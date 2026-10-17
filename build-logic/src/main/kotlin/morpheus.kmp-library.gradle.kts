@@ -43,6 +43,9 @@ extensions.configure<KotlinMultiplatformExtension> {
             // karma.config.d drops Chrome's sandbox on CI.
             testTask { useKarma { useChromeHeadless() } }
         }
+        // Not an app: webpack only bundles Skiko's runtime into the test bundle for a target with an
+        // executable binary (CMP-4906).
+        binaries.executable()
     }
 
     sourceSets.getByName("commonTest").dependencies {
