@@ -2,9 +2,10 @@ import com.android.build.api.dsl.KotlinMultiplatformAndroidLibraryTarget
 import io.gitlab.arturbosch.detekt.extensions.DetektExtension
 import org.gradle.api.artifacts.VersionCatalogsExtension
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 
-// Morpheus's Kotlin Multiplatform library modules (Android + desktop JVM). Each module sets its own
+// Morpheus's Kotlin Multiplatform library modules (Android, desktop JVM and wasm in the browser). Each module sets its own
 // `android { namespace }` and its own dependencies; everything shared lives here. Ids carry a
 // `morpheus.` prefix so they never clash with a consuming build's own convention plugins.
 plugins {
@@ -32,6 +33,11 @@ extensions.configure<KotlinMultiplatformExtension> {
     jvm {
         compilerOptions { jvmTarget.set(JvmTarget.JVM_11) }
     }
+    // For Compose Multiplatform web consumers; common tests also run here, in a headless browser.
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs {
+        browser()
+    }
 
     sourceSets.getByName("commonTest").dependencies {
         implementation(kotlin("test"))
@@ -46,5 +52,6 @@ extensions.configure<DetektExtension> {
         "src/commonTest/kotlin",
         "src/androidMain/kotlin",
         "src/jvmMain/kotlin",
+        "src/wasmJsMain/kotlin",
     )
 }

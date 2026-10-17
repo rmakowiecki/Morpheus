@@ -1,6 +1,6 @@
 # Morpheus
 
-Compose Multiplatform eye-candy libraries for Android and desktop JVM.
+Compose Multiplatform eye-candy libraries for Android, desktop JVM and the browser (wasm).
 
 | Module | Coordinates | What it is |
 | --- | --- | --- |

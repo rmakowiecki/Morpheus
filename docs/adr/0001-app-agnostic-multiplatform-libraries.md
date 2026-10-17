@@ -16,7 +16,7 @@ which consumers include as a Gradle composite build until the modules are publis
 `:morpheus` is the first library, published as `com.rossomak:morpheus` in the package
 `com.rossomak.morpheus`. Library modules apply the `morpheus.kmp-library` convention plugin:
 
-- targets: Android and desktop JVM;
+- targets: Android, desktop JVM and wasm in the browser;
 - strict explicit API mode;
 - JetBrains Compose Multiplatform artifacts through the version catalog, with no `org.jetbrains.compose`
   Gradle plugin;
