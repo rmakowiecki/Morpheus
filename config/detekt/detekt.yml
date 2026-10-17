@@ -1,0 +1,56 @@
+# Overrides layered on top of detekt's default config (buildUponDefaultConfig = true).
+# Formatting is intentionally NOT enabled here — Spotless/ktlint owns formatting.
+# Keep this lean; tighten in the type-resolution follow-up PR.
+
+build:
+  maxIssues: 0 # any NEW (non-baselined) finding fails the task
+
+complexity:
+  ComplexCondition:
+    # Detekt reports conditions whose complexity is greater than or equal to this value.
+    threshold: 6
+  LargeClass:
+    # Test classes are explicitly allowed to grow unbounded — splitting by concern reads worse than one file per ViewModel/screen under test
+    excludes: ['**/*Test.kt']
+  LongMethod:
+    threshold: 80
+  LongParameterList:
+    functionThreshold: 8
+    constructorThreshold: 8 # ViewModels/DI constructors legitimately take many collaborators
+    ignoreDefaultParameters: true
+  TooManyFunctions:
+    thresholdInClasses: 20
+    thresholdInFiles: 20
+    thresholdInInterfaces: 20
+  CyclomaticComplexMethod:
+    threshold: 18
+
+style:
+  MaxLineLength:
+    maxLineLength: 180
+    excludeCommentStatements: true # comments are never wrapped/broken to fit a length limit
+  MagicNumber:
+    ignorePropertyDeclaration: true
+    ignoreCompanionObjectPropertyDeclaration: true
+    ignoreNamedArgument: true
+    ignoreEnums: true
+  ReturnCount:
+    max: 4
+  UnusedPrivateMember:
+    active: true
+    # @Preview / @PreviewLightDark functions are entry points for the IDE + Showkase, never
+    # called from code, so they are legitimately "unused" in the source graph.
+    ignoreAnnotated: ['Preview', 'PreviewLightDark']
+
+naming:
+  FunctionNaming:
+    # @Composable functions are PascalCase by convention.
+    ignoreAnnotated: ['Composable']
+  TopLevelPropertyNaming:
+    active: true
+  EnumNaming:
+    active: true
+    # PascalCase only. detekt's default pattern allows underscores AND all-caps single words
+    # (e.g. DEFAULT); this requires a lowercase letter after each leading capital, so every
+    # "word" segment must be Capitalized, not ALL_CAPS or ALLCAPS.
+    enumEntryPattern: '^[A-Z][a-z0-9]*(?:[A-Z][a-z0-9]+)*$'

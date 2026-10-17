@@ -2,12 +2,12 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 // The desktop host of the network-graph playground: the only module that applies the Compose
 // Multiplatform Gradle plugin, which the lib modules don't need. Run it with
-// `./gradlew :lib:networkgraph-playground:run`.
+// `./gradlew :networkgraph-playground:run`.
 plugins {
     id("org.jetbrains.kotlin.jvm")
     id("org.jetbrains.kotlin.plugin.compose")
     alias(libs.plugins.jetbrains.compose)
-    id("android-quality")
+    id("morpheus.quality")
 }
 
 java {
@@ -20,7 +20,7 @@ kotlin {
 }
 
 dependencies {
-    implementation(project(":lib:networkgraph-tuner"))
+    implementation(project(":networkgraph-tuner"))
     implementation(compose.desktop.currentOs)
     implementation(libs.jetbrains.compose.material3)
 }
