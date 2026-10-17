@@ -18,13 +18,13 @@ which consumers include as a Gradle composite build until the modules are publis
 
 - targets: Android, desktop JVM and wasm in the browser;
 - strict explicit API mode;
-- JetBrains Compose Multiplatform artifacts through the version catalog, with no `org.jetbrains.compose`
-  Gradle plugin;
+- JetBrains Compose Multiplatform artifacts through the version catalog. The `org.jetbrains.compose`
+  Gradle plugin is applied only so the wasmJs tests get Skiko's wasm runtime; dependencies never go
+  through its `compose.*` accessors;
 - the usual Spotless, detekt and Lint.
 
-The one exception is `:morpheus-playground`, a desktop app that hosts the tuner: it is the only
-module that applies the `org.jetbrains.compose` plugin, which it needs to package a desktop application.
-Nothing depends on it.
+The one exception is `:morpheus-playground`, a desktop JVM app that hosts the tuner and uses the
+`org.jetbrains.compose` plugin to package it. Nothing depends on it.
 
 Diagnostics and tooling hooks sit behind the `@ExperimentalMorpheusGraphApi` opt-in, so app modules don't
 come to depend on them by accident.

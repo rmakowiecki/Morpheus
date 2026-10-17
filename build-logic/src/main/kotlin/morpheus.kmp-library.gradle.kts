@@ -14,6 +14,8 @@ plugins {
 }
 
 pluginManager.apply("org.jetbrains.kotlin.plugin.compose")
+// Only for wasmJs tests: Compose UI loads Skiko's wasm module at startup, and this plugin puts it in the test bundle.
+pluginManager.apply("org.jetbrains.compose")
 pluginManager.apply("morpheus.quality")
 // The multiplatform Android target gets Lint only through the standalone Lint plugin.
 pluginManager.apply("com.android.lint")
@@ -36,7 +38,11 @@ extensions.configure<KotlinMultiplatformExtension> {
     // For Compose Multiplatform web consumers; common tests also run here, in a headless browser.
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
-        browser()
+        browser {
+            // Headless Chrome, not Node: Skiko's wasm module only loads in a browser. Each module's
+            // karma.config.d drops Chrome's sandbox on CI.
+            testTask { useKarma { useChromeHeadless() } }
+        }
     }
 
     sourceSets.getByName("commonTest").dependencies {
