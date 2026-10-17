@@ -21,6 +21,8 @@ kotlin {
 dependencies {
     implementation(project(":morpheus-tuner"))
     implementation(compose.desktop.currentOs)
+    // Dispatchers.Main for the desktop: the lib's renderer runs repeatOnLifecycle, which switches to it.
+    implementation(libs.kotlinx.coroutines.swing)
     implementation(libs.jetbrains.compose.material3)
 }
 
