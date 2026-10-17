@@ -1,6 +1,9 @@
 import com.diffplug.gradle.spotless.SpotlessExtension
 
+// Kotlin's plugins are loaded here once for every module, so the playground can apply them by id.
 plugins {
+    alias(libs.plugins.kotlin.jvm) apply false
+    alias(libs.plugins.kotlin.compose) apply false
     alias(libs.plugins.jetbrains.compose) apply false
     alias(libs.plugins.spotless)
 }
