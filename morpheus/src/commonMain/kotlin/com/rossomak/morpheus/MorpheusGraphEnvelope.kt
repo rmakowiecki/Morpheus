@@ -3,6 +3,7 @@
 package com.rossomak.morpheus
 
 import com.rossomak.morpheus.ShapePrimitive.Bloom
+import com.rossomak.morpheus.ShapePrimitive.Pill
 import com.rossomak.morpheus.ShapePrimitive.Ribbon
 import com.rossomak.morpheus.ShapePrimitive.Uniform
 import kotlin.math.abs
@@ -77,6 +78,7 @@ internal class MorpheusGraphEnvelope(private val seed: Int) {
                 is Uniform -> 1f
                 is Ribbon -> ribbonDensity(primitive, ribbonPhases(ordinal), width, height, x, y)
                 is Bloom -> bloomDensity(primitive, width, height, x, y)
+                is Pill -> pillDensity(primitive, width, height, x, y)
             }
             density = max(density, weight * falloff)
         }
@@ -85,7 +87,7 @@ internal class MorpheusGraphEnvelope(private val seed: Int) {
 
     /**
      * How near the point is to the shape, from 0 (the far side of the surface) to 1 (on a ribbon's
-     * center line or a bloom's center), as the strongest weighted primitive like [densityAt]. Uniform
+     * center line, a bloom's center or a pill's axis), as the strongest weighted primitive like [densityAt]. Uniform
      * is equally near everywhere.
      */
     fun closenessAt(spec: MorpheusGraphLayerSpec, width: Float, height: Float, x: Float, y: Float): Float {
@@ -99,6 +101,7 @@ internal class MorpheusGraphEnvelope(private val seed: Int) {
                 is Uniform -> 1f
                 is Ribbon -> 1f - (abs(y - ribbonCenterAt(primitive, ribbonPhases(ordinal), width, height, x)) / height).coerceIn(0f, 1f)
                 is Bloom -> 1f - (hypot(primitive.x * width - x, primitive.y * height - y) / hypot(width, height)).coerceIn(0f, 1f)
+                is Pill -> 1f - (pillAxisDistance(primitive, width, height, x, y) / hypot(width, height)).coerceIn(0f, 1f)
             }
             closeness = max(closeness, weight * nearness)
         }
@@ -106,8 +109,9 @@ internal class MorpheusGraphEnvelope(private val seed: Int) {
     }
 
     /**
-     * One ellipse per ribbon and bloom of [spec] with any weight, in pixels: a bloom is its own circle,
-     * falloff included, and a ribbon a long flat ellipse along its band. Uniform has no place to stand
+     * One ellipse per ribbon, bloom and pill of [spec] with any weight, in pixels: a bloom is its own
+     * circle, falloff included, a ribbon a long flat ellipse along its band, and a pill the ellipse
+     * spanning its length and thickness. Uniform has no place to stand
      * in for, so it has none.
      */
     fun standIns(spec: MorpheusGraphLayerSpec, width: Float, height: Float): List<ShapeStandIn> {
@@ -138,6 +142,18 @@ internal class MorpheusGraphEnvelope(private val seed: Int) {
                         minorRadius = radius,
                         angle = 0f,
                         plateau = primitive.plateau.coerceIn(0f, MAX_BLOOM_PLATEAU),
+                        weight = weight,
+                    )
+                }
+                is Pill -> {
+                    val halfThickness = pillHalfThickness(primitive, width, height)
+                    ShapeStandIn(
+                        centerX = primitive.x * width,
+                        centerY = primitive.y * height,
+                        majorRadius = pillHalfSpan(primitive, width, height, halfThickness) + halfThickness,
+                        minorRadius = halfThickness.coerceAtLeast(1f),
+                        angle = primitive.rotation * DEGREES_TO_RADIANS,
+                        plateau = primitive.plateau.coerceIn(0f, MAX_PILL_PLATEAU),
                         weight = weight,
                     )
                 }
@@ -185,13 +201,42 @@ internal class MorpheusGraphEnvelope(private val seed: Int) {
         val reach = bloom.reach.coerceAtLeast(MIN_BLOOM_REACH)
         return 1f - smoothStep(reach * bloom.plateau.coerceIn(0f, MAX_BLOOM_PLATEAU), reach, distance)
     }
+
+    /** Full density out to [Pill.plateau] of the half-thickness from the axis, thinning out to nothing at the rim. */
+    private fun pillDensity(pill: Pill, width: Float, height: Float, x: Float, y: Float): Float {
+        val halfThickness = pillHalfThickness(pill, width, height)
+        val plateau = halfThickness * pill.plateau.coerceIn(0f, MAX_PILL_PLATEAU)
+        return 1f - smoothStep(plateau, halfThickness, pillAxisDistance(pill, width, height, x, y))
+    }
 }
 
 private class RibbonPhases(val curve: Float, val thickness: Float)
 
+/** Half of the pill's thickness, in pixels. */
+private fun pillHalfThickness(pill: Pill, width: Float, height: Float): Float =
+    pill.thickness.coerceAtLeast(MIN_PILL_THICKNESS) * max(width, height) / 2f
+
+/** How far each end cap's center sits from the pill's center, in pixels; 0 leaves a disc. */
+private fun pillHalfSpan(pill: Pill, width: Float, height: Float, halfThickness: Float): Float =
+    (pill.length * max(width, height) / 2f - halfThickness).coerceAtLeast(0f)
+
+/** Distance from the point to the segment between the pill's end cap centers, in pixels. */
+private fun pillAxisDistance(pill: Pill, width: Float, height: Float, x: Float, y: Float): Float {
+    val halfSpan = pillHalfSpan(pill, width, height, pillHalfThickness(pill, width, height))
+    val angle = pill.rotation * DEGREES_TO_RADIANS
+    val cosine = cos(angle)
+    val sine = sin(angle)
+    val deltaX = x - pill.x * width
+    val deltaY = y - pill.y * height
+    val along = (deltaX * cosine + deltaY * sine).coerceIn(-halfSpan, halfSpan)
+    return hypot(deltaX - along * cosine, deltaY - along * sine)
+}
+
 private const val MIN_BLOOM_REACH = 0.01f
 private const val MAX_BLOOM_PLATEAU = 0.95f
 private const val MAX_RIBBON_TILT = 80f
+private const val MIN_PILL_THICKNESS = 0.01f
+private const val MAX_PILL_PLATEAU = 0.95f
 
 /**
  * An ellipse standing in for one shape primitive, in pixels: what a morph's comet travels from and to.

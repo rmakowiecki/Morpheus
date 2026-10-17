@@ -40,6 +40,7 @@ import com.rossomak.morpheus.MorpheusGraphPresets
 import com.rossomak.morpheus.MorpheusGraphSpec
 import com.rossomak.morpheus.ShapePrimitive
 import com.rossomak.morpheus.ShapePrimitive.Bloom
+import com.rossomak.morpheus.ShapePrimitive.Pill
 import com.rossomak.morpheus.ShapePrimitive.Ribbon
 import com.rossomak.morpheus.ShapePrimitive.Uniform
 
@@ -278,6 +279,7 @@ private val ShapePrimitive.kindName: String
         is Uniform -> "Uniform"
         is Ribbon -> "Ribbon"
         is Bloom -> "Bloom"
+        is Pill -> "Pill"
     }
 
 /** What each add chip inserts: a centered bloom rather than another corner one, so it shows up at once. */
@@ -285,6 +287,7 @@ private val newPrimitives: List<ShapePrimitive> = listOf(
     Uniform(weight = 0.3f),
     Ribbon(),
     Bloom(x = 0.5f, y = 0.5f, reach = 0.3f),
+    Pill(),
 )
 
 private class PrimitiveSlider<T : ShapePrimitive>(
@@ -310,6 +313,15 @@ private fun primitiveSliders(primitive: ShapePrimitive): List<PrimitiveSlider<Sh
         PrimitiveSlider("Weight", 0f..1f, { it.weight }, { shape, value -> shape.copy(weight = value) }),
         PrimitiveSlider("Reach", 0.1f..1.5f, { it.reach }, { shape, value -> shape.copy(reach = value) }),
         PrimitiveSlider("Plateau (0 soft, 1 disc)", 0f..0.95f, { it.plateau }, { shape, value -> shape.copy(plateau = value) }),
+        PrimitiveSlider("Center x", 0f..1f, { it.x }, { shape, value -> shape.copy(x = value) }),
+        PrimitiveSlider("Center y", 0f..1f, { it.y }, { shape, value -> shape.copy(y = value) }),
+    )
+    is Pill -> listOf<PrimitiveSlider<Pill>>(
+        PrimitiveSlider("Weight", 0f..1f, { it.weight }, { shape, value -> shape.copy(weight = value) }),
+        PrimitiveSlider("Length", 0.02f..1.5f, { it.length }, { shape, value -> shape.copy(length = value) }),
+        PrimitiveSlider("Thickness", 0.02f..0.8f, { it.thickness }, { shape, value -> shape.copy(thickness = value) }),
+        PrimitiveSlider("Rotation (°)", -180f..180f, { it.rotation }, { shape, value -> shape.copy(rotation = value) }),
+        PrimitiveSlider("Plateau (0 soft, 1 hard edge)", 0f..0.95f, { it.plateau }, { shape, value -> shape.copy(plateau = value) }),
         PrimitiveSlider("Center x", 0f..1f, { it.x }, { shape, value -> shape.copy(x = value) }),
         PrimitiveSlider("Center y", 0f..1f, { it.y }, { shape, value -> shape.copy(y = value) }),
     )
