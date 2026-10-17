@@ -70,9 +70,9 @@ internal object Delaunay {
                 }
             }
             for (triangle in badTriangles) {
-                edgeOccurrences.merge(edgeKey(triangle.first, triangle.second), 1, Int::plus)
-                edgeOccurrences.merge(edgeKey(triangle.second, triangle.third), 1, Int::plus)
-                edgeOccurrences.merge(edgeKey(triangle.third, triangle.first), 1, Int::plus)
+                edgeOccurrences.increment(edgeKey(triangle.first, triangle.second))
+                edgeOccurrences.increment(edgeKey(triangle.second, triangle.third))
+                edgeOccurrences.increment(edgeKey(triangle.third, triangle.first))
             }
             // The cavity's boundary is every edge only one bad triangle had; each is re-fanned to the point.
             for ((key, occurrences) in edgeOccurrences) {
@@ -179,6 +179,11 @@ internal fun meshEdgeKeys(
         result[resultCount++] = key
     }
     return result.copyOf(resultCount)
+}
+
+/** Counts one more occurrence of [key]; common code has no `HashMap.merge`. */
+private fun HashMap<Long, Int>.increment(key: Long) {
+    this[key] = (this[key] ?: 0) + 1
 }
 
 /** Cosine of the triangle's smallest corner — the largest of its three corner cosines. */
