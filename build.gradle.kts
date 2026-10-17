@@ -1,7 +1,9 @@
 import com.diffplug.gradle.spotless.SpotlessExtension
 
-// Kotlin's plugins are loaded here once for every module, so the playground can apply them by id.
+// AGP, Kotlin and Compose Multiplatform load here once, in the classloader every module shares: the
+// Compose plugin reaches into AGP's classes, so the two must not come from separate classloaders.
 plugins {
+    alias(libs.plugins.android.kotlin.multiplatform.library) apply false
     alias(libs.plugins.kotlin.jvm) apply false
     alias(libs.plugins.kotlin.compose) apply false
     alias(libs.plugins.jetbrains.compose) apply false

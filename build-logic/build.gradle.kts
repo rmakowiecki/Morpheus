@@ -3,12 +3,13 @@ plugins {
 }
 
 dependencies {
-    // Referenced from the plugins{} blocks of the convention scripts, and applied by id from module builds.
-    implementation(libs.android.gradlePlugin)
-    implementation(libs.kotlin.gradlePlugin)
-    implementation(libs.compose.gradlePlugin)
+    // Compiled against only: the root build loads these at runtime, in the classloader every module
+    // shares (see the root build.gradle.kts).
+    compileOnly(libs.android.gradlePlugin)
+    compileOnly(libs.kotlin.gradlePlugin)
+    compileOnly(libs.compose.gradlePlugin)
     // Compose Multiplatform: unpacks Skiko's wasm runtime next to the wasmJs test bundle.
-    implementation(libs.compose.multiplatform.gradlePlugin)
+    compileOnly(libs.compose.multiplatform.gradlePlugin)
     // Static-analysis plugins applied via pluginManager.apply(...) in morpheus.quality.
     implementation(libs.spotless.gradlePlugin)
     implementation(libs.detekt.gradlePlugin)
