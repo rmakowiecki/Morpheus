@@ -24,6 +24,6 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "morpheus"
-include(":networkgraph")
-include(":networkgraph-tuner")
-include(":networkgraph-playground")
+include(":morpheus")
+include(":morpheus-tuner")
+include(":morpheus-playground")

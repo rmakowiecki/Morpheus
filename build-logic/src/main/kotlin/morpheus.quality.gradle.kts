@@ -70,7 +70,7 @@ pluginManager.withPlugin("com.android.lint") {
     }
 }
 
-// Per-module entry point, e.g. `./gradlew :networkgraph:staticAnalysis`.
+// Per-module entry point, e.g. `./gradlew :morpheus:staticAnalysis`.
 val moduleStaticAnalysis = tasks.register("staticAnalysis") {
     group = "verification"
     description = "Runs Spotless, detekt and (Android modules) Lint for this module."

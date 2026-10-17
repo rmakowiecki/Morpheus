@@ -1,0 +1,579 @@
+package com.rossomak.morpheus
+
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import com.rossomak.morpheus.ShapePrimitive.Bloom
+import io.kotest.matchers.collections.shouldBeEmpty
+import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.doubles.plusOrMinus as plusOrMinusDouble
+import io.kotest.matchers.doubles.shouldBeLessThan
+import io.kotest.matchers.floats.plusOrMinus
+import io.kotest.matchers.ints.shouldBeGreaterThan
+import io.kotest.matchers.ints.shouldBeLessThanOrEqual
+import io.kotest.matchers.shouldBe
+import io.kotest.matchers.types.shouldBeInstanceOf
+import kotlin.math.abs
+import kotlin.math.hypot
+import kotlin.math.max
+import kotlin.math.sqrt
+import kotlin.test.Test
+
+/**
+ * Morphs and resizes on real [LayerField]s: both invariants must hold on every frame part way through
+ * a morph, not only at its ends, and a resize must never move a node that already exists. A morph must
+ * also be stable: every node switches at most once, in order of distance from the shape, a node only a
+ * comet lights pulses once, and a scrub back retraces it.
+ */
+class MorpheusGraphMorphTest {
+
+    private val family = MorpheusGraphPresets.MorphFamily.all
+    private val surfaces = listOf(WIDE_STRIP_WIDTH to WIDE_STRIP_HEIGHT, TALL_HERO_WIDTH to TALL_HERO_HEIGHT)
+    private val fractions = listOf(0f, 0.25f, 0.5f, 0.75f, 1f)
+
+    @Test
+    fun `every morph family pair keeps the invariants at every fraction`() {
+        val violations = family.flatMap { from ->
+            family.filter { it != from }.flatMap { to ->
+                surfaces.flatMap { (width, height) ->
+                    val run = MorphRun(from, to, width, height)
+                    fractions.flatMap { fraction -> run.frames("${from.label} → ${to.label} at $fraction", fraction, frameCount = 2) }
+                }
+            }
+        }
+
+        violations.shouldBeEmpty()
+    }
+
+    @Test
+    fun `a scrub forward and back keeps the invariants every frame for every edge rule`() {
+        val scrub = (0..SCRUB_STEPS).map { it / SCRUB_STEPS.toFloat() }.let { forward -> forward + forward.reversed() }
+
+        val violations = EdgeRule.entries.flatMap { edgeRule ->
+            val from = family[0].withEdgeRule(edgeRule)
+            val to = family[3].withEdgeRule(edgeRule)
+            val run = MorphRun(from, to, TALL_HERO_WIDTH, TALL_HERO_HEIGHT)
+            scrub.flatMap { fraction -> run.frames("$edgeRule scrub at $fraction", fraction, frameCount = 1) }
+        }
+
+        violations.shouldBeEmpty()
+    }
+
+    @Test
+    fun `a pair of different morph families dissolves one mesh into the other instead of snapping`() {
+        val from = MorpheusGraphPresets.baseline
+        val to = MorpheusGraphPresets.ribbonMesh
+        val fromSeed = morphLayers(from, from, 0f, TestFill).single().seed
+        val toSeed = morphLayers(to, to, 0f, TestFill).single().seed
+
+        morphLayers(from, to, 0f, TestFill).map { it.seed } shouldBe listOf(fromSeed)
+        morphLayers(from, to, 0.5f, TestFill).map { it.seed } shouldBe listOf(fromSeed, toSeed)
+        morphLayers(from, to, 1f, TestFill).map { it.seed } shouldBe listOf(toSeed)
+    }
+
+    @Test
+    fun `every pair of presets of different families keeps the invariants at every fraction of its dissolve`() {
+        val violations = presetPairs().flatMap { (from, to) ->
+            surfaces.flatMap { (width, height) ->
+                val run = MorphRun(from, to, width, height)
+                fractions.flatMap { fraction -> run.frames("${from.presetLabel} → ${to.presetLabel} at $fraction", fraction, frameCount = 2) }
+            }
+        }
+
+        violations.shouldBeEmpty()
+    }
+
+    /** Allows [CROSSING_FRONTS_BUDGET] and [COMET_GLITCH_BUDGET] exceptions, as the morph family's own scrub does. */
+    @Test
+    fun `scrubbing a dissolve end to end turns each leaving node off once and each arriving node on once`() {
+        val nodes = presetPairs().flatMap { (from, to) ->
+            val run = MorphRun(from, to, TALL_HERO_WIDTH, TALL_HERO_HEIGHT)
+            val frames = scrubFrames().map { fraction -> run.visibility(fraction) }
+            frames.flatMap { it.keys }.distinct().flatMap { mesh ->
+                // A mesh not drawn in a frame shows none of its nodes there.
+                val meshFrames = frames.map { it[mesh] }
+                val nodeCount = meshFrames.filterNotNull().maxOf { it.size }
+                (0 until nodeCount).map { node ->
+                    val visibility = meshFrames.map { visible -> visible?.getOrNull(node) ?: false }
+                    NodeToggles(shownAtAnEnd = visibility.first() || visibility.last(), toggles = visibility.zipWithNext { before, after -> before != after }.count { it })
+                }
+            }
+        }
+
+        nodes.count { it.shownAtAnEnd && it.toggles > 1 } shouldBeLessThanOrEqual CROSSING_FRONTS_BUDGET
+        nodes.count { !it.shownAtAnEnd && it.toggles > 2 } shouldBeLessThanOrEqual COMET_GLITCH_BUDGET
+    }
+
+    @Test
+    fun `a dissolve played backwards gives every node of both meshes the presence it had at the mirrored fraction`() {
+        val mismatches = presetPairs().flatMap { (from, to) ->
+            fractions.flatMap { fraction ->
+                val forward = MorphRun(from, to, TALL_HERO_WIDTH, TALL_HERO_HEIGHT).also { it.advance(fraction) }
+                val backward = MorphRun(to, from, TALL_HERO_WIDTH, TALL_HERO_HEIGHT).also { it.advance(1f - fraction) }
+                forward.fields.filterKeys { it in backward.fields }.flatMap { (mesh, field) ->
+                    val mirror = backward.fields.getValue(mesh)
+                    (0 until field.nodeCount).filter { abs(field.nodePresence(it) - mirror.nodePresence(it)) > PRESENCE_TOLERANCE }
+                        .map { node -> "${from.presetLabel} → ${to.presetLabel} at $fraction mesh $mesh node $node" }
+                }
+            }
+        }
+
+        mismatches.shouldBeEmpty()
+    }
+
+    @Test
+    fun `two uniform meshes dissolve place by place, each leaving node next to arriving ones`() {
+        val from = MorpheusGraphPresets.baseline
+        val to = MorpheusGraphPresets.depthFog
+        val run = MorphRun(from, to, TALL_HERO_WIDTH, TALL_HERO_HEIGHT)
+        val switchedAt = HashMap<String, HashMap<Int, Float>>()
+        for (step in 0..ORDER_STEPS) {
+            val fraction = step / ORDER_STEPS.toFloat()
+            run.advance(fraction)
+            run.fields.forEach { (mesh, field) -> recordHalfwaySwitches(field, switchedAt.getOrPut(mesh) { HashMap() }, isLeaving = mesh == run.fields.keys.first(), fraction) }
+        }
+        val (leavingMesh, arrivingMesh) = run.fields.keys.toList()
+        val leavingField = run.fields.getValue(leavingMesh)
+        val arrivingField = run.fields.getValue(arrivingMesh)
+        val leaving = switchedAt.getValue(leavingMesh)
+        val gaps = switchedAt.getValue(arrivingMesh).map { (node, arrivedAt) ->
+            val home = arrivingField.nodeHome(node)
+            val nearest = leaving.keys.minBy { (leavingField.nodeHome(it) - home).getDistance() }
+            abs(leaving.getValue(nearest) - arrivedAt)
+        }
+
+        gaps.size shouldBeGreaterThan MIN_LEAVING_NODES
+        gaps.average() shouldBeLessThan MAX_PLACE_BY_PLACE_GAP
+    }
+
+    @Test
+    fun `a dissolve retargeted part way starts from exactly what both meshes drew`() {
+        val first = MorpheusGraphPresets.baseline
+        val second = MorpheusGraphPresets.ribbonMesh
+        val third = MorpheusGraphPresets.cornerBloom
+        val interrupted = MorpheusGraphMorph(first, second, INTERRUPT_FRACTION)
+        val retargeted = MorpheusGraphMorph(lerp(first, second, INTERRUPT_FRACTION), third, 0f, origin = interrupted)
+
+        val drawn = MorphRun(interrupted, TALL_HERO_WIDTH, TALL_HERO_HEIGHT).also { it.advance(INTERRUPT_FRACTION) }
+        val restarted = MorphRun(retargeted, TALL_HERO_WIDTH, TALL_HERO_HEIGHT).also { it.advance(0f) }
+        val halfway = MorphRun(retargeted, TALL_HERO_WIDTH, TALL_HERO_HEIGHT).also { it.advance(0.5f) }
+
+        restarted.fields.keys shouldBe drawn.fields.keys
+        drawn.fields.forEach { (mesh, field) ->
+            (0 until field.nodeCount).map(field::nodePresence) shouldBe
+                restarted.fields.getValue(mesh).let { restartedField -> (0 until restartedField.nodeCount).map(restartedField::nodePresence) }
+        }
+        halfway.frames("retargeted dissolve half way", 0.5f, frameCount = 1).shouldBeEmpty()
+    }
+
+    @Test
+    fun `a dissolve sent back where it came from reverses the leaving mesh instead of adding a third`() {
+        val first = MorpheusGraphPresets.baseline
+        val second = MorpheusGraphPresets.ribbonMesh
+        val interrupted = MorpheusGraphMorph(first, second, INTERRUPT_FRACTION)
+        val reversed = MorpheusGraphMorph(lerp(first, second, INTERRUPT_FRACTION), first, 0.5f, origin = interrupted)
+
+        val layers = morphLayers(reversed, TestFill)
+
+        layers.map { it.seed } shouldBe morphLayers(interrupted, TestFill).map { it.seed }
+        layers.first().shape.shouldBeInstanceOf<LayerShape.Morph>().to shouldBe LayerShape.Of(first.layers.single())
+    }
+
+    @Test
+    fun `a back layer only one side has fades in from zero alpha and leaves the front layer's seed alone`() {
+        val single = family.first { it.layers.size == 1 }
+        val withGhost = family.first { it.layers.size == 2 }
+
+        val layers = morphLayers(single, withGhost, 0.5f, TestFill)
+
+        layers shouldHaveSize 2
+        layers[0].spec.alpha shouldBe (withGhost.layers[0].alpha * 0.5f plusOrMinus 1e-4f)
+        layers[1].seed shouldBe morphLayers(single, single, 0f, TestFill).single().seed
+    }
+
+    @Test
+    fun `a back layer only the interrupted morph still drew fades out from where it stood instead of vanishing`() {
+        // Different seeds, so the frozen screen's specs are the nearer end alone, without the back layer.
+        val twoLayers = family.first { it.layers.size == 2 }.copy(seed = 1)
+        val oneLayer = family.first { it.layers.size == 1 }.copy(seed = 2)
+        val next = oneLayer.copy(seed = 3)
+        val interrupted = MorpheusGraphMorph(twoLayers, oneLayer, LATE_INTERRUPT_FRACTION)
+        val frozen = lerp(twoLayers, oneLayer, LATE_INTERRUPT_FRACTION)
+        val drawnBack = morphLayers(interrupted, TestFill).single { it.slotFromFront == 1 }
+
+        val restarted = morphLayers(MorpheusGraphMorph(frozen, next, 0f, origin = interrupted), TestFill)
+        val halfwayBack = morphLayers(MorpheusGraphMorph(frozen, next, 0.5f, origin = interrupted), TestFill).single { it.slotFromFront == 1 }
+        val arrivedBack = morphLayers(MorpheusGraphMorph(frozen, next, 1f, origin = interrupted), TestFill).single { it.slotFromFront == 1 }
+
+        frozen.layers shouldHaveSize 1
+        restarted.map { it.seed to it.slotFromFront } shouldBe morphLayers(interrupted, TestFill).map { it.seed to it.slotFromFront }
+        halfwayBack.seed shouldBe drawnBack.seed
+        halfwayBack.spec.alpha shouldBe (drawnBack.spec.alpha * 0.5f plusOrMinus 1e-4f)
+        arrivedBack.spec.alpha shouldBe 0f
+        MorphRun(MorpheusGraphMorph(frozen, next, 0f, origin = interrupted), TALL_HERO_WIDTH, TALL_HERO_HEIGHT)
+            .frames("back layer fading out half way", 0.5f, frameCount = 1)
+            .shouldBeEmpty()
+    }
+
+    @Test
+    fun `resizing the surface keeps every existing node in place and the invariants on every frame`() {
+        val layer = family[3].layers.single()
+        val field = LayerField(layer, family[3].seed, TALL_HERO_HEIGHT, PX_PER_DP)
+        field.advance(0f, TALL_HERO_WIDTH, TALL_HERO_HEIGHT)
+        val homes = (0 until field.nodeCount).map(field::nodeHome)
+        val heights = (0..RESIZE_STEPS).map { TALL_HERO_HEIGHT - (TALL_HERO_HEIGHT - WIDE_STRIP_HEIGHT) * it / RESIZE_STEPS }
+        val sizes = heights.map { TALL_HERO_WIDTH to it } + heights.reversed().map { TALL_HERO_WIDTH to it } + (GROWN_WIDTH to GROWN_HEIGHT)
+
+        val violations = sizes.flatMapIndexed { frame, (width, height) ->
+            val timeSeconds = (frame + 1) * FRAME_SECONDS
+            field.advance(timeSeconds, width, height)
+            frameViolations("${width.toInt()}x${height.toInt()}", field, layer.strictTriangles, timeSeconds)
+        }
+
+        violations.shouldBeEmpty()
+        field.nodeCount shouldBeGreaterThan homes.size
+        (homes.indices).map(field::nodeHome) shouldBe homes
+    }
+
+    /**
+     * Over every pair and surface — some 170 000 node morphs — this allows [CROSSING_FRONTS_BUDGET]
+     * exceptions: where a pair's leaving and arriving fronts follow two different shapes, they can cross
+     * so that a node that stays briefly has neither its old edges nor its replacements yet. A node shown
+     * at neither end is one a comet lights, and may turn on and off once; [COMET_GLITCH_BUDGET] of them,
+     * out of some 6 000, drop out for a few frames as their neighbours light up after them.
+     */
+    @Test
+    fun `scrubbing any morph family pair end to end turns each node on or off at most once and each comet node on and off once`() {
+        val nodes = morphFamilyPairs().flatMap { (from, to) -> surfaces.flatMap { (width, height) -> scrubToggles(from, to, width, height) } }
+        val flickering = nodes.filter { it.shownAtAnEnd && it.toggles > 1 }
+        val cometGlitches = nodes.filter { !it.shownAtAnEnd && it.toggles > 2 }
+
+        flickering.size shouldBeLessThanOrEqual CROSSING_FRONTS_BUDGET
+        cometGlitches.size shouldBeLessThanOrEqual COMET_GLITCH_BUDGET
+    }
+
+    /** Allows [CROSSING_FRONTS_BUDGET] exceptions, for the reason the test above gives. */
+    @Test
+    fun `a node visible at both ends of a morph stays visible all the way through`() {
+        val dropped = morphFamilyPairs().flatMap { (from, to) ->
+            surfaces.flatMap { (width, height) ->
+                val run = MorphRun(from, to, width, height)
+                val visibility = scrubFrames().map { fraction -> run.visibility(fraction) }
+                visibility.first().keys.flatMap { layerSeed ->
+                    val layerVisibility = visibility.map { it.getValue(layerSeed) }
+                    layerVisibility.first().indices
+                        .filter { node -> layerVisibility.first()[node] && layerVisibility.last()[node] && layerVisibility.any { !it[node] } }
+                        .map { node -> "${from.label} → ${to.label} ${width.toInt()}x${height.toInt()} layer $layerSeed node $node" }
+                }
+            }
+        }
+
+        dropped.size shouldBeLessThanOrEqual CROSSING_FRONTS_BUDGET
+    }
+
+    @Test
+    fun `a bloom crossing to the opposite corner sends a comet that lights the nodes between them once, half way`() {
+        val from = cometTestSpec(Bloom(reach = COMET_TEST_REACH))
+        val to = cometTestSpec(Bloom(x = 0f, y = 1f, reach = COMET_TEST_REACH))
+        val run = MorphRun(from, to, TALL_HERO_WIDTH, TALL_HERO_HEIGHT)
+        val frames = scrubFrames()
+        val visibility = frames.map { fraction -> run.visibility(fraction).values.single() }
+        val field = run.singleField()
+        val cometNodes = visibility.first().indices.filter { node -> !visibility.first()[node] && !visibility.last()[node] && visibility.any { it[node] } }
+        val reach = COMET_TEST_REACH * TALL_HERO_HEIGHT
+        val pathMiddle = Offset(TALL_HERO_WIDTH / 2f, TALL_HERO_HEIGHT / 2f)
+        val middleNodes = cometNodes.filter { node -> (field.nodeHome(node) - pathMiddle).getDistance() < MIDDLE_RADIUS }
+        val middleLitAt = middleNodes.map { node -> frames.filterIndexed { frame, _ -> visibility[frame][node] }.average() }
+
+        run.advance(0.5f)
+        field.cometCount shouldBe 1
+        cometNodes.size shouldBeGreaterThan MIN_COMET_NODES
+        cometNodes.filter { node -> visibility.zipWithNext { before, after -> before[node] != after[node] }.count { it } > 2 }.shouldBeEmpty()
+        cometNodes.filter { node -> distanceToSegment(field.nodeHome(node), Offset(TALL_HERO_WIDTH, 0f), Offset(0f, TALL_HERO_HEIGHT)) > reach }.shouldBeEmpty()
+        middleNodes.size shouldBeGreaterThan 0
+        middleLitAt.forEach { litAt -> litAt shouldBe (0.5 plusOrMinusDouble MIDDLE_LIT_TOLERANCE) }
+    }
+
+    @Test
+    fun `a centre disc splitting into two corner blooms sends a comet to each`() {
+        val from = MorpheusGraphPresets.MorphFamily.centreDisc
+        val to = MorpheusGraphPresets.MorphFamily.cornerPair
+
+        val comets = cometsFor(from, to)
+
+        comets shouldHaveSize 2
+        comets.map { it.source }.distinct() shouldHaveSize 1
+        comets.map { it.target }.distinct() shouldHaveSize 2
+    }
+
+    @Test
+    fun `two ribbons merging into a centre disc each send a comet that meets the other on the disc`() {
+        val from = MorpheusGraphPresets.MorphFamily.doubleRibbon
+        val to = MorpheusGraphPresets.MorphFamily.centreDisc
+
+        val comets = cometsFor(from, to)
+
+        comets shouldHaveSize 2
+        comets.map { it.source }.distinct() shouldHaveSize 2
+        comets.map { it.target }.distinct() shouldHaveSize 1
+        MorphRun(from, to, TALL_HERO_WIDTH, TALL_HERO_HEIGHT).also { it.advance(0.5f) }.singleField().cometCount shouldBe 2
+    }
+
+    @Test
+    fun `a bloom nudged slightly sends no comet`() {
+        val from = cometTestSpec(Bloom())
+        val to = cometTestSpec(Bloom(x = 0.96f, y = 0.03f, reach = 0.78f))
+
+        cometsFor(from, to).shouldBeEmpty()
+        MorphRun(from, to, TALL_HERO_WIDTH, TALL_HERO_HEIGHT).also { it.advance(0.5f) }.singleField().cometCount shouldBe 0
+    }
+
+    @Test
+    fun `both ends of a morph with comets draw exactly what each spec draws standing still`() {
+        val pairs = with(MorpheusGraphPresets.MorphFamily) { listOf(centreDisc to cornerPair, doubleRibbon to centreDisc, cornerBloom to bottomStartBloom) }
+
+        pairs.forEach { (from, to) ->
+            surfaces.forEach { (width, height) ->
+                listOf(0f to from, 1f to to).forEach { (fraction, still) ->
+                    val morphing = MorphRun(from, to, width, height).also { it.advance(0.5f) }.also { it.advance(fraction) }.singleField()
+                    val standing = MorphRun(still, still, width, height).also { it.advance(0f) }.also { it.advance(0f) }.singleField()
+
+                    (0 until morphing.nodeCount).map(morphing::nodePresence) shouldBe (0 until standing.nodeCount).map(standing::nodePresence)
+                    morphing.topology.edges.sorted() shouldBe standing.topology.edges.sorted()
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `a uniform field morphing into a corner bloom removes the nodes furthest from the corner first`() {
+        val from = MorpheusGraphPresets.MorphFamily.uniformField
+        val to = MorpheusGraphPresets.MorphFamily.cornerBloom
+        val field = MorphRun(from, to, TALL_HERO_WIDTH, TALL_HERO_HEIGHT).also { it.advance(0f) }.singleField()
+        val initiallyPresent = (0 until field.nodeCount).filter { field.nodePresence(it) >= HALF_PRESENT }.toSet()
+        val leftAt = HashMap<Int, Float>()
+        val run = MorphRun(from, to, TALL_HERO_WIDTH, TALL_HERO_HEIGHT)
+        for (step in 0..ORDER_STEPS) {
+            val fraction = step / ORDER_STEPS.toFloat()
+            val stepField = run.also { it.advance(fraction) }.singleField()
+            initiallyPresent.filter { it !in leftAt && stepField.nodePresence(it) < HALF_PRESENT }.forEach { leftAt[it] = fraction }
+        }
+        val leaving = leftAt.keys.toList()
+        val distances = leaving.map { node -> field.nodeHome(node).let { home -> hypot(TALL_HERO_WIDTH - home.x, home.y) } }
+
+        leaving.size shouldBeGreaterThan MIN_LEAVING_NODES
+        rankCorrelation(distances, leaving.map(leftAt::getValue)) shouldBeLessThan -MIN_ORDER_CORRELATION
+    }
+
+    @Test
+    fun `a morph played backwards gives every node the presence it had at the mirrored fraction`() {
+        val mismatches = morphFamilyPairs().flatMap { (from, to) ->
+            fractions.flatMap { fraction ->
+                val forward = MorphRun(from, to, TALL_HERO_WIDTH, TALL_HERO_HEIGHT).also { it.advance(fraction) }
+                val backward = MorphRun(to, from, TALL_HERO_WIDTH, TALL_HERO_HEIGHT).also { it.advance(1f - fraction) }
+                forward.fields.flatMap { (layerSeed, field) ->
+                    val mirror = backward.fields.getValue(layerSeed)
+                    (0 until field.nodeCount).filter { abs(field.nodePresence(it) - mirror.nodePresence(it)) > PRESENCE_TOLERANCE }
+                        .map { node -> "${from.label} → ${to.label} at $fraction layer $layerSeed node $node" }
+                }
+            }
+        }
+
+        mismatches.shouldBeEmpty()
+    }
+
+    @Test
+    fun `a fraction jittering around one value never re-settles the mesh`() {
+        val from = MorpheusGraphPresets.MorphFamily.uniformField
+        val to = MorpheusGraphPresets.MorphFamily.cornerBloom
+        EdgeRule.entries.forEach { edgeRule ->
+            val run = MorphRun(from.withEdgeRule(edgeRule), to.withEdgeRule(edgeRule), TALL_HERO_WIDTH, TALL_HERO_HEIGHT)
+            val jitter = (0 until JITTER_FRAMES).map { frame -> JITTER_CENTER + if (frame % 2 == 0) JITTER_AMPLITUDE else -JITTER_AMPLITUDE }
+            jitter.take(2).forEach(run::advance)
+            val field = run.singleField()
+            val settledTopology = field.topology
+            val settledMembershipChanges = field.meshMembershipChanges
+
+            jitter.drop(2).forEach(run::advance)
+
+            if (edgeRule == EdgeRule.FixedTriangulation) {
+                (field.topology === settledTopology) shouldBe true
+            } else {
+                field.meshMembershipChanges shouldBe settledMembershipChanges
+            }
+        }
+    }
+
+    @Test
+    fun `a timed morph retargeted part way starts from exactly what was drawn`() {
+        val first = MorpheusGraphPresets.MorphFamily.uniformField
+        val second = MorpheusGraphPresets.MorphFamily.cornerBloom
+        val third = MorpheusGraphPresets.MorphFamily.ribbon
+        val interrupted = MorpheusGraphMorph(first, second, INTERRUPT_FRACTION)
+        val retargeted = MorpheusGraphMorph(lerp(first, second, INTERRUPT_FRACTION), third, 0f, origin = interrupted)
+
+        val drawn = MorphRun(interrupted, TALL_HERO_WIDTH, TALL_HERO_HEIGHT).also { it.advance(INTERRUPT_FRACTION) }.singleField()
+        val restarted = MorphRun(retargeted, TALL_HERO_WIDTH, TALL_HERO_HEIGHT).also { it.advance(0f) }.singleField()
+        val halfway = MorphRun(retargeted, TALL_HERO_WIDTH, TALL_HERO_HEIGHT).also { it.advance(0.5f) }
+
+        (0 until drawn.nodeCount).map(drawn::nodePresence) shouldBe (0 until restarted.nodeCount).map(restarted::nodePresence)
+        halfway.frames("retargeted half way", 0.5f, frameCount = 1).shouldBeEmpty()
+    }
+
+    /** How often each node's dot turns on or off over a [scrubFrames] swipe from [from] to [to]. */
+    private fun scrubToggles(from: MorpheusGraphSpec, to: MorpheusGraphSpec, width: Float, height: Float): List<NodeToggles> {
+        val run = MorphRun(from, to, width, height)
+        val visibility = scrubFrames().map { fraction -> run.visibility(fraction) }
+        return visibility.first().keys.flatMap { layerSeed ->
+            val layerVisibility = visibility.map { it.getValue(layerSeed) }
+            layerVisibility.first().indices.map { node ->
+                NodeToggles(
+                    shownAtAnEnd = layerVisibility.first()[node] || layerVisibility.last()[node],
+                    toggles = layerVisibility.zipWithNext { before, after -> before[node] != after[node] }.count { it },
+                )
+            }
+        }
+    }
+
+    private class NodeToggles(val shownAtAnEnd: Boolean, val toggles: Int)
+
+    /** The comets a morph between the single-layer [from] and [to] sends on the tall surface. */
+    private fun cometsFor(from: MorpheusGraphSpec, to: MorpheusGraphSpec): List<Comet> {
+        val envelope = MorpheusGraphEnvelope(morphLayers(from, from, 0f, TestFill).single().seed)
+        return cometsBetween(
+            from = envelope.standIns(from.layers.single(), TALL_HERO_WIDTH, TALL_HERO_HEIGHT),
+            to = envelope.standIns(to.layers.single(), TALL_HERO_WIDTH, TALL_HERO_HEIGHT),
+            width = TALL_HERO_WIDTH,
+            height = TALL_HERO_HEIGHT,
+        )
+    }
+
+    /** A morph family member with the one primitive given, so corner to corner leaves a gap for a comet to cross. */
+    private fun cometTestSpec(primitive: ShapePrimitive) =
+        MorpheusGraphPresets.MorphFamily.cornerBloom.let { bloom -> bloom.copy(layers = listOf(bloom.layers.single().copy(shapes = listOf(primitive)))) }
+
+    private fun distanceToSegment(point: Offset, start: Offset, end: Offset): Float {
+        val along = end - start
+        val share = (((point - start).x * along.x + (point - start).y * along.y) / (along.x * along.x + along.y * along.y)).coerceIn(0f, 1f)
+        return (point - (start + along * share)).getDistance()
+    }
+
+    /** Records in [switches] the fraction each of [field]'s nodes not yet in it first passes half presence, going out if [isLeaving], else coming in. */
+    private fun recordHalfwaySwitches(field: LayerField, switches: HashMap<Int, Float>, isLeaving: Boolean, fraction: Float) {
+        for (node in 0 until field.nodeCount) {
+            if (node in switches) continue
+            val presence = field.nodePresence(node)
+            val passed = if (isLeaving) fraction > 0f && presence > 0f && presence < HALF_PRESENT else presence >= HALF_PRESENT
+            if (passed) switches[node] = fraction
+        }
+    }
+
+    /** Every ordered pair of distinct presets, each its own morph family. */
+    private fun presetPairs(): List<Pair<MorpheusGraphSpec, MorpheusGraphSpec>> =
+        MorpheusGraphPresets.all.flatMap { from -> MorpheusGraphPresets.all.filter { it != from }.map { to -> Pair(from, to) } }
+
+    private val MorpheusGraphSpec.presetLabel: String get() = "preset ${MorpheusGraphPresets.all.indexOf(this)}"
+
+    /** Every ordered pair of distinct [family] variants. */
+    private fun morphFamilyPairs(): List<Pair<MorpheusGraphSpec, MorpheusGraphSpec>> =
+        family.flatMap { from -> family.filter { it != from }.map { to -> Pair(from, to) } }
+
+    /** A two-second swipe from end to end, then a second held at the end so every fade can finish. */
+    private fun scrubFrames() = (0..SWIPE_FRAMES).map { it / SWIPE_FRAMES.toFloat() } + List(HOLD_FRAMES) { 1f }
+
+    /** Spearman's rank correlation of [first] and [second]. */
+    private fun rankCorrelation(first: List<Float>, second: List<Float>): Double {
+        fun ranks(values: List<Float>): List<Double> {
+            val order = values.indices.sortedBy { values[it] }
+            return DoubleArray(values.size).also { ranks -> order.forEachIndexed { rank, index -> ranks[index] = rank.toDouble() } }.toList()
+        }
+        val firstRanks = ranks(first)
+        val secondRanks = ranks(second)
+        val firstMean = firstRanks.average()
+        val secondMean = secondRanks.average()
+        val covariance = firstRanks.indices.sumOf { (firstRanks[it] - firstMean) * (secondRanks[it] - secondMean) }
+        val firstSpread = firstRanks.sumOf { (it - firstMean) * (it - firstMean) }
+        val secondSpread = secondRanks.sumOf { (it - secondMean) * (it - secondMean) }
+        return covariance / sqrt(firstSpread * secondSpread)
+    }
+
+    /** One [LayerField] per morph layer, kept across frames the way the modifier keeps them. */
+    private class MorphRun(private val morph: MorpheusGraphMorph, private val width: Float, private val height: Float) {
+        constructor(from: MorpheusGraphSpec, to: MorpheusGraphSpec, width: Float, height: Float) : this(MorpheusGraphMorph(from, to, 0f), width, height)
+
+        /** One field per mesh, keyed by [meshKey]. */
+        val fields = LinkedHashMap<String, LayerField>()
+        private var timeSeconds = 0f
+
+        /** One frame at [fraction]; the layers it drew, back to front. */
+        fun advance(fraction: Float): List<MorphLayer> {
+            timeSeconds += FRAME_SECONDS
+            return morphLayers(morph.copy(fraction = fraction), TestFill).onEach { layer ->
+                val field = fields.getOrPut(meshKey(layer)) { LayerField(layer.spec, layer.seed, max(width, height), PX_PER_DP) }
+                field.spec = layer.spec
+                field.shape = layer.shape
+                field.advance(timeSeconds, width, height)
+            }
+        }
+
+        /**
+         * Every invariant violation over [frameCount] frames at [fraction]. Strict triangles are a still
+         * frame's rule only: mid-morph, the edges that carry a comet across the gap may be open.
+         */
+        fun frames(label: String, fraction: Float, frameCount: Int): List<String> = (0 until frameCount).flatMap {
+            advance(fraction).flatMap { layer ->
+                val field = fields.getValue(meshKey(layer))
+                val still = fraction <= 0f || fraction >= 1f
+                frameViolations("$label ${width.toInt()}x${height.toInt()} layer ${layer.seed}", field, layer.spec.strictTriangles && still, timeSeconds)
+            }
+        }
+
+        /** One frame at [fraction]: which dots are drawn, per mesh. */
+        fun visibility(fraction: Float): Map<String, List<Boolean>> = advance(fraction).associate { layer ->
+            val field = fields.getValue(meshKey(layer))
+            meshKey(layer) to (0 until field.nodeCount).map { field.nodeAlpha(it) >= NODE_VISIBLE_ALPHA }
+        }
+
+        fun singleField(): LayerField = fields.values.single()
+
+        /** A layer's mesh: its seed and morph family, which a field is built for and never changes. */
+        private fun meshKey(layer: MorphLayer): String = with(layer.spec) { "${layer.seed}/$density/$jitter/$edgeRule/$strictTriangles" }
+    }
+
+    /** A spec's place in [family], to tell the pairs in a failure apart. */
+    private val MorpheusGraphSpec.label: String get() = "variant ${family.indexOf(this)}"
+
+    private fun MorpheusGraphSpec.withEdgeRule(edgeRule: EdgeRule) = copy(layers = layers.map { it.copy(edgeRule = edgeRule) })
+
+    private companion object {
+        val TestFill = MorpheusGraphFill.Solid(Color.White)
+        const val PX_PER_DP = 2.75f
+        const val WIDE_STRIP_WIDTH = 1080f
+        const val WIDE_STRIP_HEIGHT = 420f
+        const val TALL_HERO_WIDTH = 1080f
+        const val TALL_HERO_HEIGHT = 1900f
+        const val GROWN_WIDTH = 1300f
+        const val GROWN_HEIGHT = 2100f
+        const val FRAME_SECONDS = 1f / 60f
+        const val SCRUB_STEPS = 20
+        const val RESIZE_STEPS = 12
+        const val CROSSING_FRONTS_BUDGET = 32
+        const val COMET_GLITCH_BUDGET = 32
+        const val COMET_TEST_REACH = 0.3f
+        const val MIN_COMET_NODES = 30
+        const val MIDDLE_RADIUS = 150f
+        const val MIDDLE_LIT_TOLERANCE = 0.15
+        const val SWIPE_FRAMES = 120
+        const val HOLD_FRAMES = 60
+        const val ORDER_STEPS = 200
+        const val HALF_PRESENT = 0.5f
+        const val MIN_LEAVING_NODES = 100
+        const val MIN_ORDER_CORRELATION = 0.9
+        const val PRESENCE_TOLERANCE = 1e-4f
+        const val JITTER_FRAMES = 240
+        const val JITTER_CENTER = 0.5f
+        const val JITTER_AMPLITUDE = 0.01f
+        const val INTERRUPT_FRACTION = 0.4f
+        const val LATE_INTERRUPT_FRACTION = 0.6f
+        const val MAX_PLACE_BY_PLACE_GAP = 0.12
+    }
+}

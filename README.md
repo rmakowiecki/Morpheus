@@ -4,9 +4,9 @@ Compose Multiplatform eye-candy libraries for Android and desktop JVM.
 
 | Module | Coordinates | What it is |
 | --- | --- | --- |
-| `:networkgraph` | `com.rossomak.morpheus:networkgraph` | An animated network-graph background whose specs morph into each other. Depends only on Compose runtime, UI and animation. |
-| `:networkgraph-tuner` | `com.rossomak.morpheus:networkgraph-tuner` | A Material3 tuning sheet and playground for designing specs, with export to Kotlin source. |
-| `:networkgraph-playground` | not published | A desktop app hosting the tuner: `./gradlew :networkgraph-playground:run`. |
+| `:morpheus` | `com.rossomak:morpheus` | An animated network-graph background whose specs morph into each other. Depends only on Compose runtime, UI and animation. |
+| `:morpheus-tuner` | `com.rossomak:morpheus-tuner` | A Material3 tuning sheet and playground for designing specs, with export to Kotlin source. |
+| `:morpheus-playground` | not published | A desktop app hosting the tuner: `./gradlew :morpheus-playground:run`. |
 
 See [ADR-0001](docs/adr/0001-app-agnostic-multiplatform-libraries.md) for the design rules.
 
@@ -25,7 +25,7 @@ includeBuild("morpheus")
 
 ```kotlin
 // a module's build.gradle.kts
-implementation("com.rossomak.morpheus:networkgraph")
+implementation("com.rossomak:morpheus")
 ```
 
 Gradle substitutes the coordinates with the included project. Once the modules are published, drop the

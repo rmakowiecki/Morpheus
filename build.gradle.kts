@@ -5,10 +5,10 @@ plugins {
     alias(libs.plugins.spotless)
 }
 
-// A consumer that includes this build (`includeBuild("morpheus")`) gets `com.rossomak.morpheus:<module>`
+// A consumer that includes this build (`includeBuild("morpheus")`) gets `com.rossomak:<module>`
 // substituted from source; the same coordinates resolve from a repository once the modules are published.
 allprojects {
-    group = "com.rossomak.morpheus"
+    group = "com.rossomak"
     version = "0.1.0-SNAPSHOT"
 }
 

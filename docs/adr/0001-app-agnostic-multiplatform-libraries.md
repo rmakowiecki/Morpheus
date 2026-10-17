@@ -13,8 +13,8 @@ which consumers include as a Gradle composite build until the modules are publis
 
 ### Kotlin Multiplatform modules under `com.rossomak.morpheus`
 
-`:networkgraph` is the first library, published as `com.rossomak.morpheus:networkgraph` in the package
-`com.rossomak.networkgraph`. Library modules apply the `morpheus.kmp-library` convention plugin:
+`:morpheus` is the first library, published as `com.rossomak:morpheus` in the package
+`com.rossomak.morpheus`. Library modules apply the `morpheus.kmp-library` convention plugin:
 
 - targets: Android and desktop JVM;
 - strict explicit API mode;
@@ -22,11 +22,11 @@ which consumers include as a Gradle composite build until the modules are publis
   Gradle plugin;
 - the usual Spotless, detekt and Lint.
 
-The one exception is `:networkgraph-playground`, a desktop app that hosts the tuner: it is the only
+The one exception is `:morpheus-playground`, a desktop app that hosts the tuner: it is the only
 module that applies the `org.jetbrains.compose` plugin, which it needs to package a desktop application.
 Nothing depends on it.
 
-Diagnostics and tooling hooks sit behind the `@ExperimentalNetworkGraphApi` opt-in, so app modules don't
+Diagnostics and tooling hooks sit behind the `@ExperimentalMorpheusGraphApi` opt-in, so app modules don't
 come to depend on them by accident.
 
 ### Nothing here knows about a consuming app
@@ -37,11 +37,11 @@ fill. The library's presets set no fills for the same reason, and branded varian
 
 ### Color comes from an inherited, lerpable fill
 
-A layer paints with its own `NetworkGraphLayerSpec.fill`, else its spec's `NetworkGraphSpec.fill`, else
-the fill passed to `networkGraphBackground`, which defaults to the `LocalNetworkGraphFill` composition
+A layer paints with its own `MorpheusGraphLayerSpec.fill`, else its spec's `MorpheusGraphSpec.fill`, else
+the fill passed to `morpheusGraphBackground`, which defaults to the `LocalMorpheusGraphFill` composition
 local. One fill set once colors every graph, and a single spec or layer can still override it.
 
-`NetworkGraphFill` is `Solid`, `Linear` or `Radial`, all plain values with geometry in fractions of the
+`MorpheusGraphFill` is `Solid`, `Linear` or `Radial`, all plain values with geometry in fractions of the
 surface, or `Custom`, a `Brush` asked once per layer and frame and once per end of a running morph.
 
 - **Plain values** interpolate during a morph: colors in Oklab, gradient stops matched by position,
