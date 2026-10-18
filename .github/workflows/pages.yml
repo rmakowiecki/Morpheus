@@ -8,10 +8,9 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
-# Deploys run one after the other, so the last push wins; an in-progress deploy is never cancelled.
+# Deploys run one after the other and an in-progress deploy is never cancelled. A newer push replaces a
+# still-pending one, which is fine: the newest commit holds every earlier change, so the last push wins.
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -21,6 +20,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The build runs Gradle plugins; don't leave the token in the checkout for them.
+          persist-credentials: false
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -35,6 +37,10 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    # Only the deploy job gets the Pages and OIDC scopes.
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
