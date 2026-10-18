@@ -1,9 +1,9 @@
 name: Pages
 
-# Deploys the wasm samples gallery as the live demo at https://rmakowiecki.github.io/Morpheus/.
+# Deploys the wasm samples gallery from main as the live demo at https://rmakowiecki.github.io/Morpheus/.
 on:
   push:
-    branches: [develop]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
