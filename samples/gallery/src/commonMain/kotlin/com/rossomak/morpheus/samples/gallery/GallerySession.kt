@@ -31,13 +31,14 @@ internal class GallerySession(val sample: Sample) {
         selectedSpecName?.let { tunedSpecs[it] = spec }
     }
 
+    /** Runs the sample's preparation step; a failure, a wasm JS error included (not an [Exception]), shows in the pane. */
     suspend fun prepare() {
         preparation = try {
             sample.prepare()
             Preparation.Done
         } catch (cancellation: CancellationException) {
             throw cancellation
-        } catch (@Suppress("TooGenericExceptionCaught") failure: Exception) {
+        } catch (@Suppress("TooGenericExceptionCaught") failure: Throwable) {
             Preparation.Failed(failure.message ?: failure.toString())
         }
     }
