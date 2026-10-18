@@ -3,7 +3,6 @@ package com.rossomak.morpheus.samples
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,9 +16,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-
-/** One labeled cell of a [SampleGrid]; [content] draws inside the tile's clipped bounds. */
-class SampleTile(val label: String, val content: @Composable BoxScope.() -> Unit)
 
 /**
  * Lays [tiles] out in rows of [columns] filling the canvas, each under its [SampleLabel], each clipped to
