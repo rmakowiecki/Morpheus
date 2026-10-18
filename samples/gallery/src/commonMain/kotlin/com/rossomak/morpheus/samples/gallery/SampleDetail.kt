@@ -107,14 +107,15 @@ private fun ThemeControl(selected: ThemeMode, enabled: Boolean, onSelect: (Theme
 }
 
 /**
- * Runs [content] on a [canvasSize] canvas, centered, inside a window reference of that same size, so the
- * mesh density matches a capture's. A canvas bigger than the stage is scaled down uniformly to fit: never
- * cropped, never scrolled, and the window reference keeps the canvas size, so it looks identical, only smaller.
+ * Runs [content] on a [canvasSize] canvas inside a window reference of that same size, so the mesh density
+ * matches a capture's, then scales the canvas uniformly to fill the stage and centers it. It follows the
+ * window's size, up or down, but is never cropped or scrolled, and since the window reference keeps the
+ * canvas size, it looks like the capture, only bigger or smaller.
  */
 @Composable
 private fun SampleStage(canvasSize: DpSize, content: @Composable () -> Unit) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
-        val scale = minOf(1f, maxWidth / canvasSize.width, maxHeight / canvasSize.height).coerceAtLeast(0f)
+        val scale = minOf(maxWidth / canvasSize.width, maxHeight / canvasSize.height).coerceAtLeast(0f)
         val canvasWindow = rememberCanvasWindowInfo(canvasSize)
         Box(modifier = Modifier.size(canvasSize.width * scale, canvasSize.height * scale), contentAlignment = Alignment.Center) {
             Box(
