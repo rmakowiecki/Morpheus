@@ -44,6 +44,7 @@ fun Gallery(samples: List<Sample> = SampleRegistry.samples, onSpecExport: (sourc
     // Held here rather than in a pane, so a layout switch keeps the open sample's preparation and tuning.
     val session = remember(selectedId) { samples.firstOrNull { it.id == selectedId }?.let(::GallerySession) }
     var themeMode by remember { mutableStateOf(ThemeMode.System) }
+    val previewFrame = remember { PreviewFrame() }
     var showViolations by remember { mutableStateOf(false) }
     val clipboard = LocalClipboard.current
     val coroutineScope = rememberCoroutineScope()
@@ -60,6 +61,7 @@ fun Gallery(samples: List<Sample> = SampleRegistry.samples, onSpecExport: (sourc
                         session = openSession,
                         themeMode = themeMode,
                         systemDark = systemDark,
+                        previewFrame = previewFrame,
                         onThemeModeChange = { themeMode = it },
                         onBack = if (wide) null else ({ selectedId = null }),
                         modifier = modifier,

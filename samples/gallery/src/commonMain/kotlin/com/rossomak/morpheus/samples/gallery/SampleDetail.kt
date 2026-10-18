@@ -41,14 +41,16 @@ import com.rossomak.morpheus.samples.CaptureThemes
 import com.rossomak.morpheus.samples.SampleTheme
 
 /**
- * The open sample at its recipe's canvas size, centered on the sample theme's background, under its title,
- * the theme control and the Tune action. [onBack] is the single-pane layout's way back to the list.
+ * The open sample on the [previewFrame]'s canvas, centered on the sample theme's background, under its title,
+ * the theme control, the Tune action and the preview canvas control. [onBack] is the single-pane layout's
+ * way back to the list.
  */
 @Composable
 internal fun SampleDetail(
     session: GallerySession,
     themeMode: ThemeMode,
     systemDark: Boolean,
+    previewFrame: PreviewFrame,
     onThemeModeChange: (ThemeMode) -> Unit,
     onBack: (() -> Unit)?,
     modifier: Modifier = Modifier,
@@ -79,13 +81,17 @@ internal fun SampleDetail(
                 }
             }
         }
+        PreviewFrameControl(frame = previewFrame, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 8.dp))
         SampleTheme(dark = darkOnly || themeMode.isDark(systemDark), modifier = Modifier.weight(1f).fillMaxWidth()) {
             when (val preparation = session.preparation) {
                 Preparation.Running -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 is Preparation.Failed -> Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
                     Text(text = preparation.message, color = MaterialTheme.colorScheme.error)
                 }
-                Preparation.Done -> SampleStage(canvasSize = sample.recipe.canvasSize) { sample.content(session.specs) }
+                Preparation.Done -> SampleStage(
+                    canvasSize = previewFrame.canvasSize(sample.recipe),
+                    scalesToFit = previewFrame.scalesToFit,
+                ) { sample.content(session.specs) }
             }
         }
     }
@@ -108,19 +114,22 @@ private fun ThemeControl(selected: ThemeMode, enabled: Boolean, onSelect: (Theme
 
 /**
  * Runs [content] on a [canvasSize] canvas inside a window reference of that same size, so the mesh density
- * matches a capture's, then scales the canvas uniformly to fill the stage and centers it. It follows the
- * window's size, up or down, but is never cropped or scrolled, and since the window reference keeps the
- * canvas size, it looks like the capture, only bigger or smaller.
+ * follows the canvas, not the app window, as in a capture. The canvas is centered and, when it
+ * [scalesToFit], scaled uniformly to fill the stage; otherwise it shows at its own size, shrunk only if it
+ * wouldn't fit. Either way it is never cropped or scrolled, and the window reference keeps the canvas size,
+ * so a scaled canvas looks the same, only bigger or smaller. A null [canvasSize] fills the stage.
  */
 @Composable
-private fun SampleStage(canvasSize: DpSize, content: @Composable () -> Unit) {
+private fun SampleStage(canvasSize: DpSize?, scalesToFit: Boolean, content: @Composable () -> Unit) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
-        val scale = minOf(maxWidth / canvasSize.width, maxHeight / canvasSize.height).coerceAtLeast(0f)
-        val canvasWindow = rememberCanvasWindowInfo(canvasSize)
-        Box(modifier = Modifier.size(canvasSize.width * scale, canvasSize.height * scale), contentAlignment = Alignment.Center) {
+        val canvas = canvasSize ?: DpSize(maxWidth, maxHeight)
+        val fitScale = minOf(maxWidth / canvas.width, maxHeight / canvas.height).coerceAtLeast(0f)
+        val scale = if (scalesToFit) fitScale else minOf(1f, fitScale)
+        val canvasWindow = rememberCanvasWindowInfo(canvas)
+        Box(modifier = Modifier.size(canvas.width * scale, canvas.height * scale), contentAlignment = Alignment.Center) {
             Box(
                 modifier = Modifier
-                    .requiredSize(canvasSize)
+                    .requiredSize(canvas)
                     .graphicsLayer {
                         scaleX = scale
                         scaleY = scale
