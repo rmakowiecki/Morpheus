@@ -71,6 +71,13 @@ class MorpheusGraphSpecSourceTest {
     }
 
     @Test
+    fun `a pill prints only the arguments that differ from its defaults`() {
+        val layer = MorpheusGraphLayerSpec(shapes = listOf(ShapePrimitive.Pill(x = 0.3f, rotation = -30f)))
+
+        MorpheusGraphSpec(seed = 1, layers = listOf(layer)).toKotlinSource() shouldContain "shapes = listOf(ShapePrimitive.Pill(x = 0.3f, rotation = -30.0f))"
+    }
+
+    @Test
     fun `a spec fill and gradient stops print as constructor calls`() {
         val fill = MorpheusGraphFill.Linear(listOf(GradientStop(0f, Color.White), GradientStop(1f, Color(0x33FFFFFF))), angleDegrees = 90f)
         val source = MorpheusGraphSpec(seed = 3, layers = listOf(MorpheusGraphLayerSpec()), fill = fill).toKotlinSource()

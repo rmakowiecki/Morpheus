@@ -13,6 +13,7 @@ import com.rossomak.morpheus.ShapePrimitive
 private val UniformDefaults = ShapePrimitive.Uniform()
 private val RibbonDefaults = ShapePrimitive.Ribbon()
 private val BloomDefaults = ShapePrimitive.Bloom()
+private val PillDefaults = ShapePrimitive.Pill()
 
 /**
  * The spec as Kotlin source in the style of [MorpheusGraphPresets], ready to paste into a preset list. Lists
@@ -110,6 +111,15 @@ private fun ShapePrimitive.toSource(): String {
             "y" to (y to BloomDefaults.y),
             "reach" to (reach to BloomDefaults.reach),
             "plateau" to (plateau to BloomDefaults.plateau),
+        )
+        is ShapePrimitive.Pill -> listOf(
+            "weight" to (weight to PillDefaults.weight),
+            "x" to (x to PillDefaults.x),
+            "y" to (y to PillDefaults.y),
+            "length" to (length to PillDefaults.length),
+            "thickness" to (thickness to PillDefaults.thickness),
+            "rotation" to (rotation to PillDefaults.rotation),
+            "plateau" to (plateau to PillDefaults.plateau),
         )
     }
     val changed = arguments.filter { (_, values) -> values.first != values.second }

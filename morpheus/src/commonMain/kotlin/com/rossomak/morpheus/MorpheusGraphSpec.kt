@@ -43,6 +43,9 @@ private const val RIBBON_DEFAULT_CENTER = 0.6f
 private const val RIBBON_DEFAULT_WIDTH = 0.45f
 private const val RIBBON_DEFAULT_CURVE = 0.1f
 private const val BLOOM_DEFAULT_REACH = 0.8f
+private const val PILL_DEFAULT_LENGTH = 0.5f
+private const val PILL_DEFAULT_THICKNESS = 0.18f
+private const val PILL_DEFAULT_PLATEAU = 0.8f
 
 /**
  * One part of a layer's shape: a density field over the surface, from 0 to 1, scaled by [weight]. A
@@ -79,6 +82,26 @@ public sealed interface ShapePrimitive {
         val reach: Float = BLOOM_DEFAULT_REACH,
         /** Share of [reach] held at full density before the falloff starts: 0 = a soft bloom, near 1 = a hard disc. */
         val plateau: Float = 0f,
+    ) : ShapePrimitive
+
+    /**
+     * A capsule: a straight bar with round ends, dense along its axis and thinning out toward its rim.
+     * Sizes are fractions of the surface's longer side, like [Bloom.reach], so the pill keeps its
+     * proportions on any aspect ratio. A [length] under [thickness] leaves a disc.
+     */
+    public data class Pill(
+        override val weight: Float = 1f,
+        /** Center, as fractions of width and height. */
+        val x: Float = 0.5f,
+        val y: Float = 0.5f,
+        /** End cap to end cap, as a fraction of the surface's longer side. */
+        val length: Float = PILL_DEFAULT_LENGTH,
+        /** Rim to rim across the bar, as a fraction of the surface's longer side. */
+        val thickness: Float = PILL_DEFAULT_THICKNESS,
+        /** Clockwise turn around the center, in degrees; 0 lies along the width. */
+        val rotation: Float = 0f,
+        /** Share of the half-thickness held at full density before the falloff starts: 0 = soft, near 1 = a hard edge. */
+        val plateau: Float = PILL_DEFAULT_PLATEAU,
     ) : ShapePrimitive
 }
 

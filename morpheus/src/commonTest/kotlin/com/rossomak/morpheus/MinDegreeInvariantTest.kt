@@ -1,6 +1,7 @@
 package com.rossomak.morpheus
 
 import com.rossomak.morpheus.ShapePrimitive.Bloom
+import com.rossomak.morpheus.ShapePrimitive.Pill
 import com.rossomak.morpheus.ShapePrimitive.Ribbon
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.ints.shouldBeGreaterThan
@@ -27,6 +28,8 @@ class MinDegreeInvariantTest {
         "two ribbons + centre disc" to {
             it.copy(shapes = listOf(Ribbon(center = 0.2f, width = 0.15f), Ribbon(center = 0.8f, width = 0.15f), Bloom(x = 0.5f, y = 0.5f, reach = 0.3f, plateau = 0.8f)))
         },
+        "pill, rotated" to { it.copy(shapes = listOf(Pill(rotation = -30f))) },
+        "two thin crossing pills" to { it.copy(shapes = listOf(Pill(thickness = 0.06f, rotation = 30f), Pill(weight = 0.8f, thickness = 0.06f, rotation = -60f))) },
     )
 
     private val extremes: List<Pair<String, (MorpheusGraphLayerSpec) -> MorpheusGraphLayerSpec>> = listOf(
