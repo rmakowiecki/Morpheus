@@ -11,10 +11,65 @@
             margin: 0;
             overflow: hidden;
         }
+        .fallback {
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            height: 100%;
+            padding: 16px;
+            text-align: center;
+            font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            color: #e6e6e6;
+            background: #0b0d0c;
+        }
+        .fallback[hidden] {
+            display: none;
+        }
+        .fallback p {
+            max-width: 32em;
+            margin: 0;
+        }
+        .fallback a {
+            color: #7fd88f;
+        }
     </style>
-    <!-- Relative paths only: the page is also served from a subpath on GitHub Pages. -->
-    <script type="application/javascript" src="gallery.js"></script>
 </head>
 <body>
+    <noscript>
+        <div class="fallback">
+            <p>This demo needs JavaScript and a browser with WebAssembly GC: Chrome or Edge 119+, Firefox 120+, or Safari 18.2+.</p>
+            <p><a href="https://github.com/rmakowiecki/Morpheus">See Morpheus on GitHub</a></p>
+        </div>
+    </noscript>
+    <!-- Shown instead of the app when the browser lacks WebAssembly GC. The hero image goes above the message. -->
+    <div id="wasm-gc-fallback" class="fallback" hidden>
+        <p>This demo needs a browser with WebAssembly GC: Chrome or Edge 119+, Firefox 120+, or Safari 18.2+.</p>
+        <p><a href="https://github.com/rmakowiecki/Morpheus">See Morpheus on GitHub</a></p>
+    </div>
+    <script>
+        // A module whose only content is one empty struct type: valid only where WebAssembly GC is supported.
+        function supportsWasmGc() {
+            try {
+                return typeof WebAssembly === "object" && WebAssembly.validate(new Uint8Array([
+                    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, // magic, version 1
+                    0x01, 0x03, 0x01, 0x5f, 0x00,                   // type section: one struct with no fields
+                ]));
+            } catch (e) {
+                return false;
+            }
+        }
+
+        if (supportsWasmGc()) {
+            // Relative paths only: the page is also served from a subpath on GitHub Pages.
+            const app = document.createElement("script");
+            app.src = "gallery.js";
+            document.body.appendChild(app);
+        } else {
+            document.getElementById("wasm-gc-fallback").hidden = false;
+        }
+    </script>
 </body>
 </html>
