@@ -7,3 +7,5 @@
 build/
 /captures
 local.properties
+# Capture tool output, regenerated on demand (ADR-0002).
+/docs/media/
