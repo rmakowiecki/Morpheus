@@ -52,3 +52,4 @@ include(":morpheus-playground")
 // Never published; see docs/adr/0002-samples-gallery-and-captures.md.
 include(":samples:shared")
 include(":samples:gallery")
+include(":samples:capture")
