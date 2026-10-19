@@ -36,7 +36,7 @@ object Img2WebP {
     }
 
     /** Lossy WebP quality, from 0 to 100. */
-    const val QUALITY = 80
+    const val QUALITY = 95
 
     private const val COMMAND = "img2webp"
 }

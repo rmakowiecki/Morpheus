@@ -22,11 +22,11 @@ import kotlin.time.Duration.Companion.seconds
 data class CaptureRecipe(
     val canvasSize: DpSize = DpSize(360.dp, 200.dp),
     val density: Float = 1f,
-    val duration: Duration = 3.seconds,
+    val duration: Duration = 6.seconds,
     val fps: Int = 30,
     val stillAt: Duration = 1500.milliseconds,
     val loop: LoopMode = LoopMode.Crossfade,
-    val crossfade: Duration = 500.milliseconds,
+    val crossfade: Duration = 1.seconds,
     val themes: CaptureThemes = CaptureThemes.LightAndDark,
     val budgetBytes: Long = 5_000_000,
 ) {
