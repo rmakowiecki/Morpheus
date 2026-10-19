@@ -8,19 +8,17 @@ import org.jetbrains.skia.EncodedImageFormat
 import org.jetbrains.skia.Image
 import org.jetbrains.skia.ImageInfo
 
-/** One rendered frame: [width] × [height] pixels, row by row, as `0xAARRGGBB`. */
+/** A rendered frame: [width] × [height] `0xAARRGGBB` pixels, row by row. */
 class Frame(val width: Int, val height: Int, val argb: IntArray) {
     init {
         require(argb.size == width * height) { "A $width × $height frame needs ${width * height} pixels, not ${argb.size}" }
     }
 
-    /** True if every pixel is the same color. */
     val isUniform: Boolean get() = argb.all { it == argb[0] }
 
-    /** The same pixels, byte for byte. */
     fun contentEquals(other: Frame): Boolean = width == other.width && height == other.height && argb.contentEquals(other.argb)
 
-    /** The mean absolute difference per color channel from [other], from 0 to 255. */
+    /** The mean absolute difference per color channel from [other], 0 to 255. */
     fun meanChannelDifference(other: Frame): Double {
         require(width == other.width && height == other.height) { "Can't compare a $width × $height frame with a ${other.width} × ${other.height} one" }
         var sum = 0L
@@ -32,7 +30,6 @@ class Frame(val width: Int, val height: Int, val argb: IntArray) {
         return sum.toDouble() / (argb.size * CHANNEL_SHIFTS.size)
     }
 
-    /** The frame as a PNG file's bytes. */
     fun encodePng(): ByteArray {
         // 0xAARRGGBB in little-endian order is B, G, R, A.
         val bytes = ByteBuffer.allocate(argb.size * Int.SIZE_BYTES).order(ByteOrder.LITTLE_ENDIAN).apply { asIntBuffer().put(argb) }.array()
@@ -43,10 +40,7 @@ class Frame(val width: Int, val height: Int, val argb: IntArray) {
     }
 }
 
-/**
- * [from] blended toward [to], per channel: [step] of [steps] of the way, so step 0 is [from] and step [steps]
- * would be [to]. Integer arithmetic, rounded, so a blend is the same on every run.
- */
+/** [from] blended [step] of [steps] of the way to [to], in rounded integer arithmetic, so it is the same on every run. */
 fun blend(from: Frame, to: Frame, step: Int, steps: Int): Frame {
     require(from.width == to.width && from.height == to.height) { "Can't blend a ${from.width} × ${from.height} frame with a ${to.width} × ${to.height} one" }
     require(step in 0..steps && steps > 0) { "Step $step isn't within 0..$steps" }

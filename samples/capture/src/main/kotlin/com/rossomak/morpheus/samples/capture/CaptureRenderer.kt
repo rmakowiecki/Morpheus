@@ -30,29 +30,25 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 
-/** A theme a capture renders in, and the suffix it gives a two-theme sample's files. */
 enum class CaptureTheme(val dark: Boolean, val suffix: String) {
     Light(dark = false, suffix = "light"),
     Dark(dark = true, suffix = "dark"),
 }
 
-/** The themes a recipe declares, light first. */
 val CaptureThemes.themes: List<CaptureTheme>
     get() = when (this) {
         CaptureThemes.LightAndDark -> listOf(CaptureTheme.Light, CaptureTheme.Dark)
         CaptureThemes.DarkOnly -> listOf(CaptureTheme.Dark)
     }
 
-/** What a capture renders: the loop's [frames] in order, empty for [LoopMode.Still], and the [still] frame. */
+/** The loop's [frames], empty for [LoopMode.Still], and the [still] frame. */
 class Capture(val frames: List<Frame>, val still: Frame)
 
 /**
- * Renders [sample] in [theme] as [recipe] declares, at its default specs, on a virtual frame clock, so the same
- * input always gives the same pixels. Awaits the sample's preparation first.
- *
- * The scene matches the gallery's: a canvas-sized window reference, so the mesh density follows the canvas, a
- * lifecycle held in RESUMED, as the lib's renderer only advances while STARTED, and the sample theme. A warm-up
- * frame at time 0 starts every frame-clock reader; kept frame `i` is then at exactly `i / fps` seconds.
+ * Renders [sample] at its default specs on a virtual frame clock, so the same input gives the same pixels. The
+ * scene matches the gallery's: a canvas-sized window reference, a lifecycle held in RESUMED (the lib's renderer
+ * only advances while STARTED) and the sample theme. A warm-up frame at time 0 starts every frame-clock reader,
+ * so kept frame `i` is at exactly `i / fps` seconds.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 suspend fun renderCapture(sample: Sample, theme: CaptureTheme, recipe: CaptureRecipe = sample.recipe): Capture {
@@ -74,7 +70,6 @@ suspend fun renderCapture(sample: Sample, theme: CaptureTheme, recipe: CaptureRe
     }
 }
 
-/** How many frames the forward recording needs: the loop's and the still frame's. */
 private fun forwardFrameCount(recipe: CaptureRecipe): Int {
     val loopFrames = when (recipe.loop) {
         LoopMode.Crossfade -> recipe.frameCount + recipe.crossfadeFrames
@@ -85,11 +80,7 @@ private fun forwardFrameCount(recipe: CaptureRecipe): Int {
     return maxOf(loopFrames, recipe.stillFrame + 1)
 }
 
-/**
- * The first [loopFrames] of [forward], with the [crossfadeFrames] after them blended into the head: frame `k`
- * of the head runs from the tail's frame `k` to its own over the crossfade. Frame 0 is then the frame that
- * follows the last one, so the loop has no seam, and the head is its own again by frame [crossfadeFrames].
- */
+/** The first [loopFrames] of [forward], with the [crossfadeFrames] after them blended into the head, so frame 0 follows on from the last. */
 private fun crossfade(forward: List<Frame>, loopFrames: Int, crossfadeFrames: Int): List<Frame> = List(loopFrames) { index ->
     if (index < crossfadeFrames) blend(forward[loopFrames + index], forward[index], step = index, steps = crossfadeFrames) else forward[index]
 }
@@ -128,7 +119,7 @@ private fun org.jetbrains.skia.Image.toFrame(): Frame {
     return Frame(bitmap.width, bitmap.height, pixels)
 }
 
-/** The scene's window info, except that its container is the canvas, as the gallery provides around its stage. */
+/** The scene's window info with the canvas as its container, as around the gallery's stage. */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun rememberCanvasWindowInfo(canvasPixels: IntSize, canvasSize: DpSize): WindowInfo {
@@ -143,7 +134,6 @@ private fun rememberCanvasWindowInfo(canvasPixels: IntSize, canvasSize: DpSize):
     }
 }
 
-/** Always RESUMED; the capture never pauses. */
 private class ResumedLifecycleOwner : LifecycleOwner {
     // Unsafe: the capture runs off any UI thread, and nothing else touches this registry.
     private val registry = LifecycleRegistry.createUnsafe(this).apply { currentState = Lifecycle.State.RESUMED }

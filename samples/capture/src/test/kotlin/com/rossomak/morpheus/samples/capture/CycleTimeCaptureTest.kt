@@ -26,9 +26,8 @@ import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.runBlocking
 
 /**
- * A test-only sample, outside the registry, paints the cycle-time helper's elapsed share of its period as a
- * gray level. Its frames prove the helper follows the virtual clock exactly and wraps at its period, and they
- * prove the boomerang and still modes, which no registered sample uses yet.
+ * A test-only sample paints the cycle-time helper's share of its period as a gray level. It proves the helper
+ * follows the virtual clock and wraps at its period, and covers the boomerang and still modes no registered sample uses yet.
  */
 class CycleTimeCaptureTest {
     @Test
@@ -72,13 +71,12 @@ class CycleTimeCaptureTest {
 
     private fun capture(recipe: CaptureRecipe): Capture = runBlocking { renderCapture(cycleTimeSample, CaptureTheme.Dark, recipe) }
 
-    /** Frame [index]'s share of the period as a gray level, give or take one for rounding. */
     private fun expectedGray(index: Int): IntRange {
         val gray = ((index % FRAMES_PER_PERIOD) * 255.0 / FRAMES_PER_PERIOD).roundToInt()
         return gray - 1..gray + 1
     }
 
-    /** The red channel of the frame's first pixel; the sample is one flat gray. */
+    /** The first pixel's red channel; the sample is one flat gray. */
     private val Frame.gray: Int get() = argb[0] shr 16 and 0xFF
 
     private companion object {

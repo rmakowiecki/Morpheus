@@ -13,10 +13,7 @@ import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlinx.coroutines.runBlocking
 
-/**
- * The renderer over the whole registry, so every sample a later change registers is covered as it lands. Driven
- * only through [renderCapture]'s input and output.
- */
+/** The renderer over the whole registry, so every sample registered later is covered as it lands. */
 class CaptureRendererTest {
     private val samples = SampleRegistry.samples
 
@@ -97,7 +94,7 @@ class CaptureRendererTest {
     }
 
     private companion object {
-        /** Each sample and theme renders once for every test in the class; only the determinism test renders again. */
+        /** Each sample and theme renders once for the whole class; only the determinism test renders again. */
         private val captures = HashMap<Pair<String, CaptureTheme>, Capture>()
 
         fun captureOf(sample: Sample, theme: CaptureTheme): Capture = captures.getOrPut(sample.id to theme) { runBlocking { renderCapture(sample, theme) } }
@@ -108,14 +105,13 @@ class CaptureRendererTest {
     }
 }
 
-/** How many frames a capture of [recipe] has: the loop, twice over less both ends for a boomerang, or none for a still. */
 internal fun declaredFrameCount(recipe: CaptureRecipe): Int = when (recipe.loop) {
     LoopMode.Crossfade -> recipe.frameCount
     LoopMode.Boomerang -> 2 * recipe.frameCount
     LoopMode.Still -> 0
 }
 
-/** [frames] is forward frames 0..[forwardFrames], then frames [forwardFrames] − 1 down to 1. */
+/** [frames] is forward frames 0..[forwardFrames], then [forwardFrames] − 1 down to 1. */
 internal fun assertMirrored(frames: List<Frame>, forwardFrames: Int) {
     frames shouldHaveSize 2 * forwardFrames
     for (offset in 1 until forwardFrames) {

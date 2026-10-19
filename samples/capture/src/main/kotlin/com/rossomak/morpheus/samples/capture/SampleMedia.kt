@@ -9,12 +9,10 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
- * Renders [sample] in each of its recipe's themes and writes its media into [mediaDir]: a looping WebP and
- * a PNG still per theme, or only the still in [com.rossomak.morpheus.samples.LoopMode.Still]. Two-theme
- * files are `<id>-light` and `<id>-dark`, a dark-only sample's just `<id>`; existing files are overwritten.
- *
- * Everything is written to a temporary directory first and moved into [mediaDir] only when every file fits
- * the recipe's budget, so a failed capture leaves [mediaDir] as it was. Returns the files written.
+ * Writes [sample]'s media into [mediaDir]: per theme, a looping WebP and a PNG still, or only the still in
+ * [com.rossomak.morpheus.samples.LoopMode.Still]. Files are `<id>-light` and `<id>-dark`, or `<id>` for dark-only.
+ * Everything is written to a temporary directory first and moved only when every file fits the budget, so a
+ * failed capture leaves [mediaDir] as it was.
  */
 suspend fun writeSampleMedia(sample: Sample, mediaDir: Path): List<Path> {
     val recipe = sample.recipe
@@ -41,7 +39,6 @@ suspend fun writeSampleMedia(sample: Sample, mediaDir: Path): List<Path> {
     }
 }
 
-/** Writes [capture] into [workDir] as `<baseName>.webp`, unless it has no frames, and `<baseName>.png`. */
 private fun writeCapture(capture: Capture, baseName: String, fps: Int, workDir: Path): List<Path> {
     val animation = if (capture.frames.isNotEmpty()) {
         val framesDir = Files.createDirectory(workDir.resolve("$baseName-frames"))
@@ -56,7 +53,7 @@ private fun writeCapture(capture: Capture, baseName: String, fps: Int, workDir: 
     return listOfNotNull(animation, still)
 }
 
-/** [bytes] in megabytes, as the budget's 5 MB default counts them. */
+/** [bytes] in decimal megabytes, as the budget counts them. */
 fun megabytes(bytes: Long): String = "%.2f MB".format(Locale.ROOT, bytes / BYTES_PER_MEGABYTE)
 
 private const val MILLIS_PER_SECOND = 1000.0

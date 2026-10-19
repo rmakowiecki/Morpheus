@@ -7,10 +7,7 @@ import java.nio.file.Paths
 import kotlin.system.exitProcess
 import kotlinx.coroutines.runBlocking
 
-/**
- * Captures one sample, by id, or `all` that aren't gallery-only, in registry order, into the repository's
- * docs/media. Stops at the first failure, keeping the media of the samples captured before it.
- */
+/** Captures one sample by id, or `all` that aren't gallery-only, into docs/media. Stops at the first failure; earlier samples' media stays. */
 fun main(args: Array<String>) {
     val exitCode = try {
         capture(args.toList())
@@ -38,7 +35,6 @@ private fun capture(args: List<String>) {
     }
 }
 
-/** The samples [args] name: one id, or `all` for every sample that isn't gallery-only, in [registry] order. */
 fun selectSamples(args: List<String>, registry: List<Sample>): List<Sample> {
     val captured = registry.filterNot { it.galleryOnly }
     val validIds = (captured.map { it.id } + ALL).joinToString()
