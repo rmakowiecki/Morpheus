@@ -1,0 +1,39 @@
+package com.rossomak.morpheus.samples.capture
+
+import java.nio.file.Path
+
+object Img2WebP {
+    fun checkInstalled() {
+        // Starting a missing command throws an IOException.
+        val installed = runCatching {
+            val process = ProcessBuilder(COMMAND, "-version").redirectErrorStream(true).start()
+            process.inputStream.readBytes()
+            process.waitFor() == 0
+        }.getOrDefault(false)
+        if (!installed) {
+            throw CaptureException(
+                """
+                |$COMMAND isn't installed; it comes with libwebp:
+                |  macOS: brew install webp
+                |  Linux: sudo apt install webp
+                """.trimMargin(),
+            )
+        }
+    }
+
+    fun encode(frames: List<Path>, delayMillis: Int, output: Path) {
+        // Every file is its own argument, never one joined string, so no path is ever split or quoted.
+        val command = listOf(COMMAND, "-loop", "0", "-lossy", "-q", QUALITY.toString(), "-d", delayMillis.toString()) +
+            frames.map { it.toString() } +
+            listOf("-o", output.toString())
+        val process = ProcessBuilder(command).redirectErrorStream(true).start()
+        val log = process.inputStream.bufferedReader().readText()
+        val exitCode = process.waitFor()
+        if (exitCode != 0) throw CaptureException("$COMMAND failed with exit code $exitCode on ${output.fileName}:\n$log")
+    }
+
+    /** Lossy WebP quality, from 0 to 100. */
+    const val QUALITY = 95
+
+    private const val COMMAND = "img2webp"
+}

@@ -13,16 +13,19 @@ import kotlin.time.Duration.Companion.seconds
  *
  * Animated captures render [duration] at [fps] (plus [crossfade] in [LoopMode.Crossfade]); the still
  * frame is the one at [stillAt]. A file over [budgetBytes] fails the capture.
+ *
+ * [fps] is at least [MIN_CAPTURE_FPS], as the library caps one clock step at 0.1 s. [duration], [crossfade]
+ * and [stillAt] are whole frames, so every frame count and timestamp is exact.
  */
 @Immutable
 data class CaptureRecipe(
     val canvasSize: DpSize = DpSize(360.dp, 200.dp),
     val density: Float = 1f,
-    val duration: Duration = 3.seconds,
+    val duration: Duration = 6.seconds,
     val fps: Int = 30,
     val stillAt: Duration = 1500.milliseconds,
     val loop: LoopMode = LoopMode.Crossfade,
-    val crossfade: Duration = 500.milliseconds,
+    val crossfade: Duration = 1.seconds,
     val themes: CaptureThemes = CaptureThemes.LightAndDark,
     val budgetBytes: Long = 5_000_000,
 ) {
@@ -30,12 +33,30 @@ data class CaptureRecipe(
         require(canvasSize.width > 0.dp && canvasSize.height > 0.dp) { "The canvas needs an area, not $canvasSize" }
         require(density > 0f) { "Density must be positive, not $density" }
         require(duration.isPositive()) { "Duration must be positive, not $duration" }
-        require(fps > 0) { "Frame rate must be positive, not $fps" }
+        require(fps >= MIN_CAPTURE_FPS) { "Frame rate must be at least $MIN_CAPTURE_FPS, not $fps: the library caps one clock step at 0.1 s" }
         require(!stillAt.isNegative() && stillAt <= duration) { "The still frame at $stillAt is outside the $duration duration" }
         require(!crossfade.isNegative() && crossfade < duration) { "The $crossfade crossfade doesn't fit the $duration duration" }
         require(budgetBytes > 0) { "The byte budget must be positive, not $budgetBytes" }
+        require(isWholeFrames(duration)) { "The $duration duration isn't a whole number of frames at $fps fps" }
+        require(isWholeFrames(crossfade)) { "The $crossfade crossfade isn't a whole number of frames at $fps fps" }
+        require(isWholeFrames(stillAt)) { "The still frame at $stillAt isn't on a frame at $fps fps" }
     }
+
+    /** Frames in [duration]: a crossfade's whole loop, a boomerang's forward half. */
+    val frameCount: Int get() = framesIn(duration)
+
+    val crossfadeFrames: Int get() = framesIn(crossfade)
+
+    val stillFrame: Int get() = framesIn(stillAt)
+
+    private fun isWholeFrames(span: Duration): Boolean = span.inWholeNanoseconds * fps % NANOS_PER_SECOND == 0L
+
+    private fun framesIn(span: Duration): Int = (span.inWholeNanoseconds * fps / NANOS_PER_SECOND).toInt()
 }
+
+const val MIN_CAPTURE_FPS = 20
+
+private const val NANOS_PER_SECOND = 1_000_000_000L
 
 /**
  * How a capture closes its loop. A seamless cycle isn't an option: node drift is a sum of sines with
