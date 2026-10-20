@@ -4,6 +4,11 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 // The samples gallery, on the desktop and in the browser. Run it with `./gradlew :samples:gallery:run`
 // or `./gradlew :samples:gallery:wasmJsBrowserDevelopmentRun`. Never published.
+//
+// Benchmarking (docs/benchmark.md): `./gradlew :samples:gallery:run -Pbenchmark` turns off the frame-rate cap
+// and sets device scale 2. In the browser, serve the gallery with `wasmJsBrowserDevelopmentRun` (or
+// `wasmJsBrowserProductionRun`) and open it in a Chrome started with
+// `--disable-gpu-vsync --disable-frame-rate-limit --force-device-scale-factor=2`.
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -42,6 +47,10 @@ kotlin {
 compose.desktop {
     application {
         mainClass = "com.rossomak.morpheus.samples.gallery.MainKt"
+        if (providers.gradleProperty("benchmark").isPresent) {
+            // No vsync, so the frame interval is the real cost per frame, at the recipe's device scale.
+            jvmArgs += listOf("-Dskiko.vsync.enabled=false", "-Dsun.java2d.uiScale=2")
+        }
     }
 }
 

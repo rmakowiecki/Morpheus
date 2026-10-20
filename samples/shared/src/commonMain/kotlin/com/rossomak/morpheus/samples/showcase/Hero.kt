@@ -144,7 +144,8 @@ internal val heroSample = Sample(
     description = "Two pills morph in place into two crossing ribbons and back, trading colors as they go.",
     category = SampleCategory.Showcase,
     recipe = CaptureRecipe(
-        // 880×440 and 720×360 ran over the budget at 30 fps; the duration stays whole.
+        // Not a standard canvas: the shapes are composed for 2:1. 880×440 and 720×360 ran over the budget
+        // at 30 fps; the duration stays whole.
         canvasSize = DpSize(540.dp, 270.dp),
         duration = HalfLoop,
         stillAt = Duration.ZERO,

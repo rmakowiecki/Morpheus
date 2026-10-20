@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalMorpheusGraphApi::class)
+
 // Every tuning value with a meaning of its own is either a spec field or a named constant below. What
 // detekt flags here is the arithmetic of the formulas themselves (the 0.5 of a cell's center, the 2
 // that turns 0..1 into -1..1), which naming individually would only bury.
@@ -215,6 +217,7 @@ private const val DEPTH_SIZE_SHRINK = 0.45f
  * each edge's and node's alpha; [draw] only paints what [advance] decided. Internal rather than private
  * so tests can check the invariants on real layers.
  */
+@Suppress("LargeClass") // One field's whole frame, from node motion to the violation rings, shares its state.
 internal class LayerField(
     spec: MorpheusGraphLayerSpec,
     private val seed: Int,
@@ -315,6 +318,12 @@ internal class LayerField(
         private set
     internal val repairedEdgeCount: Int get() = topology.repairedEdgeCount
 
+    /** How many times the topology was settled, a morph's mesh builds included, and how many morph meshes were built, since the field was built. */
+    internal var settleCount = 0
+        private set
+    internal var morphMeshBuildCount = 0
+        private set
+
     private var lastTimeSeconds = Float.NaN
 
     /**
@@ -363,8 +372,8 @@ internal class LayerField(
         return connectivityViolations(count, LongArray(visible.size) { visible[it].first })
     }
 
-    /** Moves the layer to [timeSeconds] on a [width] × [height] surface, under the current [spec]. */
-    fun advance(timeSeconds: Float, width: Float, height: Float) {
+    /** Moves the layer to [timeSeconds] on a [width] × [height] surface, under the current [spec]; [probe] times each phase. */
+    fun advance(timeSeconds: Float, width: Float, height: Float, probe: LayerProbe? = null) {
         val isFirstFrame = lastTimeSeconds.isNaN()
         val stepSeconds = if (isFirstFrame) 0f else (timeSeconds - lastTimeSeconds).coerceIn(0f, MAX_STEP_SECONDS)
         lastTimeSeconds = timeSeconds
@@ -380,6 +389,7 @@ internal class LayerField(
         updatePositions(width, height)
         val presenceChanged = updatePresences(width, height)
         val filtersChanged = updateSettledFilters()
+        probe?.lap(FramePhase.Shape)
         val morph = (shape as? LayerShape.Morph)?.takeIf { it.fraction > 0f && it.fraction < 1f }
         val wasMorphing = morphMesh != null
         if (spec.edgeRule != EdgeRule.FixedTriangulation) {
@@ -393,9 +403,12 @@ internal class LayerField(
             topology = settleTopology(homeX, homeY, presentMask, presences, spec)
         }
         prunedNodeCount = (0 until count).count { presentMask[it] && !topology.alive[it] }
+        probe?.lap(FramePhase.Mesh)
         updateFadingEdges(stepSeconds, isFirstFrame, morphing = morph != null)
         morph?.let { applyMorphEdgeWeights(it.fraction) }
+        probe?.lap(FramePhase.EdgeFades)
         updateAlphas()
+        probe?.lap(FramePhase.AlphaSettle)
     }
 
     /**
@@ -407,20 +420,31 @@ internal class LayerField(
      * offscreen: [BlendMode.SrcIn] takes the base brush's color and keeps each pixel's alpha, and
      * [BlendMode.SrcAtop] blends each overlay over it the same way. The offscreen layer is composited
      * at the fill's [LayerFill.layerAlpha].
+     *
+     * [probe] times each step and counts what was drawn, and its switches skip steps entirely.
      */
-    fun draw(scope: DrawScope, fill: LayerFill, halos: HaloBrushCache, timeSeconds: Float, showViolations: Boolean) = with(scope) {
+    fun draw(scope: DrawScope, fill: LayerFill, halos: HaloBrushCache, timeSeconds: Float, showViolations: Boolean, probe: LayerProbe? = null) = with(scope) {
         val color = fill.maskColor
         layerPaint.alpha = fill.layerAlpha
         drawIntoCanvas { canvas -> canvas.saveLayer(Rect(Offset.Zero, size), layerPaint) }
-        drawEdges(color, timeSeconds)
-        drawGlows(halos)
-        drawCores(color)
+        // The save and its restore count as one draw call.
+        var drawCalls = 1
+        probe?.lap(FramePhase.Composite)
+        val drawnEdges = probe.timed(FramePhase.Edges, skip = probe?.stats?.skipEdges == true) { drawEdges(color, timeSeconds) }
+        val drawnHalos = probe.timed(FramePhase.Halos, skip = probe?.stats?.skipHalos == true) { drawGlows(halos) }
+        val drawnDots = probe.timed(FramePhase.Dots, skip = probe?.stats?.skipDots == true) { drawCores(color) }
+        drawCalls += drawnEdges + drawnHalos + drawnDots
         if (fill is LayerFill.Masked) {
-            drawRect(brush = fill.base, blendMode = BlendMode.SrcIn)
-            fill.overlays.forEach { overlay -> drawRect(brush = overlay.brush, alpha = overlay.alpha, blendMode = BlendMode.SrcAtop) }
+            drawCalls += probe.timed(FramePhase.Fill, skip = probe?.stats?.skipFillRecolor == true) {
+                drawRect(brush = fill.base, blendMode = BlendMode.SrcIn)
+                fill.overlays.forEach { overlay -> drawRect(brush = overlay.brush, alpha = overlay.alpha, blendMode = BlendMode.SrcAtop) }
+                1 + fill.overlays.size
+            }
         }
         drawIntoCanvas { canvas -> canvas.restore() }
-        if (showViolations) drawViolations(timeSeconds)
+        probe?.lap(FramePhase.Composite)
+        if (showViolations) drawCalls += drawViolations(timeSeconds)
+        probe?.recordDrawn(edges = drawnEdges, halos = drawnHalos, dots = drawnDots, drawCalls = drawCalls)
     }
 
     /** Adds the cells a grown surface needs, plus the border rings; never removes any. */
@@ -672,6 +696,7 @@ internal class LayerField(
      */
     private fun morphMeshFor(morph: LayerShape.Morph, width: Float, height: Float): MorphMesh {
         morphMesh?.takeIf { it.isFor(morph, width, height, count) }?.let { return it }
+        morphMeshBuildCount++
         val startPresences = FloatArray(count) { scratch(0, 0)[it] * borderFactor(it, width, height) }
         val endPresences = FloatArray(count) { scratch(0, 1)[it] * borderFactor(it, width, height) }
         val startMask = BooleanArray(count) { startPresences[it] >= PRESENT_THRESHOLD }
@@ -750,8 +775,9 @@ internal class LayerField(
      * mesh also keeps [enforceMinDegree]'s connectivity rules, and edges drawn too faint to see (see
      * [VISIBLE_EDGE_MARGIN]) don't count, so the rules hold for the graph as seen.
      */
-    private fun settleTopology(xs: FloatArray, ys: FloatArray, mask: BooleanArray, presence: FloatArray, filters: MorpheusGraphLayerSpec): MeshTopology =
-        enforceOnVisibleEdges(
+    private fun settleTopology(xs: FloatArray, ys: FloatArray, mask: BooleanArray, presence: FloatArray, filters: MorpheusGraphLayerSpec): MeshTopology {
+        settleCount++
+        return enforceOnVisibleEdges(
             count = count,
             xs = xs,
             ys = ys,
@@ -762,6 +788,7 @@ internal class LayerField(
             // A mesh rebuilt every frame can't afford the connectivity rules, nor needs edge visibility without them.
             keepConnectivity = spec.edgeRule == EdgeRule.FixedTriangulation,
         ) { nodes[it].depth }
+    }
 
     private fun ensureEdgeCapacity(capacity: Int) {
         if (edgeKeys.size >= capacity) return
@@ -943,8 +970,10 @@ internal class LayerField(
 
     private fun depthAlpha(index: Int): Float = 1f - spec.depthDimming * (1f - nodes[index].depth)
 
-    private fun DrawScope.drawEdges(color: Color, timeSeconds: Float) {
+    /** Returns how many edges it drew. */
+    private fun DrawScope.drawEdges(color: Color, timeSeconds: Float): Int {
         val strokeWidth = max(1f, spec.strokeWidthDp * pxPerDp)
+        var drawn = 0
         for (edge in 0 until edgeCount) {
             val key = edgeKeys[edge]
             val start = edgeStart(key)
@@ -957,22 +986,30 @@ internal class LayerField(
                 end = Offset(positionsX[end], positionsY[end]),
                 strokeWidth = strokeWidth,
             )
+            drawn++
         }
+        return drawn
     }
 
-    /** Halos are exempt from the alpha rule but still fade with their node's presence and edges. */
-    private fun DrawScope.drawGlows(halos: HaloBrushCache) {
-        if (spec.glowStrength <= 0f) return
+    /** Halos are exempt from the alpha rule but still fade with their node's presence and edges. Returns how many it drew. */
+    private fun DrawScope.drawGlows(halos: HaloBrushCache): Int {
+        if (spec.glowStrength <= 0f) return 0
+        var drawn = 0
         for (index in 0 until count) {
             if (hotWeights[index] <= 0f) continue
             val radius = spec.glowRadiusDp * pxPerDp * sizeFactor(index)
             val alpha = spec.glowStrength * spec.alpha * depthAlpha(index) * glowFactors[index] * hotWeights[index] * presences[index]
-            drawHalo(halos, positionsX[index], positionsY[index], radius, alpha)
+            if (drawHalo(halos, positionsX[index], positionsY[index], radius, alpha)) drawn++
         }
+        return drawn
     }
 
-    /** Drawn last and with [BlendMode.Src], so a dot replaces the edges and halo under it rather than summing with them. */
-    private fun DrawScope.drawCores(color: Color) {
+    /**
+     * Drawn last and with [BlendMode.Src], so a dot replaces the edges and halo under it rather than summing
+     * with them. Returns how many it drew.
+     */
+    private fun DrawScope.drawCores(color: Color): Int {
+        var drawn = 0
         for (index in 0 until count) {
             if (nodeAlphas[index] < EDGE_MIN_VISIBLE_ALPHA) continue
             val depthShrink = 1f - DEPTH_SIZE_SHRINK * spec.depthDimming * (1f - nodes[index].depth)
@@ -983,7 +1020,9 @@ internal class LayerField(
                 center = Offset(positionsX[index], positionsY[index]),
                 blendMode = BlendMode.Src,
             )
+            drawn++
         }
+        return drawn
     }
 
     private fun sizeFactor(index: Int): Float = max(NODE_SIZE_FLOOR, 1f + spec.nodeSizeVariance * (nodes[index].sizeRoll * 2f - 1f))
@@ -992,9 +1031,9 @@ internal class LayerField(
      * Rings in red every node drawn visibly with fewer than two visible edges, every node fainter than an
      * edge it anchors as drawn this frame, and every cut node of the drawn graph; in amber, every node of
      * a drawn graph smaller than [MIN_GRAPH_NODES]. Still frames should have none; a morph may pass
-     * through some.
+     * through some. Returns how many rings it drew.
      */
-    private fun DrawScope.drawViolations(timeSeconds: Float) {
+    private fun DrawScope.drawViolations(timeSeconds: Float): Int {
         val stroke = Stroke(width = VIOLATION_RING_STROKE_DP * pxPerDp)
         val brightestDrawn = FloatArray(count)
         for (edge in 0 until edgeCount) {
@@ -1003,27 +1042,31 @@ internal class LayerField(
             brightestDrawn[edgeStart(key)] = max(brightestDrawn[edgeStart(key)], alpha)
             brightestDrawn[edgeEnd(key)] = max(brightestDrawn[edgeEnd(key)], alpha)
         }
+        var rings = 0
         for (index in 0 until count) {
             val underconnected = nodeAlphas[index] >= NODE_VISIBLE_ALPHA && visibleEdgeCounts[index] < 2
             val fainterThanEdge = brightestDrawn[index] > nodeAlphas[index] + ALPHA_RULE_TOLERANCE
             if (!underconnected && !fainterThanEdge) continue
             drawViolationRing(index, ViolationColor, stroke)
+            rings++
         }
         val connectivity = drawnConnectivityViolations()
         connectivity.smallGraphNodes.forEach { drawViolationRing(it, SmallGraphColor, stroke) }
         connectivity.cutNodes.forEach { drawViolationRing(it, ViolationColor, stroke) }
+        return rings + connectivity.smallGraphNodes.size + connectivity.cutNodes.size
     }
 
     private fun DrawScope.drawViolationRing(index: Int, color: Color, stroke: Stroke) {
         drawCircle(color = color, radius = VIOLATION_RING_RADIUS_DP * pxPerDp, center = Offset(positionsX[index], positionsY[index]), style = stroke)
     }
 
-    /** The brush's gradient is centered on the origin, so the canvas moves to the point instead. */
-    private fun DrawScope.drawHalo(halos: HaloBrushCache, x: Float, y: Float, radius: Float, alpha: Float) {
-        if (alpha <= 0f || radius <= 0f) return
+    /** The brush's gradient is centered on the origin, so the canvas moves to the point instead. True if it drew. */
+    private fun DrawScope.drawHalo(halos: HaloBrushCache, x: Float, y: Float, radius: Float, alpha: Float): Boolean {
+        if (alpha <= 0f || radius <= 0f) return false
         translate(left = x, top = y) {
             drawCircle(brush = halos.brushFor(radius), radius = radius, center = Offset.Zero, alpha = alpha.coerceAtMost(1f))
         }
+        return true
     }
 }
 

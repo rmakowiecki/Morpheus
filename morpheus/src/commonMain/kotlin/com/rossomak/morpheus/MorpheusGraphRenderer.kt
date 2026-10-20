@@ -6,7 +6,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,7 +25,8 @@ import kotlin.math.max
 import kotlin.time.TimeSource
 
 private const val NANOS_PER_SECOND = 1_000_000_000f
-private const val NANOS_PER_MILLI = 1_000_000f
+
+private var nextHolderId = 0
 
 /**
  * Draws [spec] as an animated network-graph background: every layer's edges, glows and nodes,
@@ -55,7 +55,7 @@ public fun Modifier.morpheusGraphBackground(spec: MorpheusGraphSpec, fill: Morph
  */
 @Composable
 public fun Modifier.morpheusGraphBackground(morph: MorpheusGraphMorph, fill: MorpheusGraphFill = LocalMorpheusGraphFill.current): Modifier =
-    drawMorpheusGraph({ morph }, fill, stats = null, layerStats = null, showViolations = false)
+    drawMorpheusGraph({ morph }, fill, stats = LocalMorpheusGraphFrameStats.current, layerStats = null, showViolations = false)
 
 /**
  * Whatever [state] shows; see [MorpheusGraphMorphState]. The state is read while drawing, so seeks,
@@ -63,12 +63,13 @@ public fun Modifier.morpheusGraphBackground(morph: MorpheusGraphMorph, fill: Mor
  */
 @Composable
 public fun Modifier.morpheusGraphBackground(state: MorpheusGraphMorphState, fill: MorpheusGraphFill = LocalMorpheusGraphFill.current): Modifier =
-    drawMorpheusGraph({ state.morph }, fill, stats = null, layerStats = null, showViolations = false)
+    drawMorpheusGraph({ state.morph }, fill, stats = LocalMorpheusGraphFrameStats.current, layerStats = null, showViolations = false)
 
 /**
- * [morpheusGraphBackground] with diagnostics: [stats] gets each frame's draw time, [layerStats] each
- * layer's visible, pruned and repaired counts, and [showViolations] rings in red any node that breaks
- * the connectivity or alpha rules anyway, as an on-device check.
+ * [morpheusGraphBackground] with diagnostics: [stats] gets each frame's draw time and breakdown, [layerStats]
+ * each layer's visible, pruned and repaired counts, and [showViolations] rings in red any node that breaks
+ * the connectivity or alpha rules anyway, as an on-device check. A null [stats] falls back to
+ * [LocalMorpheusGraphFrameStats], and the violations show if either [showViolations] or the stats ask.
  */
 @ExperimentalMorpheusGraphApi
 @Composable
@@ -78,7 +79,7 @@ public fun Modifier.morpheusGraphBackground(
     stats: MorpheusGraphFrameStats?,
     layerStats: MorpheusGraphLayerStats? = null,
     showViolations: Boolean = false,
-): Modifier = drawMorpheusGraph({ morph }, fill, stats, layerStats, showViolations)
+): Modifier = drawMorpheusGraph({ morph }, fill, stats ?: LocalMorpheusGraphFrameStats.current, layerStats, showViolations)
 
 /** The [state] overload of [morpheusGraphBackground] with diagnostics. */
 @ExperimentalMorpheusGraphApi
@@ -89,7 +90,7 @@ public fun Modifier.morpheusGraphBackground(
     stats: MorpheusGraphFrameStats?,
     layerStats: MorpheusGraphLayerStats? = null,
     showViolations: Boolean = false,
-): Modifier = drawMorpheusGraph({ state.morph }, fill, stats, layerStats, showViolations)
+): Modifier = drawMorpheusGraph({ state.morph }, fill, stats ?: LocalMorpheusGraphFrameStats.current, layerStats, showViolations)
 
 @Composable
 private fun Modifier.drawMorpheusGraph(
@@ -118,7 +119,11 @@ private fun Modifier.drawMorpheusGraph(
 
     return this.drawBehind {
         if (size.width <= 0f || size.height <= 0f) return@drawBehind
-        val drawStart = TimeSource.Monotonic.markNow()
+        // Without stats, no clock is read at all.
+        val drawStart = stats?.let { TimeSource.Monotonic.markNow() }
+        val probe = stats?.probe
+        stats?.recordBackground(holder.id)
+        val showsViolations = showViolations || stats?.showViolations == true
         val timeSeconds = elapsedNanos.longValue / NANOS_PER_SECOND
         // No window in previews; the surface itself is the next best fixed reference.
         val windowLongSide = max(windowSize.width, windowSize.height).toFloat()
@@ -131,13 +136,18 @@ private fun Modifier.drawMorpheusGraph(
         clipRect {
             fields.forEachIndexed { index, field ->
                 val layer = layers[index]
+                probe?.startLayer(layer.slotFromFront, field)
                 val layerFill = layer.fill.toLayerFill(layerCount - 1 - layer.slotFromFront, layerCount, timeSeconds, size)
-                field.advance(timeSeconds, size.width, size.height)
-                field.draw(this, layerFill, holder.halosFor(layerFill.maskColor), timeSeconds, showViolations)
+                probe?.lap(FramePhase.Fill)
+                field.advance(timeSeconds, size.width, size.height, probe)
+                val halos = holder.halosFor(layerFill.maskColor)
+                probe?.lapUnlessSkipped(FramePhase.Halos, skip = probe.stats.skipHalos)
+                field.draw(this, layerFill, halos, timeSeconds, showsViolations, probe)
+                probe?.endLayer(field)
             }
         }
         holder.endFrame()
-        stats?.recordDraw(drawStart.elapsedNow().inWholeNanoseconds)
+        drawStart?.let { start -> stats?.recordDraw(start.elapsedNow().inWholeNanoseconds) }
         layerStats?.record(fields)
     }
 }
@@ -167,44 +177,6 @@ internal sealed interface LayerFill {
     }
 
     data class Overlay(val brush: Brush, val alpha: Float)
-}
-
-/**
- * Average frame interval and graph draw time, published twice a second so the readout doesn't
- * recompose every frame. Draw time is CPU time spent recording every graph on the page into the
- * display list, summed per frame — a relative cost signal between presets, not a GPU measurement.
- */
-@ExperimentalMorpheusGraphApi
-@Stable
-public class MorpheusGraphFrameStats {
-    public var frameMillis: Float by mutableFloatStateOf(0f)
-        private set
-    public var drawMillis: Float by mutableFloatStateOf(0f)
-        private set
-
-    private var intervalNanosSum = 0L
-    private var drawNanosSum = 0L
-    private var frames = 0
-
-    public fun recordDraw(nanos: Long) {
-        drawNanosSum += nanos
-    }
-
-    public fun recordFrame(intervalNanos: Long) {
-        intervalNanosSum += intervalNanos
-        frames++
-        if (intervalNanosSum >= PUBLISH_INTERVAL_NANOS) {
-            frameMillis = intervalNanosSum / frames / NANOS_PER_MILLI
-            drawMillis = drawNanosSum / frames / NANOS_PER_MILLI
-            intervalNanosSum = 0L
-            drawNanosSum = 0L
-            frames = 0
-        }
-    }
-
-    private companion object {
-        const val PUBLISH_INTERVAL_NANOS = 500_000_000L
-    }
 }
 
 /**
@@ -242,6 +214,9 @@ public class MorpheusGraphLayerStats {
  * changes the grid's cell size, rebuilds them all.
  */
 private class MorpheusGraphHolder {
+    /** Tells the holder's background apart in [MorpheusGraphFrameStats], without the stats holding on to it. */
+    val id = nextHolderId++
+
     private var builtReferenceSize = 0f
     private var builtPxPerDp = 0f
     private var fieldsByFamily = HashMap<LayerFamily, LayerField>()

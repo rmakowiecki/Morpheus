@@ -35,6 +35,9 @@ internal class GallerySession(val sample: Sample) {
         selectedSpecName?.let { tunedSpecs[it] = spec }
     }
 
+    /** Every spec as tuned, in the sample's order; snapshot-backed, so a tuning edit changes it. */
+    val currentSpecs: List<MorpheusGraphSpec> get() = sample.specs.map { tunedSpecs.getValue(it.name) }
+
     /** True once any spec differs from its default. */
     val isTuned: Boolean get() = sample.specs.any { tunedSpecs[it.name] != it.default }
 
