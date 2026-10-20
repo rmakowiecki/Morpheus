@@ -1225,7 +1225,7 @@ private class MorphMesh(
         val endEdges = end.edges.toHashSet()
         val alive = BooleanArray(nodeCount) { start.alive[it] || end.alive[it] }
         val transitEdges = transit?.let { connectTransit(it, startEdges, endEdges, alive, switches) }.orEmpty()
-        val unionEdges = (startEdges + endEdges + transitEdges).toLongArray()
+        val unionEdges = (startEdges + endEdges + transitEdges).toLongArray().apply { sort() }
         val neighbours = Array(nodeCount) { ArrayList<Int>() }
         for (key in unionEdges) {
             neighbours[edgeStart(key)] += edgeEnd(key)

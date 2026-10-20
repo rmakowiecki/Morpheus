@@ -97,19 +97,23 @@ internal fun connectivityViolations(count: Int, edges: LongArray): ConnectivityV
     return ConnectivityViolations(smallGraphNodes = graph.smallGraphNodes(), cutNodes = graph.cutNodes().asList())
 }
 
-/** Every triangle of the graph of [edges] over [count] nodes, as node index triples, each once. */
+/**
+ * Every triangle of the graph of [edges] over [count] nodes, as node index triples, each once: each
+ * triple ascending, the triples in ascending order, so the list is the same whatever order [edges] come in.
+ */
 internal fun meshTriangles(count: Int, edges: LongArray): IntArray {
     val neighbours = Array(count) { HashSet<Int>() }
     for (key in edges) {
         neighbours[edgeStart(key)] += edgeEnd(key)
         neighbours[edgeEnd(key)] += edgeStart(key)
     }
+    val sortedNeighbours = Array(count) { neighbours[it].toIntArray().apply { sort() } }
     val triangles = ArrayList<Int>()
-    for (key in edges) {
+    for (key in edges.sortedArray()) {
         val low = min(edgeStart(key), edgeEnd(key))
         val high = max(edgeStart(key), edgeEnd(key))
         // From the edge between each triangle's two lowest corners only.
-        for (apex in neighbours[low]) {
+        for (apex in sortedNeighbours[low]) {
             if (apex <= high || apex !in neighbours[high]) continue
             triangles += low
             triangles += high
@@ -130,7 +134,7 @@ internal fun triangleEdgeKeys(triangles: IntArray): LongArray {
     return keys.distinct().toLongArray()
 }
 
-/** Each node's [neighbours] nearest other nodes, as unique edges. Repair candidates for [EdgeRule.Proximity]. */
+/** Each node's [neighbours] nearest other nodes, as unique edges, sorted. Repair candidates for [EdgeRule.Proximity]. */
 internal fun nearestNeighbourEdgeKeys(count: Int, xs: FloatArray, ys: FloatArray, neighbours: Int): LongArray {
     val keys = HashSet<Long>()
     val bestIndices = IntArray(neighbours)
@@ -153,7 +157,7 @@ internal fun nearestNeighbourEdgeKeys(count: Int, xs: FloatArray, ys: FloatArray
         }
         for (index in 0 until found) keys += edgeKey(node, bestIndices[index])
     }
-    return keys.toLongArray()
+    return keys.toLongArray().apply { sort() }
 }
 
 private fun squaredDistance(first: Int, second: Int, xs: FloatArray, ys: FloatArray): Float {
@@ -162,7 +166,12 @@ private fun squaredDistance(first: Int, second: Int, xs: FloatArray, ys: FloatAr
     return deltaX * deltaX + deltaY * deltaY
 }
 
-/** The mutable graph [enforceMinDegree] works on: adjacency, repair candidates per node, and removed pairs. */
+/**
+ * The mutable graph [enforceMinDegree] works on: adjacency, repair candidates per node, and removed pairs.
+ *
+ * Wherever the order of a walk changes the result, it runs in ascending node index (edge key for edges),
+ * never in hash-set order, which differs between the JVM and wasm: so one spec settles on one mesh everywhere.
+ */
 private class EnforcementGraph(
     private val count: Int,
     private val xs: FloatArray,
@@ -309,6 +318,7 @@ private class EnforcementGraph(
             if (pieces.size < 2) continue
             val pieceOf = IntArray(count) { -1 }
             pieces.forEachIndexed { index, piece -> for (node in piece) pieceOf[node] = index }
+            // Pieces come ordered by their lowest node, so a tie for the largest goes to the lowest.
             val main = pieces.indices.maxBy { pieces[it].size }
             for (index in pieces.indices) {
                 if (index == main) continue
@@ -340,7 +350,7 @@ private class EnforcementGraph(
     }
 
     fun toTopology(converged: Boolean): MeshTopology {
-        val edges = currentKeys().sortedArray()
+        val edges = currentKeys()
         return MeshTopology(
             edges = edges,
             alive = alive,
@@ -459,10 +469,12 @@ private class EnforcementGraph(
         }
     }
 
-    /** The groups [cut]'s graph falls into without [cut]: each holds at least one of its neighbours. */
+    /** The groups [cut]'s graph falls into without [cut], ordered by their lowest node: each holds at least one of its neighbours. */
     private fun piecesAround(cut: Int): List<IntArray> {
         val seen = BooleanArray(count)
-        return neighbours[cut].toList().mapNotNull { start -> if (seen[start]) null else collectFrom(start, blocked = cut, seen = seen) }
+        return sortedNeighbours(cut).asList()
+            .mapNotNull { start -> if (seen[start]) null else collectFrom(start, blocked = cut, seen = seen) }
+            .sortedBy { piece -> piece.min() }
     }
 
     /** Every node reachable from [start] without passing [blocked], marked in [seen]. */
@@ -474,7 +486,7 @@ private class EnforcementGraph(
         while (stack.isNotEmpty()) {
             val node = stack.removeLast()
             found += node
-            for (other in neighbours[node]) {
+            for (other in sortedNeighbours(node)) {
                 if (other == blocked || seen[other]) continue
                 seen[other] = true
                 stack += other
@@ -484,11 +496,14 @@ private class EnforcementGraph(
     }
 
     /** Every cut node of the current graph; see [CutSearch]. */
-    fun cutNodes(): IntArray = CutSearch(Array(count) { if (neighbours[it].isEmpty()) EMPTY_NEIGHBOURS else neighbours[it].toIntArray() }).cutNodes()
+    fun cutNodes(): IntArray = CutSearch(Array(count) { if (neighbours[it].isEmpty()) EMPTY_NEIGHBOURS else sortedNeighbours(it) }).cutNodes()
+
+    /** [node]'s neighbours in ascending order. */
+    private fun sortedNeighbours(node: Int): IntArray = neighbours[node].toIntArray().apply { sort() }
 
     private fun prune(node: Int) {
         alive[node] = false
-        for (other in neighbours[node].toList()) disconnect(node, other)
+        for (other in sortedNeighbours(node)) disconnect(node, other)
     }
 
     private fun canAdd(first: Int, second: Int): Boolean {
@@ -515,10 +530,11 @@ private class EnforcementGraph(
         removedKeys += edgeKey(first, second)
     }
 
+    /** Every current edge, in ascending key order. */
     private fun currentKeys(): LongArray {
         val keys = ArrayList<Long>()
         for (node in 0 until count) {
-            for (other in neighbours[node]) if (node < other) keys += edgeKey(node, other)
+            for (other in sortedNeighbours(node)) if (node < other) keys += edgeKey(node, other)
         }
         return keys.toLongArray()
     }
