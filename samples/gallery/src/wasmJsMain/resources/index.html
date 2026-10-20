@@ -51,7 +51,7 @@
     <!-- Shown instead of the app when the browser lacks WebAssembly GC. The hero comes from develop on GitHub:
          docs/assets isn't part of the Pages artifact. -->
     <div id="wasm-gc-fallback" class="fallback" hidden>
-        <img src="https://raw.githubusercontent.com/rmakowiecki/Morpheus/develop/docs/assets/hero.webp" width="540" height="270"
+        <img data-src="https://raw.githubusercontent.com/rmakowiecki/Morpheus/develop/docs/assets/hero.webp" width="540" height="270"
              alt="Two pills of mesh morphing into two crossing ribbons and back">
         <p>This demo needs a browser with WebAssembly GC: Chrome or Edge 119+, Firefox 120+, or Safari 18.2+.</p>
         <p><a href="https://github.com/rmakowiecki/Morpheus">See Morpheus on GitHub</a></p>
@@ -75,7 +75,11 @@
             app.src = "gallery.js";
             document.body.appendChild(app);
         } else {
-            document.getElementById("wasm-gc-fallback").hidden = false;
+            // The src is set only here: a hidden img with a src is still fetched, and the hero is ~10 MB.
+            const fallback = document.getElementById("wasm-gc-fallback");
+            const hero = fallback.querySelector("img[data-src]");
+            hero.src = hero.dataset.src;
+            fallback.hidden = false;
         }
     </script>
 </body>
