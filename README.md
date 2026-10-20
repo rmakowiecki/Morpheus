@@ -1,4 +1,8 @@
+[![Two pills of mesh morphing into two crossing ribbons and back](docs/assets/hero.webp)](https://rmakowiecki.github.io/Morpheus/)
+
 # Morpheus
+
+[Live demo](https://rmakowiecki.github.io/Morpheus/)
 
 Compose Multiplatform eye-candy libraries for Android, desktop JVM and the browser (wasm).
 

@@ -329,7 +329,7 @@ private fun primitiveSliders(primitive: ShapePrimitive): List<PrimitiveSlider<Sh
 
 @Suppress("MagicNumber")
 private val layerSliders = listOf(
-    LayerSlider("Density (cells on window long side)", 4f..48f, { it.density }, { spec, value -> spec.copy(density = value) }),
+    LayerSlider("Density (cells on window long side)", 4f..96f, { it.density }, { spec, value -> spec.copy(density = value) }),
     LayerSlider("Fill chance", 0.3f..1f, { it.fillChance }, { spec, value -> spec.copy(fillChance = value) }),
     LayerSlider("Jitter (cells)", 0f..0.5f, { it.jitter }, { spec, value -> spec.copy(jitter = value) }),
     LayerSlider("Drift amplitude (cells)", 0f..1.2f, { it.driftAmplitude }, { spec, value -> spec.copy(driftAmplitude = value) }),

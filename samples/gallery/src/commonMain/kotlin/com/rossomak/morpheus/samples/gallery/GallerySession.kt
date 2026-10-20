@@ -6,11 +6,12 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.rossomak.morpheus.MorpheusGraphSpec
+import com.rossomak.morpheus.samples.CycleControl
 import com.rossomak.morpheus.samples.Sample
 import com.rossomak.morpheus.samples.SampleSpecs
 import kotlin.coroutines.cancellation.CancellationException
 
-/** One open sample: its preparation, its tuned specs and the tuning sheet. Dropped, and so reset, when the sample is left. */
+/** One open sample: its preparation, its tuned specs, the tuning sheet and its cycle control. Dropped, and so reset, when the sample is left. */
 @Stable
 internal class GallerySession(val sample: Sample) {
     private val tunedSpecs = mutableStateMapOf<String, MorpheusGraphSpec>().apply { sample.specs.forEach { put(it.name, it.default) } }
@@ -23,12 +24,23 @@ internal class GallerySession(val sample: Sample) {
 
     var isTuning by mutableStateOf(false)
 
+    /** Pauses and scrubs the sample's cycle, such as a morph held at one end while its spec is tuned. */
+    val cycle = CycleControl()
+
     var selectedSpecName: String? by mutableStateOf(sample.specs.firstOrNull()?.name)
 
     val selectedSpec: MorpheusGraphSpec? get() = selectedSpecName?.let { tunedSpecs[it] }
 
     fun tune(spec: MorpheusGraphSpec) {
         selectedSpecName?.let { tunedSpecs[it] = spec }
+    }
+
+    /** True once any spec differs from its default. */
+    val isTuned: Boolean get() = sample.specs.any { tunedSpecs[it.name] != it.default }
+
+    /** Puts every spec back to its default, as a capture renders it. */
+    fun resetSpecs() {
+        sample.specs.forEach { tunedSpecs[it.name] = it.default }
     }
 
     /** Runs the sample's preparation step; a failure, a wasm JS error included (not an [Exception]), shows in the pane. */

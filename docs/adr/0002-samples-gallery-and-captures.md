@@ -50,8 +50,12 @@ crossfade (the default, for directional motion), a boomerang (for morphs and scr
 
 The capture tool writes into `docs/media`, which git ignores. Media is regenerated on demand with
 `./gradlew :samples:capture:run` and never checked in, so the repository's history doesn't grow by
-megabytes of binaries every time a spec or a default changes (one 6 s Minimal loop is about 2.2 MB). Where the
-README's images are hosted is decided with the README captures.
+megabytes of binaries every time a spec or a default changes (one 6 s Minimal loop is about 2.2 MB).
+
+The few images the README and the Pages fallback show are the exception: hand-picked copies of captures,
+committed in `docs/assets`. A recapture never touches them; refreshing one is a deliberate copy from
+`docs/media`, so binary history grows only when a published image changes, not on every capture. The Pages
+fallback loads them by their raw GitHub URL on `develop`, as the Pages artifact holds only the gallery.
 
 ### The gallery deploys to GitHub Pages from `develop`
 
