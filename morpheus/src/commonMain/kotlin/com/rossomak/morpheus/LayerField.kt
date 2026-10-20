@@ -191,6 +191,9 @@ private const val NODE_ALPHA = 0.85f
 private const val HOT_NODE_SCALE = 1.4f
 private const val NODE_SIZE_FLOOR = 0.2f
 
+/** A dot is a punch and an add; see `drawCores`. */
+private const val DRAW_CALLS_PER_DOT = 2
+
 /** How much a far node shrinks at full [MorpheusGraphLayerSpec.depthDimming]. */
 private const val DEPTH_SIZE_SHRINK = 0.45f
 
@@ -413,8 +416,10 @@ internal class LayerField(
 
     /**
      * Paints the layer into its own offscreen layer, composited onto the canvas once. Edges and halos
-     * blend with each other there, but each dot is drawn with [BlendMode.Src] and replaces whatever lies
-     * under it, so a dot's pixels are exactly its own alpha instead of summing with the edges it anchors.
+     * blend with each other there, but each dot is punched out with [BlendMode.DstOut] and then added with
+     * [BlendMode.Plus], so it replaces whatever lies under it: a dot's pixels are exactly its own alpha
+     * instead of summing with the edges it anchors. Everything drawn into the offscreen must be in the
+     * fill's mask color, because [BlendMode.Plus] adds color too.
      *
      * A [LayerFill.Masked] layer is drawn in white first, then recolored as a whole while still
      * offscreen: [BlendMode.SrcIn] takes the base brush's color and keeps each pixel's alpha, and
@@ -433,7 +438,7 @@ internal class LayerField(
         val drawnEdges = probe.timed(FramePhase.Edges, skip = probe?.stats?.skipEdges == true) { drawEdges(color, timeSeconds) }
         val drawnHalos = probe.timed(FramePhase.Halos, skip = probe?.stats?.skipHalos == true) { drawGlows(halos) }
         val drawnDots = probe.timed(FramePhase.Dots, skip = probe?.stats?.skipDots == true) { drawCores(color) }
-        drawCalls += drawnEdges + drawnHalos + drawnDots
+        drawCalls += drawnEdges + drawnHalos + drawnDots * DRAW_CALLS_PER_DOT
         if (fill is LayerFill.Masked) {
             drawCalls += probe.timed(FramePhase.Fill, skip = probe?.stats?.skipFillRecolor == true) {
                 drawRect(brush = fill.base, blendMode = BlendMode.SrcIn)
@@ -1005,8 +1010,13 @@ internal class LayerField(
     }
 
     /**
-     * Drawn last and with [BlendMode.Src], so a dot replaces the edges and halo under it rather than summing
-     * with them. Returns how many it drew.
+     * Drawn last, so a dot replaces the edges and halo under it rather than summing with them. Each dot is two
+     * fixed-function blends: a [BlendMode.DstOut] punch at alpha 1 leaves `d·(1−c)` at coverage `c`, then the
+     * dot at its alpha `a` with [BlendMode.Plus] adds `a·c`. That is the antialiased [BlendMode.Src] result,
+     * `c·a + (1−c)·d`, without Src itself: on WebGL, which has no dual-source blending, Skia draws an
+     * antialiased Src by copying the layer once per dot. [BlendMode.Plus] adds color as well as alpha, so it is
+     * exact only because everything in the layer's offscreen is in the one mask [color]. Returns how many dots
+     * it drew, each two draw calls.
      */
     private fun DrawScope.drawCores(color: Color): Int {
         var drawn = 0
@@ -1014,12 +1024,10 @@ internal class LayerField(
             if (nodeAlphas[index] < EDGE_MIN_VISIBLE_ALPHA) continue
             val depthShrink = 1f - DEPTH_SIZE_SHRINK * spec.depthDimming * (1f - nodes[index].depth)
             val hotScale = lerp(1f, HOT_NODE_SCALE, hotWeights[index])
-            drawCircle(
-                color = color.copy(alpha = nodeAlphas[index]),
-                radius = spec.nodeSizeDp * pxPerDp * sizeFactor(index) * hotScale * depthShrink,
-                center = Offset(positionsX[index], positionsY[index]),
-                blendMode = BlendMode.Src,
-            )
+            val radius = spec.nodeSizeDp * pxPerDp * sizeFactor(index) * hotScale * depthShrink
+            val center = Offset(positionsX[index], positionsY[index])
+            drawCircle(color = color, radius = radius, center = center, blendMode = BlendMode.DstOut)
+            drawCircle(color = color.copy(alpha = nodeAlphas[index]), radius = radius, center = center, blendMode = BlendMode.Plus)
             drawn++
         }
         return drawn

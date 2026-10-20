@@ -54,7 +54,9 @@ class FrameStatsCaptureTest {
         val skipped = measure { skipDots = true }
         skipped.frame.contentEquals(normal.frame) shouldBe false
         normal.breakdown.total.drawnDots shouldBeGreaterThan 0f
-        skipped.breakdown.total.drawCalls shouldBe normal.breakdown.total.drawCalls - normal.breakdown.total.drawnDots
+        withClue("each dot is a punch and an add") {
+            skipped.breakdown.total.drawCalls shouldBe normal.breakdown.total.drawCalls - 2 * normal.breakdown.total.drawnDots
+        }
         skipped.breakdown.total.drawnDots shouldBe 0f
         skipped.breakdown.total.dotsMillis shouldBe 0f
     }
