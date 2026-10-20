@@ -16,12 +16,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -51,8 +53,8 @@ import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * The open sample on the [previewFrame]'s canvas, centered on the sample theme's background, under its title,
- * the theme control, the Tune action, the cycle control for a sample that runs a cycle, and the
- * preview canvas control. [onBack] is the single-pane layout's way back to the list.
+ * the theme control, the Tune and Reset to defaults actions, the cycle control for a sample that runs a cycle,
+ * and the preview canvas control. [onBack] is the single-pane layout's way back to the list.
  */
 @Composable
 internal fun SampleDetail(
@@ -87,6 +89,10 @@ internal fun SampleDetail(
                 FilledTonalButton(onClick = { session.isTuning = !session.isTuning }) {
                     Icon(Icons.Filled.Tune, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
                     Text("Tune")
+                }
+                OutlinedButton(onClick = session::resetSpecs, enabled = session.isTuned) {
+                    Icon(Icons.Filled.RestartAlt, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                    Text("Reset to defaults")
                 }
             }
             session.cycle.period?.let { period -> CycleControls(control = session.cycle, period = period) }

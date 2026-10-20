@@ -35,6 +35,14 @@ internal class GallerySession(val sample: Sample) {
         selectedSpecName?.let { tunedSpecs[it] = spec }
     }
 
+    /** True once any spec differs from its default. */
+    val isTuned: Boolean get() = sample.specs.any { tunedSpecs[it.name] != it.default }
+
+    /** Puts every spec back to its default, as a capture renders it. */
+    fun resetSpecs() {
+        sample.specs.forEach { tunedSpecs[it.name] = it.default }
+    }
+
     /** Runs the sample's preparation step; a failure, a wasm JS error included (not an [Exception]), shows in the pane. */
     suspend fun prepare() {
         preparation = try {
