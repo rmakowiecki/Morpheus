@@ -46,13 +46,22 @@ is dark-only. Every file has a byte budget, 5 MB by default; a capture over it f
 (frame rate, canvas area, duration, quality). Node drift never repeats, so a capture closes its loop with a
 crossfade (the default, for directional motion), a boomerang (for morphs and scrolls) or a single still.
 
+### Captured media is regenerated, not committed
+
+The capture tool writes into `docs/media`, which git ignores. Media is regenerated on demand with
+`./gradlew :samples:capture:run` and never checked in, so the repository's history doesn't grow by
+megabytes of binaries every time a spec or a default changes (one 6 s Minimal loop is about 2.2 MB). Where the
+README's images are hosted is decided with the README captures.
+
 ### The gallery deploys to GitHub Pages from `develop`
 
 The gallery's browser build is the live demo, deployed on every push to `develop`, so it tracks current
-work. CI never runs captures: media changes are intentional commits.
+work. CI never runs captures.
 
 ## Considered options
 
+- **Committing captures to the repository.** Rejected: every recapture adds megabytes of binary history
+  that no clone can shed, and the captures are reproducible from the code anyway.
 - **Screen recordings for the README.** Rejected: they drift from the code, can't be reproduced, and go
   stale as soon as a spec changes.
 - **Samples inside the tuner playground.** Rejected: a showcase and a design tool pull the UI in different
