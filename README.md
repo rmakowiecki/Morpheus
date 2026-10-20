@@ -1,4 +1,4 @@
-[![Two pills of mesh morphing into two crossing ribbons and back](docs/media/hero.webp)](https://rmakowiecki.github.io/Morpheus/)
+[![Two pills of mesh morphing into two crossing ribbons and back](docs/assets/hero.webp)](https://rmakowiecki.github.io/Morpheus/)
 
 # Morpheus
 
