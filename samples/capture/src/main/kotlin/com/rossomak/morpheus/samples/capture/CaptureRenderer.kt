@@ -19,6 +19,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.rossomak.morpheus.ExperimentalMorpheusGraphApi
+import com.rossomak.morpheus.LocalMorpheusGraphFrameStats
+import com.rossomak.morpheus.MorpheusGraphFrameStats
 import com.rossomak.morpheus.samples.CaptureRecipe
 import com.rossomak.morpheus.samples.CaptureThemes
 import com.rossomak.morpheus.samples.LoopMode
@@ -50,14 +53,23 @@ class Capture(val frames: List<Frame>, val still: Frame)
  * only advances while STARTED) and the sample theme. A warm-up frame at time 0 starts every frame-clock reader,
  * so kept frame `i` is at exactly `i / fps` seconds.
  */
+@OptIn(ExperimentalMorpheusGraphApi::class)
+suspend fun renderCapture(sample: Sample, theme: CaptureTheme, recipe: CaptureRecipe = sample.recipe): Capture =
+    renderCapture(sample, theme, recipe, frameStats = null)
+
+/**
+ * [renderCapture] with [frameStats] provided as [LocalMorpheusGraphFrameStats], as the gallery provides it, so its
+ * debug switches apply and every rendered frame, the warm-up included, reports into it.
+ */
+@ExperimentalMorpheusGraphApi
 @OptIn(ExperimentalCoroutinesApi::class)
-suspend fun renderCapture(sample: Sample, theme: CaptureTheme, recipe: CaptureRecipe = sample.recipe): Capture {
+suspend fun renderCapture(sample: Sample, theme: CaptureTheme, recipe: CaptureRecipe, frameStats: MorpheusGraphFrameStats?): Capture {
     // The lib's renderer switches to Dispatchers.Main.immediate; unconfined, its frame loop resumes inside
     // each render call instead of racing it.
     Dispatchers.setMain(UnconfinedTestDispatcher())
     try {
         sample.prepare()
-        val forward = renderForward(sample, theme, recipe, frameCount = forwardFrameCount(recipe))
+        val forward = renderForward(sample, theme, recipe, frameCount = forwardFrameCount(recipe), frameStats = frameStats)
         val still = forward[recipe.stillFrame]
         val frames = when (recipe.loop) {
             LoopMode.Crossfade -> crossfade(forward, recipe.frameCount, recipe.crossfadeFrames)
@@ -85,8 +97,8 @@ private fun crossfade(forward: List<Frame>, loopFrames: Int, crossfadeFrames: In
     if (index < crossfadeFrames) blend(forward[loopFrames + index], forward[index], step = index, steps = crossfadeFrames) else forward[index]
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
-private fun renderForward(sample: Sample, theme: CaptureTheme, recipe: CaptureRecipe, frameCount: Int): List<Frame> {
+@OptIn(ExperimentalComposeUiApi::class, ExperimentalMorpheusGraphApi::class)
+private fun renderForward(sample: Sample, theme: CaptureTheme, recipe: CaptureRecipe, frameCount: Int, frameStats: MorpheusGraphFrameStats?): List<Frame> {
     val density = Density(recipe.density)
     val canvasPixels = with(density) { IntSize(recipe.canvasSize.width.roundToPx(), recipe.canvasSize.height.roundToPx()) }
     val lifecycleOwner = ResumedLifecycleOwner()
@@ -95,6 +107,7 @@ private fun renderForward(sample: Sample, theme: CaptureTheme, recipe: CaptureRe
         CompositionLocalProvider(
             LocalWindowInfo provides rememberCanvasWindowInfo(canvasPixels, recipe.canvasSize),
             LocalLifecycleOwner provides lifecycleOwner,
+            LocalMorpheusGraphFrameStats provides frameStats,
         ) {
             SampleTheme(dark = theme.dark, modifier = Modifier.fillMaxSize()) {
                 Box(Modifier.fillMaxSize()) { sample.content(specs) }
