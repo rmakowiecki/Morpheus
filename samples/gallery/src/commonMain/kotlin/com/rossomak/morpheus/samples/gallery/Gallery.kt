@@ -1,11 +1,17 @@
+@file:OptIn(ExperimentalMorpheusGraphApi::class)
+
 package com.rossomak.morpheus.samples.gallery
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.VerticalDivider
@@ -21,7 +27,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.rossomak.morpheus.ExperimentalMorpheusGraphApi
 import com.rossomak.morpheus.MorpheusGraphSpec
 import com.rossomak.morpheus.samples.Sample
 import com.rossomak.morpheus.samples.SampleRegistry
@@ -45,7 +53,7 @@ fun Gallery(samples: List<Sample> = SampleRegistry.samples, onSpecExport: (sourc
     val session = remember(selectedId) { samples.firstOrNull { it.id == selectedId }?.let(::GallerySession) }
     var themeMode by remember { mutableStateOf(ThemeMode.System) }
     val previewFrame = remember { PreviewFrame() }
-    var showViolations by remember { mutableStateOf(false) }
+    val frameStats = remember { GalleryFrameStats() }
     val clipboard = LocalClipboard.current
     val coroutineScope = rememberCoroutineScope()
 
@@ -62,7 +70,9 @@ fun Gallery(samples: List<Sample> = SampleRegistry.samples, onSpecExport: (sourc
                         themeMode = themeMode,
                         systemDark = systemDark,
                         previewFrame = previewFrame,
+                        frameStats = frameStats,
                         onThemeModeChange = { themeMode = it },
+                        showsInlineBreakdown = !wide,
                         onBack = if (wide) null else ({ selectedId = null }),
                         modifier = modifier,
                     )
@@ -71,8 +81,8 @@ fun Gallery(samples: List<Sample> = SampleRegistry.samples, onSpecExport: (sourc
                 val tuneSheet = @Composable { openSession: GallerySession, modifier: Modifier ->
                     TuneSheetContent(
                         session = openSession,
-                        showViolations = showViolations,
-                        onShowViolationsChange = { showViolations = it },
+                        showViolations = frameStats.stats.showViolations,
+                        onShowViolationsChange = { frameStats.stats.showViolations = it },
                         onExport = { spec -> coroutineScope.launch { exportSpec(spec, clipboard, onSpecExport) } },
                         modifier = modifier,
                     )
@@ -91,11 +101,15 @@ fun Gallery(samples: List<Sample> = SampleRegistry.samples, onSpecExport: (sourc
                         } else {
                             detail(session, Modifier.weight(1f).fillMaxHeight())
                         }
-                        if (tuning != null) {
+                        val showsFrameStats = session != null && frameStats.isBreakdownExpanded
+                        if (tuning != null || showsFrameStats) {
                             VerticalDivider()
-                            SideSheet(onClose = { tuning.isTuning = false }, modifier = Modifier.width(SIDE_SHEET_WIDTH).fillMaxHeight()) {
-                                tuneSheet(tuning, Modifier)
-                            }
+                            SideColumn(
+                                tuning = tuning?.let { open -> { tuneSheet(open, Modifier) } },
+                                onCloseTuning = { tuning?.isTuning = false },
+                                frameStats = frameStats.takeIf { showsFrameStats },
+                                modifier = Modifier.width(SIDE_SHEET_WIDTH).fillMaxHeight(),
+                            )
                         }
                     }
                 } else {
@@ -107,6 +121,38 @@ fun Gallery(samples: List<Sample> = SampleRegistry.samples, onSpecExport: (sourc
                     if (tuning != null) {
                         TuneBottomSheet(onDismiss = { tuning.isTuning = false }) { tuneSheet(tuning, Modifier) }
                     }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The wide layout's right-hand column, which stacks the tuner and the frame stats panes like an IDE's side panes.
+ * The tuner takes whatever height the frame stats pane leaves; that pane takes only what its table needs, up to
+ * [FRAME_STATS_MAX_SHARE] of the column, and scrolls inside itself past that. Either pane alone fills what it needs.
+ */
+@Composable
+private fun SideColumn(
+    tuning: (@Composable () -> Unit)?,
+    onCloseTuning: () -> Unit,
+    frameStats: GalleryFrameStats?,
+    modifier: Modifier = Modifier,
+) {
+    BoxWithConstraints(modifier = modifier) {
+        val frameStatsMaxHeight = maxHeight * FRAME_STATS_MAX_SHARE
+        Column(modifier = Modifier.fillMaxSize()) {
+            if (tuning != null) {
+                SideSheet(title = "Tune", onClose = onCloseTuning, modifier = Modifier.weight(1f).fillMaxWidth()) { tuning() }
+            }
+            if (frameStats != null) {
+                if (tuning != null) HorizontalDivider()
+                SideSheet(
+                    title = "Frame stats",
+                    onClose = { frameStats.isBreakdownExpanded = false },
+                    modifier = Modifier.fillMaxWidth().heightIn(max = frameStatsMaxHeight),
+                ) {
+                    FrameBreakdownPanel(frameStats = frameStats, maxHeight = Dp.Infinity, modifier = Modifier.fillMaxWidth())
                 }
             }
         }
@@ -132,3 +178,4 @@ private suspend fun exportSpec(spec: MorpheusGraphSpec, clipboard: Clipboard, on
 private val WIDE_LAYOUT_MIN_WIDTH = 840.dp
 private val LIST_WIDTH = 320.dp
 private val SIDE_SHEET_WIDTH = 380.dp
+private const val FRAME_STATS_MAX_SHARE = 0.4f

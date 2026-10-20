@@ -29,7 +29,7 @@ import com.rossomak.morpheus.tuner.MorpheusGraphTuningSheetContent
 
 /**
  * The tuner on the open sample's selected spec, under a picker for its tunable specs and the Export
- * button. Violations are gallery state only: samples own their modifiers, so the toggle draws nothing.
+ * button. The violations toggle is the gallery's frame stats switch, so it rings violations on every sample.
  */
 @Composable
 internal fun TuneSheetContent(
@@ -69,14 +69,14 @@ internal fun TuneSheetContent(
     }
 }
 
-/** The wide layout's sheet, beside the detail pane so the sample stays in view. */
+/** The wide layout's sheet, titled [title], beside the detail pane so the sample stays in view. */
 @Composable
-internal fun SideSheet(onClose: () -> Unit, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+internal fun SideSheet(title: String, onClose: () -> Unit, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Surface(modifier = modifier, color = MaterialTheme.colorScheme.surfaceContainerLow) {
         Column {
             Row(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(text = "Tune", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                IconButton(onClick = onClose) { Icon(Icons.Filled.Close, contentDescription = "Close the tuner") }
+                Text(text = title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                IconButton(onClick = onClose) { Icon(Icons.Filled.Close, contentDescription = "Close the $title pane") }
             }
             content()
         }
