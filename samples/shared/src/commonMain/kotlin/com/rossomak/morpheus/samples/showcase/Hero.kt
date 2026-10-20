@@ -40,7 +40,7 @@ private val NearBlack = Color(0xFF050807)
 
 /** The very dense front mesh both ends share, so its family fields can't diverge and nodes stay put. */
 private val heroFront = MorpheusGraphLayerSpec(
-    density = 85f,
+    density = 70f,
     jitter = 0.4f,
     driftAmplitude = 0.3f,
     envelopeFloor = 0.01f,
