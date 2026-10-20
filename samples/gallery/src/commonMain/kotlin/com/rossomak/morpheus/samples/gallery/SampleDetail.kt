@@ -11,8 +11,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
@@ -22,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -38,12 +42,17 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.rossomak.morpheus.samples.CaptureThemes
+import com.rossomak.morpheus.samples.CycleControl
+import com.rossomak.morpheus.samples.LocalCycleControl
 import com.rossomak.morpheus.samples.SampleTheme
+import kotlin.math.roundToInt
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * The open sample on the [previewFrame]'s canvas, centered on the sample theme's background, under its title,
- * the theme control, the Tune action and the preview canvas control. [onBack] is the single-pane layout's
- * way back to the list.
+ * the theme control, the Tune action, the cycle control for a sample that runs a cycle, and the
+ * preview canvas control. [onBack] is the single-pane layout's way back to the list.
  */
 @Composable
 internal fun SampleDetail(
@@ -80,6 +89,7 @@ internal fun SampleDetail(
                     Text("Tune")
                 }
             }
+            session.cycle.period?.let { period -> CycleControls(control = session.cycle, period = period) }
         }
         PreviewFrameControl(frame = previewFrame, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 8.dp))
         SampleTheme(dark = darkOnly || themeMode.isDark(systemDark), modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -91,11 +101,41 @@ internal fun SampleDetail(
                 Preparation.Done -> SampleStage(
                     canvasSize = previewFrame.canvasSize(sample.recipe),
                     scalesToFit = previewFrame.scalesToFit,
-                ) { sample.content(session.specs) }
+                ) {
+                    CompositionLocalProvider(LocalCycleControl provides session.cycle) { sample.content(session.specs) }
+                }
             }
         }
     }
 }
+
+/** Pauses and resumes the sample's cycle; while paused, a slider scrubs it, so a morph can be held anywhere. */
+@Composable
+private fun CycleControls(control: CycleControl, period: Duration) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilledTonalButton(onClick = { control.isPaused = !control.isPaused }) {
+            val icon = if (control.isPaused) Icons.Filled.PlayArrow else Icons.Filled.Pause
+            Icon(icon, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+            Text(if (control.isPaused) "Play" else "Pause")
+        }
+        if (control.isPaused) {
+            Slider(
+                value = (control.time / period).toFloat(),
+                onValueChange = { control.time = period * it.toDouble() },
+                modifier = Modifier.width(240.dp),
+            )
+            Text(text = "${seconds(control.time)} / ${seconds(period)} s", style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+/** [duration] in seconds, to a tenth. */
+private fun seconds(duration: Duration): String {
+    val tenths = (duration / 100.milliseconds).roundToInt()
+    return "${tenths / TENTHS_PER_SECOND}.${tenths % TENTHS_PER_SECOND}"
+}
+
+private const val TENTHS_PER_SECOND = 10
 
 @Composable
 private fun ThemeControl(selected: ThemeMode, enabled: Boolean, onSelect: (ThemeMode) -> Unit) {
