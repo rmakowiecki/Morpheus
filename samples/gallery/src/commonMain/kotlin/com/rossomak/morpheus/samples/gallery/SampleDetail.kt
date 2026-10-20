@@ -54,7 +54,7 @@ import kotlin.time.Duration.Companion.milliseconds
 /**
  * The open sample on the [previewFrame]'s canvas, centered on the sample theme's background, under its title,
  * the theme control, the Tune and Reset to defaults actions, the cycle control for a sample that runs a cycle,
- * and the preview canvas control. [onBack] is the single-pane layout's way back to the list.
+ * the frame rate readout and the preview canvas control. [onBack] is the single-pane layout's way back to the list.
  */
 @Composable
 internal fun SampleDetail(
@@ -96,6 +96,7 @@ internal fun SampleDetail(
                 }
             }
             session.cycle.period?.let { period -> CycleControls(control = session.cycle, period = period) }
+            FrameRateReadout()
         }
         PreviewFrameControl(frame = previewFrame, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 8.dp))
         SampleTheme(dark = darkOnly || themeMode.isDark(systemDark), modifier = Modifier.weight(1f).fillMaxWidth()) {
