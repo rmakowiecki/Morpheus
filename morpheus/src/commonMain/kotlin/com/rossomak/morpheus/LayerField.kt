@@ -272,6 +272,9 @@ internal class LayerField(
 
     /** The memory every settle of this layer reuses. */
     private val meshWorkspace = MeshWorkspace()
+
+    /** Held so a settle doesn't allocate a capturing lambda. */
+    private val nodeDepths = NodeDepths { nodes[it].depth }
     private var hotWeights = FloatArray(0)
     private var brightestEdgeAlphas = FloatArray(0)
     private var secondEdgeAlphas = FloatArray(0)
@@ -802,7 +805,8 @@ internal class LayerField(
             cell = cell,
             // A mesh rebuilt every frame can't afford the connectivity rules, nor needs edge visibility without them.
             keepConnectivity = spec.edgeRule == EdgeRule.FixedTriangulation,
-        ) { nodes[it].depth }
+            depths = nodeDepths,
+        )
     }
 
     private fun ensureEdgeCapacity(capacity: Int) {

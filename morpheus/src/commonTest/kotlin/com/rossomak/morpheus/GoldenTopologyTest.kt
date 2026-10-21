@@ -11,7 +11,7 @@ import kotlin.test.fail
  * one that changes them shows what changed. The expected values live in [goldenTopology] and
  * [goldenZeroJitterTopology]; they must pass on the JVM and in headless Chrome alike.
  *
- * **Stepping**: each case starts from a fresh field and steps
+ * **Stepping**, which every later ticket keeps: each case starts from a fresh field and steps
  * at a fixed 30 fps from t = 0. A still case is recorded at frames 0, 45 and 150 (0 s, 1.5 s, 5 s). A
  * morph case steps its fraction linearly from 0 to 1 over 60 frames, then holds it at 1 until frame 75, and
  * is recorded at fractions 0.25, 0.5, 0.75 and 1 and at frame 75 (settled), one record per mesh drawn. A
@@ -28,8 +28,8 @@ import kotlin.test.fail
  * one doesn't invalidate the record.
  *
  * **Zero-jitter cases** sit on a perfect grid, so Delaunay meets co-circular points and its tie-breaks
- * decide the mesh. They are recorded apart in [goldenZeroJitterTopology], so a tie-break change
- * re-records on its own.
+ * decide the mesh. They are recorded apart in [goldenZeroJitterTopology] because #26 may change them
+ * on purpose; every other ticket keeps them.
  *
  * **Regenerating**: flip [REGENERATE] to true locally and run `./gradlew :morpheus:jvmTest --tests
  * '*GoldenTopologyTest'`. Each test prints its whole table in source form (find it in the system-out of
@@ -163,7 +163,7 @@ class GoldenTopologyTest {
     }
 
     private companion object {
-        /** Flip locally to print the tables instead of checking them; see the class doc. */
+        /** Flip locally to print the tables instead of checking them; see the class doc. Never commit it true. */
         const val REGENERATE = false
 
         val SEEDS = listOf(1, 42, 9_001)
