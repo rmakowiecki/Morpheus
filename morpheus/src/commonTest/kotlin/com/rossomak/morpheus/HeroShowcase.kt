@@ -7,7 +7,6 @@ import com.rossomak.morpheus.ShapePrimitive.Uniform
 // The "Pills to ribbons" showcase's two ends, copied from samples/shared's showcase/Hero.kt (the library
 // can't depend on the samples). Fills are left out: they never touch the mesh.
 
-/** Hero.kt's heroFront. */
 internal val heroFront = MorpheusGraphLayerSpec(
     density = 70f,
     jitter = 0.4f,
@@ -27,7 +26,7 @@ internal val heroFront = MorpheusGraphLayerSpec(
     cometSpark = 0.6f,
 )
 
-/** Hero.kt's heroGhost: [MorpheusGraphPresets.defaultBackLayer] at density 16 and alpha 0.3, spelled out. */
+/** [MorpheusGraphPresets.defaultBackLayer] at density 16 and alpha 0.3, spelled out. */
 internal val heroGhost = MorpheusGraphLayerSpec(
     shapes = listOf(Uniform()),
     density = 16f,
@@ -47,7 +46,6 @@ internal val heroGhost = MorpheusGraphLayerSpec(
     alpha = 0.3f,
 )
 
-/** Hero.kt's heroPills. */
 internal val heroPills = MorpheusGraphSpec(
     seed = 23,
     layers = listOf(
@@ -61,7 +59,6 @@ internal val heroPills = MorpheusGraphSpec(
     ),
 )
 
-/** Hero.kt's heroRibbons. */
 internal val heroRibbons = heroPills.copy(
     layers = listOf(
         heroGhost,

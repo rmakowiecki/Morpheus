@@ -30,7 +30,7 @@ class SettleBenchmark {
             }.apply { sort() }
             val settlesBefore = field.settleCount
             field.rebuildMorphMesh(shape, WIDTH, HEIGHT)
-            val meshes = if (field.settleCount - settlesBefore > 2) "two ends and the transit mesh" else "two ends"
+            val meshes = if (field.settleCount - settlesBefore > END_SETTLES) "two ends and the transit mesh" else "two ends"
             println(
                 "slot ${layer.slotFromFront} (density ${layer.spec.density.toInt()}, $meshes): " +
                     "median ${nanos[nanos.size / 2].millis()} ms, fastest ${nanos.first().millis()} ms over $MEASURED_RUNS runs",
@@ -41,11 +41,12 @@ class SettleBenchmark {
     private fun Long.millis(): String = "%.3f".format(this / 1_000_000.0)
 
     private companion object {
-        /** The benchmark recipe's 16:9 canvas, at its device scale. */
+        /** A 16:9 canvas at 2x scale. */
         const val WIDTH = 640f
         const val HEIGHT = 360f
         const val PX_PER_DP = 2f
         const val MID_FRACTION = 0.5f
+        const val END_SETTLES = 2
         const val WARM_UP_RUNS = 200
         const val MEASURED_RUNS = 200
     }

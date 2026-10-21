@@ -4,8 +4,9 @@ private const val EMPTY: Byte = 0
 private const val FULL: Byte = 1
 private const val REMOVED: Byte = 2
 private const val INITIAL_CAPACITY = 16
+private const val INITIAL_STRIDE = 16
 
-/** Rehashes once full and removed slots pass this share of the table, so every probe ends on an empty slot. */
+/** The most full or removed slots a table keeps, as a share of its size, so an empty slot always ends a probe. */
 private const val MAX_LOAD = 0.5f
 
 // SplitMix64's finalizer: its shifts and multipliers (0xbf58476d1ce4e5b9, 0x94d049bb133111eb as signed longs).
@@ -199,21 +200,16 @@ private fun tableSizeFor(capacity: Int): Int {
     return size
 }
 
-private const val INITIAL_STRIDE = 16
-
 /**
- * Each node's neighbours in one [IntArray], a fixed [stride] of slots per node. When a node would
- * outgrow it, the whole array is rebuilt at double the stride, and keeps that size from then on.
- * [reset] keeps the arrays, so refilling it allocates only to grow.
+ * Each node's neighbours in one [IntArray], [stride] slots per node; when a node outgrows its slots,
+ * every node's stride doubles. [reset] keeps the arrays, so refilling allocates only to grow.
  */
 internal class IntAdjacency {
     private var stride = INITIAL_STRIDE
     private var neighbours = IntArray(0)
     private var degrees = IntArray(0)
 
-    /** Nodes in use since the last [reset]. */
-    var nodeCount: Int = 0
-        private set
+    private var nodeCount = 0
 
     /** Empties the first [nodeCount] nodes and makes room for that many. */
     fun reset(nodeCount: Int) {
@@ -228,7 +224,7 @@ internal class IntAdjacency {
 
     fun degree(node: Int): Int = degrees[node]
 
-    /** [node]'s neighbour at [position], below [degree]. */
+    /** [node]'s neighbour at [position], which must be below [degree]. */
     fun neighbour(node: Int, position: Int): Int = neighbours[node * stride + position]
 
     fun contains(node: Int, other: Int): Boolean {
@@ -268,7 +264,7 @@ internal class IntAdjacency {
         return false
     }
 
-    /** True if two nodes with ascending neighbours share one, by a merge walk. */
+    /** Whether [first] and [second] share a neighbour; both neighbour lists must be ascending (merge walk). */
     fun sharesSortedNeighbour(first: Int, second: Int): Boolean {
         var firstSlot = first * stride
         val firstEnd = firstSlot + degrees[first]

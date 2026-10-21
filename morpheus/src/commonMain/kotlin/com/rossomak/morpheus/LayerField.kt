@@ -270,7 +270,7 @@ internal class LayerField(
     /** The [EdgeRule.FixedTriangulation] mesh of each end of the current morph, and how its edges switch. */
     private var morphMesh: MorphMesh? = null
 
-    /** The memory every settle of this layer works in: still frames and a morph's ends and transit mesh alike. */
+    /** The memory every settle of this layer reuses. */
     private val meshWorkspace = MeshWorkspace()
     private var hotWeights = FloatArray(0)
     private var brightestEdgeAlphas = FloatArray(0)
@@ -696,7 +696,7 @@ internal class LayerField(
     private fun cometTrackFor(morph: LayerShape.Morph, level: Int, width: Float, height: Float): CometTrack =
         cometTracks.forMorph(morph, level, width, height, nodes, homeX, homeY)
 
-    /** Settles [morph]'s meshes again from the current frame's presences, past the cache; for the settle benchmark. */
+    /** Rebuilds [morph]'s meshes, bypassing the cache. For the settle benchmark. */
     internal fun rebuildMorphMesh(morph: LayerShape.Morph, width: Float, height: Float) {
         morphMesh = null
         morphMeshFor(morph, width, height)
@@ -1235,6 +1235,7 @@ private class MorphMesh(
         val endEdges = end.edges.toHashSet()
         val alive = BooleanArray(nodeCount) { start.alive[it] || end.alive[it] }
         val transitEdges = transit?.let { connectTransit(it, startEdges, endEdges, alive, switches) }.orEmpty()
+        // Sorted: set order differs between the JVM and wasm.
         val unionEdges = (startEdges + endEdges + transitEdges).toLongArray().apply { sort() }
         val neighbours = Array(nodeCount) { ArrayList<Int>() }
         for (key in unionEdges) {
@@ -1608,7 +1609,7 @@ private fun ruleEdges(
 /** An edge rule's output for [enforceMinDegree]: its filtered edges, repair candidates and, for Delaunay rules, triangles. */
 private class RuleEdges(val base: LongArray, val candidates: LongArray, val triangles: IntArray?)
 
-/** Each node's depth, by index; an interface, so neither is boxed. */
+/** A node's depth by index; a `fun interface` rather than `(Int) -> Float`, so nothing is boxed. */
 private fun interface NodeDepths {
     fun depthOf(node: Int): Float
 }
@@ -1630,6 +1631,7 @@ private fun enforceOnVisibleEdges(
     depths: NodeDepths,
 ): MeshTopology {
     val visibleAlpha = EDGE_VISIBLE_ALPHA * VISIBLE_EDGE_MARGIN
+    fun restAlphaOf(key: Long) = restEdgeAlpha(key, xs, ys, presence, filters, cell, depths)
     fun settle(visible: EdgeFilter): MeshTopology =
         workspace.enforceMinDegree(
             count = count,
@@ -1644,10 +1646,10 @@ private fun enforceOnVisibleEdges(
             visible = visible,
         )
     if (!keepConnectivity) return settle(EdgeFilter.All)
-    if (!filters.strictTriangles) return settle { key -> restEdgeAlpha(key, xs, ys, presence, filters, cell, depths) >= visibleAlpha }
+    if (!filters.strictTriangles) return settle { key -> restAlphaOf(key) >= visibleAlpha }
     val restAlphas = HashMap<Long, Float>()
-    for (key in edges.candidates) restAlphas[key] = restEdgeAlpha(key, xs, ys, presence, filters, cell, depths)
-    for (key in edges.base) restAlphas.getOrPut(key) { restEdgeAlpha(key, xs, ys, presence, filters, cell, depths) }
+    for (key in edges.candidates) restAlphas[key] = restAlphaOf(key)
+    for (key in edges.base) restAlphas.getOrPut(key) { restAlphaOf(key) }
     // Strict meshes lift a faint edge to its triangle's other sides (see [fillTriangles]). Which
     // triangles the mesh keeps is known only once it settles, so this first guess counts every
     // triangle, and an edge the settled mesh leaves faint after all is dropped and the mesh re-settled.

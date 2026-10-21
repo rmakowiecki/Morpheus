@@ -6,8 +6,8 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Safety cap on [enforceMinDegree]'s repair rounds. Every pair can be added and removed at most once
- * per call, so the rounds converge on their own; the cap only bounds a bug.
+ * Safety cap on the repair rounds of [MeshWorkspace.enforceMinDegree]. Every pair can be added and
+ * removed at most once per call, so the rounds converge on their own; the cap only bounds a bug.
  */
 internal const val MAX_ENFORCEMENT_ROUNDS = 8
 
@@ -15,13 +15,12 @@ private const val TRIANGLE_CORNERS = 3
 
 /**
  * The fewest nodes a separate graph may have: a smaller one reads as a stray scrap next to the mesh.
- * Also the fewest nodes a piece hanging from a cut node keeps when [enforceMinDegree] cuts it loose
- * instead of pruning it.
+ * Also the fewest nodes a piece hanging from a cut node keeps when it is cut loose instead of pruned.
  */
 internal const val MIN_GRAPH_NODES = 6
 
 /**
- * The edge set a layer actually draws, after [enforceMinDegree].
+ * The edge set a layer actually draws, after [MeshWorkspace.enforceMinDegree].
  *
  * [alive] is false for every pruned node. [converged] is false only when the repair rounds hit
  * [MAX_ENFORCEMENT_ROUNDS] and the removal-only terminal pass had to finish the job.
@@ -34,7 +33,7 @@ internal class MeshTopology(
     val converged: Boolean,
 )
 
-/** Which edges of an edge list [MeshWorkspace.enforceMinDegree] takes; an interface, so a key is never boxed. */
+/** Whether an edge is kept; a `fun interface` rather than `(Long) -> Boolean`, so keys aren't boxed. */
 internal fun interface EdgeFilter {
     fun keeps(key: Long): Boolean
 
@@ -43,72 +42,11 @@ internal fun interface EdgeFilter {
     }
 }
 
-/**
- * Enforces the network-graph invariant: every node that is drawn has at least two edges. A node with
- * one edge reads as a dangling tail, a node with none as a stray dot, and no slider setting is
- * allowed to produce either.
- *
- * Starting from [baseEdges] (what the edge rule and its filters kept), each round:
- * 1. with [strictTriangles], every edge whose ends share no neighbour is closed into a triangle by
- *    adding a third edge from [candidateEdges], or dropped when none fits, so the mesh has no strings
- *    or bridges, only faces;
- * 2. every node short of two edges is repaired from [candidateEdges] no longer than
- *    [maxRepairLength], shortest first but preferring an edge that closes a triangle (with
- *    [strictTriangles], only triangle-closing repairs are allowed);
- * 3. every node still short is pruned, along with its edges;
- * 4. once those settle, and with [keepConnectivity], every cut node (one whose removal splits its graph, as at either end of a
- *    bridge) gets an edge between two of its neighbours on either side, closing a triangle across it,
- *    or without [strictTriangles] any candidate edge across; a piece that still hangs from it is
- *    pruned when smaller than [MIN_GRAPH_NODES] and cut loose otherwise. Every separate graph smaller
- *    than [MIN_GRAPH_NODES] is pruned.
- *
- * With [strictTriangles] and [triangles] (the Delaunay triangles the candidates come from), every
- * triangle with all three corners kept and two of its edges also gets its third, so no face of the mesh
- * is a polygon: a dropped diagonal comes back unless it is longer than [maxRepairLength].
- *
- * Repair edges bypass the rule's keep chance and minimum-angle filters but not the length cap, so a
- * sparse area keeps its nodes connected while a far outlier disappears instead of growing a long line.
- * A pair removed during the call is never re-added, which is what makes the rounds converge. A final
- * removal-only pass guarantees the invariants even if they did not.
- *
- * Runs on a [MeshWorkspace] of its own; a layer settling every frame reuses one instead.
- */
-internal fun enforceMinDegree(
-    count: Int,
-    xs: FloatArray,
-    ys: FloatArray,
-    baseEdges: LongArray,
-    candidateEdges: LongArray,
-    maxRepairLength: Float,
-    strictTriangles: Boolean,
-    triangles: IntArray? = null,
-    keepConnectivity: Boolean = true,
-): MeshTopology = MeshWorkspace().enforceMinDegree(
-    count = count,
-    xs = xs,
-    ys = ys,
-    baseEdges = baseEdges,
-    candidateEdges = candidateEdges,
-    maxRepairLength = maxRepairLength,
-    strictTriangles = strictTriangles,
-    triangles = triangles,
-    keepConnectivity = keepConnectivity,
-)
-
-/** What breaks [enforceMinDegree]'s connectivity rules in a graph: nodes of graphs under [MIN_GRAPH_NODES], and cut nodes. */
+/** What breaks the connectivity rules of [MeshWorkspace.enforceMinDegree]: nodes of graphs under [MIN_GRAPH_NODES], and cut nodes. */
 internal class ConnectivityViolations(val smallGraphNodes: List<Int>, val cutNodes: List<Int>)
 
 /** [ConnectivityViolations] of the graph of [edges] over [count] nodes. */
 internal fun connectivityViolations(count: Int, edges: LongArray): ConnectivityViolations = MeshWorkspace().connectivityViolations(count, edges)
-
-/**
- * Every triangle of the graph of [edges] over [count] nodes, as node index triples, each once: each
- * triple ascending, the triples in ascending order, so the list is the same whatever order [edges] come in.
- */
-internal fun meshTriangles(count: Int, edges: LongArray): IntArray = TriangleSearch().meshTriangles(count, edges)
-
-/** Every unique edge of [triangles] (vertex index triples), unfiltered, in order of first use. Repair candidates for Delaunay rules. */
-internal fun triangleEdgeKeys(triangles: IntArray): LongArray = TriangleSearch().triangleEdgeKeys(triangles)
 
 /** Each node's [neighbours] nearest other nodes, as unique edges, sorted. Repair candidates for [EdgeRule.Proximity]. */
 internal fun nearestNeighbourEdgeKeys(count: Int, xs: FloatArray, ys: FloatArray, neighbours: Int): LongArray {
@@ -138,14 +76,20 @@ internal fun nearestNeighbourEdgeKeys(count: Int, xs: FloatArray, ys: FloatArray
     return keys.distinctSorted(keyCount)
 }
 
-/** The first [size] keys, sorted, without repeats. */
+/** The distinct values of the first [size] elements, which must be sorted. */
 private fun LongArray.distinctSorted(size: Int): LongArray {
     var unique = 0
-    for (index in 0 until size) if (index == 0 || this[index] != this[index - 1]) unique++
-    val distinct = LongArray(unique)
-    var next = 0
-    for (index in 0 until size) if (index == 0 || this[index] != this[index - 1]) distinct[next++] = this[index]
-    return distinct
+    for (index in 0 until size) if (unique == 0 || this[index] != this[unique - 1]) this[unique++] = this[index]
+    return copyOf(unique)
+}
+
+private fun LongArray.atLeast(size: Int): LongArray = if (this.size >= size) this else LongArray(size)
+
+/** Copies into [target] the elements [visible] keeps, in order; returns how many. */
+private fun LongArray.keepInto(target: LongArray, visible: EdgeFilter): Int {
+    var kept = 0
+    for (key in this) if (visible.keeps(key)) target[kept++] = key
+    return kept
 }
 
 private fun squaredDistance(first: Int, second: Int, xs: FloatArray, ys: FloatArray): Float {
@@ -156,18 +100,16 @@ private fun squaredDistance(first: Int, second: Int, xs: FloatArray, ys: FloatAr
 
 /**
  * The memory [enforceMinDegree] works in, kept by a layer and reused by every settle: cleared, never
- * reallocated, and grown only when a settle needs more than any before it. A settle then allocates only
- * its output [MeshTopology].
+ * reallocated, and grown only when a settle needs more than any before. A settle allocates only its
+ * output [MeshTopology].
  *
- * A settle runs over compact indices: only the nodes some base or candidate edge touches, numbered
- * densely in ascending pool order. Every other node has no edge to keep or repair, so it is pruned
- * without being visited. The numbering keeps pool order, so ascending compact index is ascending pool
- * index and sorted compact edge keys map back to sorted pool keys.
+ * A settle runs over compact indices: only the nodes some base or candidate edge touches, numbered in
+ * ascending pool order, so sorted compact edge keys map back to sorted pool keys. Every other node has
+ * no edge to keep or repair and is pruned unvisited.
  *
- * Wherever the order of a walk changes the result, it runs in ascending node index (edge key for edges),
- * never in hash order, which differs between the JVM and wasm: so one spec settles on one mesh everywhere.
- * Each node's neighbours are kept ascending, which is that order. Repair candidates are the exception:
- * nearest first, ties in the order the candidate edges came in.
+ * Walks whose order changes the result run in ascending node index (edge key for edges), never hash
+ * order, which differs between the JVM and wasm; this is why neighbours are kept ascending. Repair
+ * candidates are the exception: nearest first, ties in the order the candidate edges came in.
  */
 internal class MeshWorkspace {
     private var poolCount = 0
@@ -183,7 +125,7 @@ internal class MeshWorkspace {
     private val baseKeys = LongHashSet()
     private val removedKeys = LongHashSet()
 
-    /** True while the nodes the compaction left out still count as pruned by the next [pruneShortNodes]. */
+    /** Until the next [pruneShortNodes], which then reports the nodes the compaction left out as pruned. */
     private var prunesLeftOut = false
 
     private val repairCandidates = RepairCandidates()
@@ -195,8 +137,8 @@ internal class MeshWorkspace {
     // Scratch for the walks, sized to the nodes or edges they hold.
     private var visibleBase = LongArray(0)
     private var visibleCandidates = LongArray(0)
-    private var keys = LongArray(0)
-    private var cuts = IntArray(0)
+    private var edgeSnapshot = LongArray(0)
+    private var cutNodeIds = IntArray(0)
     private var seen = BooleanArray(0)
     private var stack = IntArray(0)
     private var walked = IntArray(0)
@@ -207,10 +149,38 @@ internal class MeshWorkspace {
     private var pieceOf = IntArray(0)
     private val cutSearch = CutSearch()
 
-    /** The searches over pool indices: a layer's triangles and repair candidates, and the triangles it draws. */
     val triangleSearch = TriangleSearch()
 
-    /** [enforceMinDegree] over the edges of [baseEdges] and [candidateEdges] that [visible] keeps. */
+    /**
+     * Enforces the network-graph invariant: every node that is drawn has at least two edges. A node with
+     * one edge reads as a dangling tail, a node with none as a stray dot, and no slider setting is
+     * allowed to produce either.
+     *
+     * Starting from [baseEdges] (what the edge rule and its filters kept), each round:
+     * 1. with [strictTriangles], every edge whose ends share no neighbour is closed into a triangle by
+     *    adding a third edge from [candidateEdges], or dropped when none fits, so the mesh has no strings
+     *    or bridges, only faces;
+     * 2. every node short of two edges is repaired from [candidateEdges] no longer than
+     *    [maxRepairLength], shortest first but preferring an edge that closes a triangle (with
+     *    [strictTriangles], only triangle-closing repairs are allowed);
+     * 3. every node still short is pruned, along with its edges;
+     * 4. once those settle, and with [keepConnectivity], every cut node (one whose removal splits its graph, as at either end of a
+     *    bridge) gets an edge between two of its neighbours on either side, closing a triangle across it,
+     *    or without [strictTriangles] any candidate edge across; a piece that still hangs from it is
+     *    pruned when smaller than [MIN_GRAPH_NODES] and cut loose otherwise. Every separate graph smaller
+     *    than [MIN_GRAPH_NODES] is pruned.
+     *
+     * With [strictTriangles] and [triangles] (the Delaunay triangles the candidates come from), every
+     * triangle with all three corners kept and two of its edges also gets its third, so no face of the mesh
+     * is a polygon: a dropped diagonal comes back unless it is longer than [maxRepairLength].
+     *
+     * Repair edges bypass the rule's keep chance and minimum-angle filters but not the length cap, so a
+     * sparse area keeps its nodes connected while a far outlier disappears instead of growing a long line.
+     * A pair removed during the call is never re-added, which is what makes the rounds converge. A final
+     * removal-only pass guarantees the invariants even if they did not.
+     *
+     * Only edges [visible] keeps are taken, from [baseEdges] and [candidateEdges] alike.
+     */
     fun enforceMinDegree(
         count: Int,
         xs: FloatArray,
@@ -223,12 +193,10 @@ internal class MeshWorkspace {
         keepConnectivity: Boolean = true,
         visible: EdgeFilter = EdgeFilter.All,
     ): MeshTopology {
-        if (visibleBase.size < baseEdges.size) visibleBase = LongArray(baseEdges.size)
-        if (visibleCandidates.size < candidateEdges.size) visibleCandidates = LongArray(candidateEdges.size)
-        var baseCount = 0
-        for (key in baseEdges) if (visible.keeps(key)) visibleBase[baseCount++] = key
-        var candidateCount = 0
-        for (key in candidateEdges) if (visible.keeps(key)) visibleCandidates[candidateCount++] = key
+        visibleBase = visibleBase.atLeast(baseEdges.size)
+        visibleCandidates = visibleCandidates.atLeast(candidateEdges.size)
+        val baseCount = baseEdges.keepInto(visibleBase, visible)
+        val candidateCount = candidateEdges.keepInto(visibleCandidates, visible)
         try {
             load(count, xs, ys, baseCount, candidateCount, maxRepairLength, triangles)
             var converged = false
@@ -246,14 +214,14 @@ internal class MeshWorkspace {
 
     fun connectivityViolations(count: Int, edges: LongArray): ConnectivityViolations {
         try {
-            if (visibleBase.size < edges.size) visibleBase = LongArray(edges.size)
+            visibleBase = visibleBase.atLeast(edges.size)
             edges.copyInto(visibleBase)
             load(count, FloatArray(count), FloatArray(count), edges.size, candidateCount = 0, maxRepairLength = 0f, poolTriangles = null)
             val small = smallGraphNodes()
             val cutCount = findCutNodes()
             return ConnectivityViolations(
                 smallGraphNodes = List(small) { poolOf[smallNodes[it]] },
-                cutNodes = List(cutCount) { poolOf[cuts[it]] },
+                cutNodes = List(cutCount) { poolOf[cutNodeIds[it]] },
             )
         } finally {
             release()
@@ -281,8 +249,10 @@ internal class MeshWorkspace {
         }
         repairCandidates.load(visibleCandidates, candidateCount, compactOf, nodeCount, xs, ys, maxRepairLength)
         faceCornerCount = poolTriangles?.size ?: 0
-        if (faceCorners.size < faceCornerCount) faceCorners = IntArray(faceCornerCount)
-        for (corner in 0 until faceCornerCount) faceCorners[corner] = compactOf[poolTriangles!![corner]]
+        if (poolTriangles != null) {
+            if (faceCorners.size < faceCornerCount) faceCorners = IntArray(faceCornerCount)
+            for (corner in poolTriangles.indices) faceCorners[corner] = compactOf[poolTriangles[corner]]
+        }
     }
 
     private fun compact(count: Int, baseCount: Int, candidateCount: Int) {
@@ -308,6 +278,7 @@ internal class MeshWorkspace {
 
     private fun touch(node: Int) {
         if (compactOf[node] >= 0) return
+        // Any non-negative value marks it touched; the real index comes after the sort.
         compactOf[node] = 0
         poolOf[nodeCount++] = node
     }
@@ -322,7 +293,7 @@ internal class MeshWorkspace {
         xs = FloatArray(capacity)
         ys = FloatArray(capacity)
         alive = BooleanArray(capacity)
-        cuts = IntArray(capacity)
+        cutNodeIds = IntArray(capacity)
         seen = BooleanArray(capacity)
         stack = IntArray(capacity)
         walked = IntArray(capacity)
@@ -337,47 +308,33 @@ internal class MeshWorkspace {
 
     /** One repair round of [enforceMinDegree]; true if it changed anything. */
     private fun repairRound(strictTriangles: Boolean, keepConnectivity: Boolean): Boolean {
-        var changed = strictTriangles && closeOrDropOpenEdges()
+        var changed = strictTriangles && resolveOpenEdges(allowClosing = true)
         if (strictTriangles && faceCornerCount > 0) changed = closeFaces() || changed
         changed = repairShortNodes(strictTriangles) || changed
         changed = pruneShortNodes() || changed
         // Connectivity only once the degrees settle: its search costs more, and repairs move cut nodes.
-        if (!changed && keepConnectivity) changed = fixCutNodes(allowAdding = true, strictTriangles = strictTriangles) || pruneSmallGraphs()
+        if (!changed && keepConnectivity) changed = fixConnectivity(allowAdding = true, strictTriangles = strictTriangles)
         return changed
     }
 
     /** One round of [enforceMinDegree]'s removal-only terminal pass; true if it removed anything. */
     private fun removalRound(strictTriangles: Boolean, keepConnectivity: Boolean): Boolean {
-        var changed = strictTriangles && dropOpenEdges()
+        var changed = strictTriangles && resolveOpenEdges(allowClosing = false)
         changed = pruneShortNodes() || changed
-        if (!changed && keepConnectivity) changed = fixCutNodes(allowAdding = false, strictTriangles = strictTriangles) || pruneSmallGraphs()
+        if (!changed && keepConnectivity) changed = fixConnectivity(allowAdding = false, strictTriangles = strictTriangles)
         return changed
     }
 
-    /** Strict mode: close each edge without a shared neighbour into a triangle, or drop it. */
-    private fun closeOrDropOpenEdges(): Boolean {
+    /** Strict mode: closes each edge without a shared neighbour into a triangle if [allowClosing] and one fits, else drops it. */
+    private fun resolveOpenEdges(allowClosing: Boolean): Boolean {
         var changed = false
         val keyCount = snapshotKeys()
         for (index in 0 until keyCount) {
-            val start = edgeStart(keys[index])
-            val end = edgeEnd(keys[index])
+            val start = edgeStart(edgeSnapshot[index])
+            val end = edgeEnd(edgeSnapshot[index])
             if (!isConnected(start, end) || sharesNeighbour(start, end)) continue
             changed = true
-            if (!closeWithOneEdge(start, end) && !closeWithOneEdge(end, start)) disconnect(start, end)
-        }
-        return changed
-    }
-
-    /** Strict mode's removal-only half, for the terminal pass. */
-    private fun dropOpenEdges(): Boolean {
-        var changed = false
-        val keyCount = snapshotKeys()
-        for (index in 0 until keyCount) {
-            val start = edgeStart(keys[index])
-            val end = edgeEnd(keys[index])
-            if (!isConnected(start, end) || sharesNeighbour(start, end)) continue
-            disconnect(start, end)
-            changed = true
+            if (!(allowClosing && (closeWithOneEdge(start, end) || closeWithOneEdge(end, start)))) disconnect(start, end)
         }
         return changed
     }
@@ -395,7 +352,7 @@ internal class MeshWorkspace {
         return changed
     }
 
-    /** Prunes every node short of two edges; the first call also counts the nodes the compaction left out, which have none. */
+    /** Prunes each node short of two edges. True if any, or on the first call after a load that left nodes out. */
     private fun pruneShortNodes(): Boolean {
         var changed = prunesLeftOut
         prunesLeftOut = false
@@ -442,16 +399,19 @@ internal class MeshWorkspace {
         return true
     }
 
+    private fun fixConnectivity(allowAdding: Boolean, strictTriangles: Boolean): Boolean =
+        fixCutNodes(allowAdding, strictTriangles) || pruneSmallGraphs()
+
     /**
      * Fixes every cut node: joins each piece hanging from it to another piece with one new edge if
-     * [allowAdding] and one fits (see [enforceMinDegree]), else prunes the piece if it is smaller than
-     * [MIN_GRAPH_NODES] or cuts it loose from the cut node. True if anything changed.
+     * [allowAdding] and one fits, else prunes the piece if it is smaller than [MIN_GRAPH_NODES] or cuts
+     * it loose from the cut node. True if anything changed.
      */
     private fun fixCutNodes(allowAdding: Boolean, strictTriangles: Boolean): Boolean {
         var changed = false
         val cutCount = findCutNodes()
         for (index in 0 until cutCount) {
-            val cut = cuts[index]
+            val cut = cutNodeIds[index]
             if (!alive[cut]) continue
             val pieceCount = collectPiecesAround(cut)
             if (pieceCount < 2) continue
@@ -462,7 +422,7 @@ internal class MeshWorkspace {
             for (piece in 1 until pieceCount) if (pieceSize(piece) > pieceSize(main)) main = piece
             for (piece in 0 until pieceCount) {
                 if (piece == main) continue
-                val joined = allowAdding && (joinAcross(cut, piece) || !strictTriangles && joinAnywhere(cut, piece))
+                val joined = allowAdding && (joinPiece(cut, piece, acrossCut = true) || !strictTriangles && joinPiece(cut, piece, acrossCut = false))
                 if (!joined) cutOff(cut, piece)
                 changed = true
             }
@@ -497,7 +457,7 @@ internal class MeshWorkspace {
         val edges = LongArray(keyCount)
         var repaired = 0
         for (index in 0 until keyCount) {
-            val key = keys[index]
+            val key = edgeSnapshot[index]
             if (key !in baseKeys) repaired++
             edges[index] = edgeKey(poolOf[edgeStart(key)], poolOf[edgeEnd(key)])
         }
@@ -519,8 +479,8 @@ internal class MeshWorkspace {
 
     /** Adds `apex–far`, where `apex` already neighbours `near`, so `near–far–apex` becomes a triangle. */
     private fun closeWithOneEdge(near: Int, far: Int): Boolean {
-        for (slot in repairCandidates.starts[far] until repairCandidates.starts[far + 1]) {
-            val apex = repairCandidates.nodes[slot]
+        for (slot in repairCandidates.first(far) until repairCandidates.end(far)) {
+            val apex = repairCandidates.at(slot)
             if (apex != near && isConnected(near, apex) && canAdd(far, apex)) {
                 connect(far, apex)
                 return true
@@ -530,20 +490,16 @@ internal class MeshWorkspace {
     }
 
     /** Shortest candidate, preferring one that closes a triangle with an edge the node already has. */
-    private fun repairWithNearest(node: Int): Boolean {
-        var fallback = -1
-        for (slot in repairCandidates.starts[node] until repairCandidates.starts[node + 1]) {
-            val other = repairCandidates.nodes[slot]
+    private fun repairWithNearest(node: Int): Boolean = repairToNeighbourOfNeighbour(node) || connectNearest(node)
+
+    private fun connectNearest(node: Int): Boolean {
+        for (slot in repairCandidates.first(node) until repairCandidates.end(node)) {
+            val other = repairCandidates.at(slot)
             if (!canAdd(node, other)) continue
-            if (sharesNeighbour(node, other)) {
-                connect(node, other)
-                return true
-            }
-            if (fallback < 0) fallback = other
+            connect(node, other)
+            return true
         }
-        if (fallback < 0) return false
-        connect(node, fallback)
-        return true
+        return false
     }
 
     /** Only repairs that leave the node in a triangle, cheapest first: one new edge, then two, then three. */
@@ -555,8 +511,8 @@ internal class MeshWorkspace {
 
     /** One new edge, to a node that already neighbours one of this node's neighbours. */
     private fun repairToNeighbourOfNeighbour(node: Int): Boolean {
-        for (slot in repairCandidates.starts[node] until repairCandidates.starts[node + 1]) {
-            val other = repairCandidates.nodes[slot]
+        for (slot in repairCandidates.first(node) until repairCandidates.end(node)) {
+            val other = repairCandidates.at(slot)
             if (!canAdd(node, other) || !sharesNeighbour(node, other)) continue
             connect(node, other)
             return true
@@ -566,8 +522,8 @@ internal class MeshWorkspace {
 
     /** Two new edges, `node–other` and `anchor–other`, closing a triangle on the node's one existing edge. */
     private fun repairAroundAnchor(node: Int, anchor: Int): Boolean {
-        for (slot in repairCandidates.starts[node] until repairCandidates.starts[node + 1]) {
-            val other = repairCandidates.nodes[slot]
+        for (slot in repairCandidates.first(node) until repairCandidates.end(node)) {
+            val other = repairCandidates.at(slot)
             if (other == anchor || !canAdd(node, other) || !canAdd(anchor, other)) continue
             connect(node, other)
             connect(anchor, other)
@@ -578,13 +534,13 @@ internal class MeshWorkspace {
 
     /** Edges to two candidates that are, or can become, connected to each other. */
     private fun repairWithNewTriangle(node: Int): Boolean {
-        val end = repairCandidates.starts[node + 1]
+        val end = repairCandidates.end(node)
         // Nothing changes until a pair is found, so both loops see the graph as it was.
-        for (firstSlot in repairCandidates.starts[node] until end) {
-            val first = repairCandidates.nodes[firstSlot]
+        for (firstSlot in repairCandidates.first(node) until end) {
+            val first = repairCandidates.at(firstSlot)
             if (!canAdd(node, first)) continue
-            for (secondSlot in repairCandidates.starts[node] until end) {
-                val second = repairCandidates.nodes[secondSlot]
+            for (secondSlot in repairCandidates.first(node) until end) {
+                val second = repairCandidates.at(secondSlot)
                 if (second == first || !canAdd(node, second) || !isConnected(first, second) && !canAdd(first, second)) continue
                 connect(node, first)
                 connect(node, second)
@@ -595,41 +551,20 @@ internal class MeshWorkspace {
         return false
     }
 
-    /** The edge between two of [cut]'s neighbours, one in [piece] and one outside it, that closes a triangle across [cut]; shortest first. */
-    private fun joinAcross(cut: Int, piece: Int): Boolean {
+    /**
+     * Adds the shortest candidate edge from [piece] to a node outside it other than [cut]. With
+     * [acrossCut], only between two neighbours of [cut], so it closes a triangle across [cut].
+     */
+    private fun joinPiece(cut: Int, piece: Int, acrossCut: Boolean): Boolean {
         var bestNear = -1
         var bestFar = -1
         var bestDistance = Float.MAX_VALUE
-        for (position in pieceStarts[pieceOrder[piece]] until pieceStarts[pieceOrder[piece] + 1]) {
+        for (position in pieceStart(piece) until pieceEnd(piece)) {
             val near = walked[position]
-            if (!isConnected(near, cut)) continue
-            for (slot in repairCandidates.starts[near] until repairCandidates.starts[near + 1]) {
-                val far = repairCandidates.nodes[slot]
-                if (pieceOf[far] == piece || !isConnected(far, cut) || !canAdd(near, far)) continue
-                val distance = squaredDistance(near, far, xs, ys)
-                if (distance < bestDistance) {
-                    bestDistance = distance
-                    bestNear = near
-                    bestFar = far
-                }
-                break
-            }
-        }
-        if (bestNear < 0) return false
-        connect(bestNear, bestFar)
-        return true
-    }
-
-    /** The shortest candidate edge from [piece] to any node outside it other than [cut]. */
-    private fun joinAnywhere(cut: Int, piece: Int): Boolean {
-        var bestNear = -1
-        var bestFar = -1
-        var bestDistance = Float.MAX_VALUE
-        for (position in pieceStarts[pieceOrder[piece]] until pieceStarts[pieceOrder[piece] + 1]) {
-            val near = walked[position]
-            for (slot in repairCandidates.starts[near] until repairCandidates.starts[near + 1]) {
-                val far = repairCandidates.nodes[slot]
-                if (far == cut || pieceOf[far] == piece || !canAdd(near, far)) continue
+            if (acrossCut && !isConnected(near, cut)) continue
+            for (slot in repairCandidates.first(near) until repairCandidates.end(near)) {
+                val far = repairCandidates.at(slot)
+                if (far == cut || pieceOf[far] == piece || acrossCut && !isConnected(far, cut) || !canAdd(near, far)) continue
                 val distance = squaredDistance(near, far, xs, ys)
                 if (distance < bestDistance) {
                     bestDistance = distance
@@ -653,17 +588,21 @@ internal class MeshWorkspace {
         }
     }
 
-    private fun pieceSize(piece: Int): Int = pieceStarts[pieceOrder[piece] + 1] - pieceStarts[pieceOrder[piece]]
+    private fun pieceStart(piece: Int): Int = pieceStarts[pieceOrder[piece]]
 
-    /** Runs [action] on each node of the [piece]th piece in order, in the order its walk found them. */
+    private fun pieceEnd(piece: Int): Int = pieceStarts[pieceOrder[piece] + 1]
+
+    private fun pieceSize(piece: Int): Int = pieceEnd(piece) - pieceStart(piece)
+
+    /** Runs [action] on each node of [piece], in the order its walk found them. */
     private inline fun forEachInPiece(piece: Int, action: (Int) -> Unit) {
-        for (position in pieceStarts[pieceOrder[piece]] until pieceStarts[pieceOrder[piece] + 1]) action(walked[position])
+        for (position in pieceStart(piece) until pieceEnd(piece)) action(walked[position])
     }
 
     /**
-     * The groups [cut]'s graph falls into without [cut], each holding at least one of its neighbours:
-     * walked into [walked] from its neighbours in ascending order, then ordered by their lowest node
-     * through [pieceOrder]. Returns how many.
+     * Splits [cut]'s graph, minus [cut], into pieces that each hold a neighbour of [cut]. Walks them
+     * into [walked] from the neighbours in ascending order and ranks them by lowest node in
+     * [pieceOrder]. Returns the piece count.
      */
     private fun collectPiecesAround(cut: Int): Int {
         seen.fill(false, 0, nodeCount)
@@ -691,7 +630,7 @@ internal class MeshWorkspace {
         return pieceCount
     }
 
-    /** Walks every node reachable from [start] without passing [blocked] into [walked] from [offset], marked in [seen]; returns the end. */
+    /** Appends to [walked] at [offset] every node reachable from [start] without crossing [blocked], marking each in [seen]; returns the new end. */
     private fun collectFrom(start: Int, blocked: Int, offset: Int): Int {
         var end = offset
         var depth = 0
@@ -710,19 +649,19 @@ internal class MeshWorkspace {
         return end
     }
 
-    /** Collects every cut node of the current graph in [cuts], ascending; returns how many. */
-    private fun findCutNodes(): Int = cutSearch.cutNodes(neighbours, nodeCount, cuts)
+    /** Collects every cut node of the current graph in [cutNodeIds], ascending; returns how many. */
+    private fun findCutNodes(): Int = cutSearch.cutNodes(neighbours, nodeCount, cutNodeIds)
 
-    /** Copies every current edge into [keys], in ascending key order; returns how many. */
+    /** Copies every current edge into [edgeSnapshot], in ascending key order; returns how many. */
     private fun snapshotKeys(): Int {
         var total = 0
         for (node in 0 until nodeCount) total += neighbours.degree(node)
-        if (keys.size < total / 2) keys = LongArray(total / 2)
+        edgeSnapshot = edgeSnapshot.atLeast(total / 2)
         var keyCount = 0
         for (node in 0 until nodeCount) {
             for (position in 0 until neighbours.degree(node)) {
                 val other = neighbours.neighbour(node, position)
-                if (node < other) keys[keyCount++] = edgeKey(node, other)
+                if (node < other) edgeSnapshot[keyCount++] = edgeKey(node, other)
             }
         }
         return keyCount
@@ -763,7 +702,10 @@ internal class TriangleSearch {
     private var sortedKeys = LongArray(0)
     private var found = IntArray(0)
 
-    /** See the top-level [com.rossomak.morpheus.meshTriangles]. */
+    /**
+     * Every triangle of the graph of [edges] over [count] nodes, as ascending node triples in ascending
+     * order, whatever order [edges] come in.
+     */
     fun meshTriangles(count: Int, edges: LongArray): IntArray {
         poolNeighbours.reset(count)
         for (key in edges) {
@@ -771,7 +713,7 @@ internal class TriangleSearch {
             poolNeighbours.insertSorted(edgeStart(key), edgeEnd(key))
             poolNeighbours.insertSorted(edgeEnd(key), edgeStart(key))
         }
-        if (sortedKeys.size < edges.size) sortedKeys = LongArray(edges.size)
+        sortedKeys = sortedKeys.atLeast(edges.size)
         edges.copyInto(sortedKeys)
         sortedKeys.sort(0, edges.size)
         var corners = 0
@@ -790,9 +732,8 @@ internal class TriangleSearch {
     }
 
     /**
-     * The triangles of the first [edgeCount] of [edgeKeys], nodes below [count], as triples of their
-     * indices there, each once. Each triangle comes from the edge between its two lowest corners, in
-     * [edgeKeys] order, apexes in the order the edges name them.
+     * The triangles among the first [edgeCount] of [edgeKeys] over [count] nodes, as triples of edge
+     * indices, each once. Each is found from the edge between its two lowest corners, in [edgeKeys] order.
      */
     fun edgeTriangles(count: Int, edgeKeys: LongArray, edgeCount: Int): IntArray {
         poolNeighbours.reset(count)
@@ -820,10 +761,10 @@ internal class TriangleSearch {
         return found.copyOf(corners)
     }
 
-    /** See the top-level [com.rossomak.morpheus.triangleEdgeKeys]. */
+    /** Every unique edge of [triangles] (vertex index triples), unfiltered, in order of first use. Repair candidates for Delaunay rules. */
     fun triangleEdgeKeys(triangles: IntArray): LongArray {
         seenKeys.clear()
-        if (sortedKeys.size < triangles.size) sortedKeys = LongArray(triangles.size)
+        sortedKeys = sortedKeys.atLeast(triangles.size)
         var keyCount = 0
         for (base in triangles.indices step TRIANGLE_CORNERS) {
             for (side in 0 until TRIANGLE_CORNERS) {
@@ -848,10 +789,8 @@ internal class TriangleSearch {
  * in: `nodes[starts[node] until starts[node + 1]]`, in compact indices. Kept by [MeshWorkspace].
  */
 private class RepairCandidates {
-    var starts = IntArray(1)
-        private set
-    var nodes = IntArray(0)
-        private set
+    private var starts = IntArray(1)
+    private var nodes = IntArray(0)
     private var distances = FloatArray(0)
     private var ends = IntArray(0)
     private val keys = LongHashSet()
@@ -859,11 +798,17 @@ private class RepairCandidates {
 
     operator fun contains(key: Long): Boolean = key in keys
 
+    fun first(node: Int): Int = starts[node]
+
+    fun end(node: Int): Int = starts[node + 1]
+
+    fun at(slot: Int): Int = nodes[slot]
+
     /** Loads the first [edgeCount] of [poolEdges] over [nodeCount] compact nodes at [xs], [ys], dropping any longer than [maxRepairLength]. */
     fun load(poolEdges: LongArray, edgeCount: Int, compactOf: IntArray, nodeCount: Int, xs: FloatArray, ys: FloatArray, maxRepairLength: Float) {
         val maxLengthSquared = maxRepairLength * maxRepairLength
         keys.clear()
-        if (accepted.size < edgeCount) accepted = LongArray(edgeCount)
+        accepted = accepted.atLeast(edgeCount)
         if (starts.size < nodeCount + 1) {
             starts = IntArray(nodeCount + 1)
             ends = IntArray(nodeCount)

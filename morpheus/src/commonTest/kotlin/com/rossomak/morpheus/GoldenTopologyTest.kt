@@ -7,12 +7,11 @@ import kotlin.test.Test
 import kotlin.test.fail
 
 /**
- * Pins down exactly which meshes [LayerField] settles on, so a rewrite of the mesh code can prove it
- * changes nothing, and a ticket that changes meshes on purpose shows what changed. The expected values
- * live in [goldenTopology] and [goldenZeroJitterTopology]; they must pass on the JVM and in headless
- * Chrome alike.
+ * Pins the meshes [LayerField] settles on, so a change meant to leave meshes alone can prove it, and
+ * one that changes them shows what changed. The expected values live in [goldenTopology] and
+ * [goldenZeroJitterTopology]; they must pass on the JVM and in headless Chrome alike.
  *
- * **Stepping contract**, which every later ticket keeps: each case starts from a fresh field and steps
+ * **Stepping**: each case starts from a fresh field and steps
  * at a fixed 30 fps from t = 0. A still case is recorded at frames 0, 45 and 150 (0 s, 1.5 s, 5 s). A
  * morph case steps its fraction linearly from 0 to 1 over 60 frames, then holds it at 1 until frame 75, and
  * is recorded at fractions 0.25, 0.5, 0.75 and 1 and at frame 75 (settled), one record per mesh drawn. A
@@ -24,12 +23,13 @@ import kotlin.test.fail
  * keeps the whole test within a few seconds on the JVM.
  *
  * Per case and frame, the record holds the edge, alive, repaired-edge and pruned-node counts, and a
- * 64-bit hash of the sorted edge keys and the alive mask. Alphas aren't recorded: tickets that change
- * them prove themselves with capture-renderer comparisons instead.
+ * 64-bit hash of the sorted edge keys and the alive mask. Alphas aren't recorded; capture-renderer
+ * comparisons cover them. The hash mixer is deliberately separate from the hash tables', so retuning
+ * one doesn't invalidate the record.
  *
- * **Zero-jitter cases** sit on a perfect grid, so the Delaunay triangulation meets co-circular points
- * and its tie-breaks decide the mesh. They are kept apart in [goldenZeroJitterTopology] because #26 may
- * change them on purpose; every other ticket keeps them too.
+ * **Zero-jitter cases** sit on a perfect grid, so Delaunay meets co-circular points and its tie-breaks
+ * decide the mesh. They are recorded apart in [goldenZeroJitterTopology], so a tie-break change
+ * re-records on its own.
  *
  * **Regenerating**: flip [REGENERATE] to true locally and run `./gradlew :morpheus:jvmTest --tests
  * '*GoldenTopologyTest'`. Each test prints its whole table in source form (find it in the system-out of
@@ -40,15 +40,15 @@ class GoldenTopologyTest {
 
     @Test
     fun `every layer settles on the recorded mesh at every recorded frame`() {
-        check(recordAll(stillCases() + morphCases()), goldenTopology, "goldenTopology")
+        assertRecorded(recordAll(stillCases() + morphCases()), goldenTopology, "goldenTopology")
     }
 
     @Test
     fun `every edge rule settles a zero-jitter grid on the recorded mesh`() {
-        check(recordAll(zeroJitterCases()), goldenZeroJitterTopology, "goldenZeroJitterTopology")
+        assertRecorded(recordAll(zeroJitterCases()), goldenZeroJitterTopology, "goldenZeroJitterTopology")
     }
 
-    private fun check(actual: Map<String, TopologyRecord>, expected: Map<String, TopologyRecord>, tableName: String) {
+    private fun assertRecorded(actual: Map<String, TopologyRecord>, expected: Map<String, TopologyRecord>, tableName: String) {
         if (REGENERATE) {
             println(tableSource(tableName, actual))
             return
@@ -92,7 +92,7 @@ class GoldenTopologyTest {
     }
 
     private fun morphCases(): List<GoldenCase> = listOf(
-        // One morph family.
+        // Same density at both ends: one morph family.
         MorphCase("hero pills to ribbons", heroPills, heroRibbons, HERO_SURFACES),
         // A different density is a different morph family, so the front layer dissolves into another mesh.
         MorphCase(
@@ -146,7 +146,7 @@ class GoldenTopologyTest {
             val records = ArrayList<Pair<String, TopologyRecord>>()
             for (frame in 0..MORPH_SETTLED_FRAME) {
                 val fraction = min(frame / MORPH_FRAMES.toFloat(), 1f)
-                for (layer in morphLayers(morph.copy(fraction = fraction), TestFill)) {
+                for (layer in morphLayers(morph.copy(fraction = fraction), TEST_FILL)) {
                     val mesh = "slot ${layer.slotFromFront}/density ${layer.spec.density.toInt()}"
                     val field = fields.getOrPut(mesh) { LayerField(layer.spec, layer.seed, max(width, height), PX_PER_DP) }
                     field.spec = layer.spec
@@ -163,7 +163,7 @@ class GoldenTopologyTest {
     }
 
     private companion object {
-        /** Flip locally to print the tables instead of checking them; see the class doc. Never commit it true. */
+        /** Flip locally to print the tables instead of checking them; see the class doc. */
         const val REGENERATE = false
 
         val SEEDS = listOf(1, 42, 9_001)
@@ -181,7 +181,7 @@ class GoldenTopologyTest {
         val MORPH_RECORDED_FRAMES = listOf(15, 30, 45, MORPH_FRAMES, MORPH_SETTLED_FRAME)
         const val DISSOLVE_DENSITY = 48f
         const val PX_PER_DP = 2.75f
-        val TestFill = MorpheusGraphFill.Solid(Color.White)
+        val TEST_FILL = MorpheusGraphFill.Solid(Color.White)
     }
 }
 
