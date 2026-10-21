@@ -1,21 +1,17 @@
 package com.rossomak.morpheus
 
 import androidx.compose.ui.graphics.Color
-import com.rossomak.morpheus.ShapePrimitive.Pill
-import com.rossomak.morpheus.ShapePrimitive.Ribbon
-import com.rossomak.morpheus.ShapePrimitive.Uniform
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.test.Test
 import kotlin.test.fail
 
 /**
- * Pins down exactly which meshes [LayerField] settles on, so a rewrite of the mesh code can prove it
- * changes nothing, and a ticket that changes meshes on purpose shows what changed. The expected values
- * live in [goldenTopology] and [goldenZeroJitterTopology]; they must pass on the JVM and in headless
- * Chrome alike.
+ * Pins the meshes [LayerField] settles on, so a change meant to leave meshes alone can prove it, and
+ * one that changes them shows what changed. The expected values live in [goldenTopology] and
+ * [goldenZeroJitterTopology]; they must pass on the JVM and in headless Chrome alike.
  *
- * **Stepping contract**, which every later ticket keeps: each case starts from a fresh field and steps
+ * **Stepping**, which every later ticket keeps: each case starts from a fresh field and steps
  * at a fixed 30 fps from t = 0. A still case is recorded at frames 0, 45 and 150 (0 s, 1.5 s, 5 s). A
  * morph case steps its fraction linearly from 0 to 1 over 60 frames, then holds it at 1 until frame 75, and
  * is recorded at fractions 0.25, 0.5, 0.75 and 1 and at frame 75 (settled), one record per mesh drawn. A
@@ -27,12 +23,13 @@ import kotlin.test.fail
  * keeps the whole test within a few seconds on the JVM.
  *
  * Per case and frame, the record holds the edge, alive, repaired-edge and pruned-node counts, and a
- * 64-bit hash of the sorted edge keys and the alive mask. Alphas aren't recorded: tickets that change
- * them prove themselves with capture-renderer comparisons instead.
+ * 64-bit hash of the sorted edge keys and the alive mask. Alphas aren't recorded; capture-renderer
+ * comparisons cover them. The hash mixer is deliberately separate from the hash tables', so retuning
+ * one doesn't invalidate the record.
  *
- * **Zero-jitter cases** sit on a perfect grid, so the Delaunay triangulation meets co-circular points
- * and its tie-breaks decide the mesh. They are kept apart in [goldenZeroJitterTopology] because #26 may
- * change them on purpose; every other ticket keeps them too.
+ * **Zero-jitter cases** sit on a perfect grid, so Delaunay meets co-circular points and its tie-breaks
+ * decide the mesh. They are recorded apart in [goldenZeroJitterTopology] because #26 may change them
+ * on purpose; every other ticket keeps them.
  *
  * **Regenerating**: flip [REGENERATE] to true locally and run `./gradlew :morpheus:jvmTest --tests
  * '*GoldenTopologyTest'`. Each test prints its whole table in source form (find it in the system-out of
@@ -43,15 +40,15 @@ class GoldenTopologyTest {
 
     @Test
     fun `every layer settles on the recorded mesh at every recorded frame`() {
-        check(recordAll(stillCases() + morphCases()), goldenTopology, "goldenTopology")
+        assertRecorded(recordAll(stillCases() + morphCases()), goldenTopology, "goldenTopology")
     }
 
     @Test
     fun `every edge rule settles a zero-jitter grid on the recorded mesh`() {
-        check(recordAll(zeroJitterCases()), goldenZeroJitterTopology, "goldenZeroJitterTopology")
+        assertRecorded(recordAll(zeroJitterCases()), goldenZeroJitterTopology, "goldenZeroJitterTopology")
     }
 
-    private fun check(actual: Map<String, TopologyRecord>, expected: Map<String, TopologyRecord>, tableName: String) {
+    private fun assertRecorded(actual: Map<String, TopologyRecord>, expected: Map<String, TopologyRecord>, tableName: String) {
         if (REGENERATE) {
             println(tableSource(tableName, actual))
             return
@@ -95,7 +92,7 @@ class GoldenTopologyTest {
     }
 
     private fun morphCases(): List<GoldenCase> = listOf(
-        // One morph family.
+        // Same density at both ends: one morph family.
         MorphCase("hero pills to ribbons", heroPills, heroRibbons, HERO_SURFACES),
         // A different density is a different morph family, so the front layer dissolves into another mesh.
         MorphCase(
@@ -149,7 +146,7 @@ class GoldenTopologyTest {
             val records = ArrayList<Pair<String, TopologyRecord>>()
             for (frame in 0..MORPH_SETTLED_FRAME) {
                 val fraction = min(frame / MORPH_FRAMES.toFloat(), 1f)
-                for (layer in morphLayers(morph.copy(fraction = fraction), TestFill)) {
+                for (layer in morphLayers(morph.copy(fraction = fraction), TEST_FILL)) {
                     val mesh = "slot ${layer.slotFromFront}/density ${layer.spec.density.toInt()}"
                     val field = fields.getOrPut(mesh) { LayerField(layer.spec, layer.seed, max(width, height), PX_PER_DP) }
                     field.spec = layer.spec
@@ -184,79 +181,7 @@ class GoldenTopologyTest {
         val MORPH_RECORDED_FRAMES = listOf(15, 30, 45, MORPH_FRAMES, MORPH_SETTLED_FRAME)
         const val DISSOLVE_DENSITY = 48f
         const val PX_PER_DP = 2.75f
-        val TestFill = MorpheusGraphFill.Solid(Color.White)
-
-        // The "Pills to ribbons" showcase's two ends, copied from samples/shared's showcase/Hero.kt (the
-        // library can't depend on the samples). Fills are left out: they never touch the mesh.
-
-        /** Hero.kt's heroFront. */
-        val heroFront = MorpheusGraphLayerSpec(
-            density = 70f,
-            jitter = 0.4f,
-            driftAmplitude = 0.3f,
-            envelopeFloor = 0.01f,
-            maxEdgeFactor = 2.4f,
-            minAngleDegrees = 14f,
-            edgeKeepChance = 0.92f,
-            strokeWidthDp = 0.6f,
-            edgeAlpha = 0.6f,
-            nodeSizeDp = 1.6f,
-            nodeSizeVariance = 0.4f,
-            hotNodeShare = 0.12f,
-            glowRadiusDp = 10f,
-            glowStrength = 0.4f,
-            cometStrength = 0.25f,
-            cometSpark = 0.6f,
-        )
-
-        /** Hero.kt's heroGhost: [MorpheusGraphPresets.defaultBackLayer] at density 16 and alpha 0.3, spelled out. */
-        val heroGhost = MorpheusGraphLayerSpec(
-            shapes = listOf(Uniform()),
-            density = 16f,
-            jitter = 0.45f,
-            driftAmplitude = 0.35f,
-            driftSpeed = 0.5f,
-            envelopeFloor = 0.05f,
-            waveAmplitude = 0.02f,
-            waveSpeed = 0.15f,
-            maxEdgeFactor = 2.6f,
-            edgeKeepChance = 0.8f,
-            strokeWidthDp = 1f,
-            edgeAlpha = 0.5f,
-            lengthFalloff = 0.3f,
-            nodeSizeDp = 4f,
-            nodeSizeVariance = 0.2f,
-            alpha = 0.3f,
-        )
-
-        /** Hero.kt's heroPills. */
-        val heroPills = MorpheusGraphSpec(
-            seed = 23,
-            layers = listOf(
-                heroGhost.copy(waveAmplitude = 0.06f, waveSpeed = 0.4f),
-                heroFront.copy(
-                    shapes = listOf(
-                        Pill(x = 0.25f, y = 0.5f, length = 0.42f, thickness = 0.13f, rotation = 55f),
-                        Pill(x = 0.75f, y = 0.5f, length = 0.42f, thickness = 0.13f, rotation = -55f),
-                    ),
-                ),
-            ),
-        )
-
-        /** Hero.kt's heroRibbons. */
-        val heroRibbons = heroPills.copy(
-            layers = listOf(
-                heroGhost,
-                heroFront.copy(
-                    shapes = listOf(
-                        Ribbon(center = 0.5f, width = 0.15f, curve = 0.18f, tilt = 25f),
-                        Ribbon(center = 0.5f, width = 0.15f, curve = 0.18f, tilt = -25f),
-                    ),
-                    waveAmplitude = 0.06f,
-                    waveSpeed = 0.45f,
-                ),
-            ),
-        )
+        val TEST_FILL = MorpheusGraphFill.Solid(Color.White)
     }
 }
 

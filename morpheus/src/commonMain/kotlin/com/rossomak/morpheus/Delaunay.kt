@@ -76,7 +76,7 @@ internal object Delaunay {
                 edgeOccurrences.increment(edgeKey(triangle.third, triangle.first))
             }
             // The cavity's boundary is every edge only one bad triangle had; each is re-fanned to the
-            // point, in ascending key order rather than the map's, which differs between platforms.
+            // point in ascending key order, since map order differs between platforms.
             boundary.clear()
             for ((key, occurrences) in edgeOccurrences) if (occurrences == 1) boundary += key
             boundary.sort()
