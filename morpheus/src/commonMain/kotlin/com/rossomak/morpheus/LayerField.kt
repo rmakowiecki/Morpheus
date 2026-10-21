@@ -269,6 +269,9 @@ internal class LayerField(
 
     /** The [EdgeRule.FixedTriangulation] mesh of each end of the current morph, and how its edges switch. */
     private var morphMesh: MorphMesh? = null
+
+    /** The memory every settle of this layer works in: still frames and a morph's ends and transit mesh alike. */
+    private val meshWorkspace = MeshWorkspace()
     private var hotWeights = FloatArray(0)
     private var brightestEdgeAlphas = FloatArray(0)
     private var secondEdgeAlphas = FloatArray(0)
@@ -693,6 +696,12 @@ internal class LayerField(
     private fun cometTrackFor(morph: LayerShape.Morph, level: Int, width: Float, height: Float): CometTrack =
         cometTracks.forMorph(morph, level, width, height, nodes, homeX, homeY)
 
+    /** Settles [morph]'s meshes again from the current frame's presences, past the cache; for the settle benchmark. */
+    internal fun rebuildMorphMesh(morph: LayerShape.Morph, width: Float, height: Float) {
+        morphMesh = null
+        morphMeshFor(morph, width, height)
+    }
+
     /**
      * The mesh at each end of [morph] and the union [LayerField.topology] holds while it runs, rebuilt
      * only when the ends or the surface change, never as the fraction moves. Each end is settled exactly
@@ -783,10 +792,11 @@ internal class LayerField(
     private fun settleTopology(xs: FloatArray, ys: FloatArray, mask: BooleanArray, presence: FloatArray, filters: MorpheusGraphLayerSpec): MeshTopology {
         settleCount++
         return enforceOnVisibleEdges(
+            workspace = meshWorkspace,
             count = count,
             xs = xs,
             ys = ys,
-            edges = ruleEdges(spec.edgeRule, mask, xs, ys, filters, cell, seed),
+            edges = ruleEdges(meshWorkspace, spec.edgeRule, mask, xs, ys, filters, cell, seed),
             presence = presence,
             filters = filters,
             cell = cell,
@@ -899,7 +909,7 @@ internal class LayerField(
     private fun fillDrawnTriangles() {
         if (!triangleCacheKeys.contentEquals(edgeKeys.copyOf(edgeCount))) {
             triangleCacheKeys = edgeKeys.copyOf(edgeCount)
-            triangleCache = edgeTriangles(edgeKeys, edgeCount)
+            triangleCache = meshWorkspace.triangleSearch.edgeTriangles(count, edgeKeys, edgeCount)
         }
         fillTriangles(triangleCache, rawEdgeAlphas)
     }
@@ -1495,13 +1505,13 @@ private class NodeDrift(private val primary: DriftAxis, private val secondary: D
  * [presence]s: what length falloff, depth and the layer's alpha leave of it, capped by the dimmer of
  * its two dots as that dot would fade with this edge (see [LayerField]'s updateAlphas).
  */
-private fun restEdgeAlpha(key: Long, xs: FloatArray, ys: FloatArray, presence: FloatArray, filters: MorpheusGraphLayerSpec, cell: Float, depthOf: (Int) -> Float): Float {
+private fun restEdgeAlpha(key: Long, xs: FloatArray, ys: FloatArray, presence: FloatArray, filters: MorpheusGraphLayerSpec, cell: Float, depths: NodeDepths): Float {
     val start = edgeStart(key)
     val end = edgeEnd(key)
     val length = sqrt((xs[end] - xs[start]).let { it * it } + (ys[end] - ys[start]).let { it * it })
     val lengthFactor = 1f - filters.lengthFalloff * (length / (filters.maxEdgeFactor * cell)).coerceIn(0f, 1f)
-    val startDepth = 1f - filters.depthDimming * (1f - depthOf(start))
-    val endDepth = 1f - filters.depthDimming * (1f - depthOf(end))
+    val startDepth = 1f - filters.depthDimming * (1f - depths.depthOf(start))
+    val endDepth = 1f - filters.depthDimming * (1f - depths.depthOf(end))
     val depthFactor = min(startDepth, endDepth)
     val edgeAlpha = filters.edgeAlpha * filters.alpha * lengthFactor * depthFactor
     // The dimmer dot, faded as lowerDotsToTheirEdges would fade it were this its second-brightest edge.
@@ -1541,31 +1551,6 @@ private fun FloatArray.raise(index: Int, value: Float): Boolean {
     return true
 }
 
-/** The triangles of the first [edgeCount] of [edgeKeys], as triples of their indices there, each once. */
-private fun edgeTriangles(edgeKeys: LongArray, edgeCount: Int): IntArray {
-    val indexOf = HashMap<Long, Int>(edgeCount * 2)
-    val neighbours = HashMap<Int, MutableList<Int>>()
-    for (edge in 0 until edgeCount) {
-        val key = edgeKeys[edge]
-        indexOf[key] = edge
-        neighbours.getOrPut(edgeStart(key)) { ArrayList() } += edgeEnd(key)
-        neighbours.getOrPut(edgeEnd(key)) { ArrayList() } += edgeStart(key)
-    }
-    val triangles = ArrayList<Int>()
-    for (edge in 0 until edgeCount) {
-        val key = edgeKeys[edge]
-        // From the edge between each triangle's two lowest corners only; keys hold the lower end first.
-        for (apex in neighbours[edgeStart(key)].orEmpty()) {
-            if (apex <= edgeEnd(key)) continue
-            val toEnd = indexOf[edgeKey(edgeEnd(key), apex)] ?: continue
-            triangles += edge
-            triangles += indexOf.getValue(edgeKey(edgeStart(key), apex))
-            triangles += toEnd
-        }
-    }
-    return triangles.toIntArray()
-}
-
 /** [restAlphas] with each edge of [triangles] lifted to the dimmer of its triangle's other two, as [fillTriangles] does. */
 private fun liftedByTriangles(restAlphas: Map<Long, Float>, triangles: IntArray): Map<Long, Float> {
     val lifted = HashMap(restAlphas)
@@ -1584,7 +1569,16 @@ private fun liftedByTriangles(restAlphas: Map<Long, Float>, triangles: IntArray)
 }
 
 /** [edgeRule]'s filtered edges over the nodes in [mask] under [filters], with its repair candidates. */
-private fun ruleEdges(edgeRule: EdgeRule, mask: BooleanArray, xs: FloatArray, ys: FloatArray, filters: MorpheusGraphLayerSpec, cell: Float, seed: Int): RuleEdges {
+private fun ruleEdges(
+    workspace: MeshWorkspace,
+    edgeRule: EdgeRule,
+    mask: BooleanArray,
+    xs: FloatArray,
+    ys: FloatArray,
+    filters: MorpheusGraphLayerSpec,
+    cell: Float,
+    seed: Int,
+): RuleEdges {
     val presentIndices = mask.indices.filter { mask[it] }.toIntArray()
     val presentX = FloatArray(presentIndices.size) { xs[presentIndices[it]] }
     val presentY = FloatArray(presentIndices.size) { ys[presentIndices[it]] }
@@ -1608,17 +1602,23 @@ private fun ruleEdges(edgeRule: EdgeRule, mask: BooleanArray, xs: FloatArray, ys
         keepChance = filters.edgeKeepChance,
         seed = seed,
     )
-    return RuleEdges(base, candidates = triangleEdgeKeys(triangles), triangles = triangles)
+    return RuleEdges(base, candidates = workspace.triangleSearch.triangleEdgeKeys(triangles), triangles = triangles)
 }
 
 /** An edge rule's output for [enforceMinDegree]: its filtered edges, repair candidates and, for Delaunay rules, triangles. */
 private class RuleEdges(val base: LongArray, val candidates: LongArray, val triangles: IntArray?)
 
+/** Each node's depth, by index; an interface, so neither is boxed. */
+private fun interface NodeDepths {
+    fun depthOf(node: Int): Float
+}
+
 /**
- * [enforceMinDegree] over [edges], keeping its connectivity rules when [keepConnectivity] and then
- * counting only edges drawn visibly at rest (see [VISIBLE_EDGE_MARGIN] and [restEdgeAlpha]).
+ * [enforceMinDegree] over [edges] in [workspace], keeping its connectivity rules when [keepConnectivity]
+ * and then counting only edges drawn visibly at rest (see [VISIBLE_EDGE_MARGIN] and [restEdgeAlpha]).
  */
 private fun enforceOnVisibleEdges(
+    workspace: MeshWorkspace,
     count: Int,
     xs: FloatArray,
     ys: FloatArray,
@@ -1627,28 +1627,27 @@ private fun enforceOnVisibleEdges(
     filters: MorpheusGraphLayerSpec,
     cell: Float,
     keepConnectivity: Boolean,
-    depthOf: (Int) -> Float,
+    depths: NodeDepths,
 ): MeshTopology {
     val visibleAlpha = EDGE_VISIBLE_ALPHA * VISIBLE_EDGE_MARGIN
-    val restAlphaOf = { key: Long -> restEdgeAlpha(key, xs, ys, presence, filters, cell, depthOf) }
-    val settle = { visible: (Long) -> Boolean ->
-        enforceMinDegree(
+    fun settle(visible: EdgeFilter): MeshTopology =
+        workspace.enforceMinDegree(
             count = count,
             xs = xs,
             ys = ys,
-            baseEdges = edges.base.filter(visible).toLongArray(),
-            candidateEdges = edges.candidates.filter(visible).toLongArray(),
+            baseEdges = edges.base,
+            candidateEdges = edges.candidates,
             maxRepairLength = filters.repairReach * filters.maxEdgeFactor * cell,
             strictTriangles = filters.strictTriangles,
             triangles = edges.triangles,
             keepConnectivity = keepConnectivity,
+            visible = visible,
         )
-    }
-    if (!keepConnectivity) return settle { true }
-    if (!filters.strictTriangles) return settle { key -> restAlphaOf(key) >= visibleAlpha }
+    if (!keepConnectivity) return settle(EdgeFilter.All)
+    if (!filters.strictTriangles) return settle { key -> restEdgeAlpha(key, xs, ys, presence, filters, cell, depths) >= visibleAlpha }
     val restAlphas = HashMap<Long, Float>()
-    for (key in edges.candidates) restAlphas[key] = restAlphaOf(key)
-    for (key in edges.base) restAlphas.getOrPut(key) { restAlphaOf(key) }
+    for (key in edges.candidates) restAlphas[key] = restEdgeAlpha(key, xs, ys, presence, filters, cell, depths)
+    for (key in edges.base) restAlphas.getOrPut(key) { restEdgeAlpha(key, xs, ys, presence, filters, cell, depths) }
     // Strict meshes lift a faint edge to its triangle's other sides (see [fillTriangles]). Which
     // triangles the mesh keeps is known only once it settles, so this first guess counts every
     // triangle, and an edge the settled mesh leaves faint after all is dropped and the mesh re-settled.
@@ -1658,7 +1657,7 @@ private fun enforceOnVisibleEdges(
     while (true) {
         val topology = settle { key -> key !in faint && liftedAlphas.getValue(key) >= visibleAlpha }
         if (++passes == MAX_VISIBILITY_PASSES) return topology
-        val settled = liftedByTriangles(restAlphas, meshTriangles(count, topology.edges))
+        val settled = liftedByTriangles(restAlphas, workspace.triangleSearch.meshTriangles(count, topology.edges))
         val newlyFaint = topology.edges.filter { settled.getValue(it) < visibleAlpha }
         if (newlyFaint.isEmpty()) return topology
         faint += newlyFaint
