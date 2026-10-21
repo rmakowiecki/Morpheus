@@ -5,6 +5,7 @@ import com.rossomak.morpheus.ShapePrimitive.Pill
 import com.rossomak.morpheus.ShapePrimitive.Ribbon
 import com.rossomak.morpheus.ShapePrimitive.Uniform
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.test.Test
 import kotlin.test.fail
 
@@ -16,9 +17,10 @@ import kotlin.test.fail
  *
  * **Stepping contract**, which every later ticket keeps: each case starts from a fresh field and steps
  * at a fixed 30 fps from t = 0. A still case is recorded at frames 0, 45 and 150 (0 s, 1.5 s, 5 s). A
- * morph case steps its fraction linearly from 0 to 1 over 60 frames and is recorded at fractions 0.25,
- * 0.5 and 0.75, one record per mesh drawn. A frame's mesh depends on the frames before it (a fixed
- * triangulation re-settles only when presences or filters change), so the stepping is part of the record.
+ * morph case steps its fraction linearly from 0 to 1 over 60 frames, then holds it at 1 until frame 75, and
+ * is recorded at fractions 0.25, 0.5, 0.75 and 1 and at frame 75 (settled), one record per mesh drawn. A
+ * frame's mesh depends on the frames before it (a fixed triangulation re-settles only when presences or
+ * filters change), so the stepping is part of the record.
  *
  * Each case runs with three seeds, except where one run costs most: under a rule that re-settles every
  * frame, on the showcase's dense front mesh, and in the morphs. Those run the first seed only, which
@@ -93,7 +95,7 @@ class GoldenTopologyTest {
     }
 
     private fun morphCases(): List<GoldenCase> = listOf(
-        // One morph family; the front layer's comets also exercise the transit mesh.
+        // One morph family.
         MorphCase("hero pills to ribbons", heroPills, heroRibbons, HERO_SURFACES),
         // A different density is a different morph family, so the front layer dissolves into another mesh.
         MorphCase(
@@ -145,20 +147,22 @@ class GoldenTopologyTest {
             // One field per mesh, kept across frames the way the modifier keeps them.
             val fields = HashMap<String, LayerField>()
             val records = ArrayList<Pair<String, TopologyRecord>>()
-            for (frame in 0..MORPH_FRAMES) {
-                val fraction = frame / MORPH_FRAMES.toFloat()
+            for (frame in 0..MORPH_SETTLED_FRAME) {
+                val fraction = min(frame / MORPH_FRAMES.toFloat(), 1f)
                 for (layer in morphLayers(morph.copy(fraction = fraction), TestFill)) {
                     val mesh = "slot ${layer.slotFromFront}/density ${layer.spec.density.toInt()}"
                     val field = fields.getOrPut(mesh) { LayerField(layer.spec, layer.seed, max(width, height), PX_PER_DP) }
                     field.spec = layer.spec
                     field.shape = layer.shape
                     field.advance(frame * FRAME_SECONDS, width, height)
-                    // Labelled in whole percent: a float prints differently on the JVM and in the browser.
-                    if (frame in MORPH_RECORDED_FRAMES) records += "fraction ${frame * 100 / MORPH_FRAMES}%/$mesh" to TopologyRecord.of(field)
+                    if (frame in MORPH_RECORDED_FRAMES) records += "${morphLabel(frame)}/$mesh" to TopologyRecord.of(field)
                 }
             }
             return records
         }
+
+        /** Whole percent, since a float prints differently on the JVM and in the browser. */
+        private fun morphLabel(frame: Int) = if (frame == MORPH_SETTLED_FRAME) "settled" else "fraction ${frame * 100 / MORPH_FRAMES}%"
     }
 
     private companion object {
@@ -176,7 +180,8 @@ class GoldenTopologyTest {
         const val FRAME_SECONDS = 1f / 30f
         val STILL_FRAMES = listOf(0, 45, 150)
         const val MORPH_FRAMES = 60
-        val MORPH_RECORDED_FRAMES = listOf(15, 30, 45)
+        const val MORPH_SETTLED_FRAME = 75
+        val MORPH_RECORDED_FRAMES = listOf(15, 30, 45, MORPH_FRAMES, MORPH_SETTLED_FRAME)
         const val DISSOLVE_DENSITY = 48f
         const val PX_PER_DP = 2.75f
         val TestFill = MorpheusGraphFill.Solid(Color.White)
