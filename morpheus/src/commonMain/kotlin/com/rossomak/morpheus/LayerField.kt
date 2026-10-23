@@ -336,6 +336,10 @@ internal class LayerField(
     internal var morphMeshBuildCount = 0
         private set
 
+    /** Face-first settles of this field, and how many fell back to the repair rounds. */
+    internal val facesFirstSettleCount: Int get() = meshWorkspace.facesFirstSettles
+    internal val facesFirstFallbackCount: Int get() = meshWorkspace.facesFirstFallbacks
+
     private var lastTimeSeconds = Float.NaN
 
     /**
@@ -1624,8 +1628,10 @@ private fun interface NodeDepths {
 }
 
 /**
- * [enforceMinDegree] over [edges] in [workspace], keeping its connectivity rules when [keepConnectivity]
- * and then counting only edges drawn visibly at rest (see [VISIBLE_EDGE_MARGIN] and [restEdgeAlpha]).
+ * The settled mesh of [edges] in [workspace], keeping [enforceMinDegree]'s connectivity rules when
+ * [keepConnectivity] and then counting only edges drawn visibly at rest (see [VISIBLE_EDGE_MARGIN] and
+ * [restEdgeAlpha]). A strict mesh over Delaunay triangles settles face first ([MeshWorkspace.settleFacesFirst]);
+ * any other, and a face-first one that falls back, settles through [enforceMinDegree]'s rounds.
  */
 private fun enforceOnVisibleEdges(
     workspace: MeshWorkspace,
@@ -1640,36 +1646,99 @@ private fun enforceOnVisibleEdges(
     depths: NodeDepths,
 ): MeshTopology {
     val visibleAlpha = EDGE_VISIBLE_ALPHA * VISIBLE_EDGE_MARGIN
-    fun restAlphaOf(key: Long) = restEdgeAlpha(key, xs, ys, presence, filters, cell, depths)
-    fun settle(visible: EdgeFilter): MeshTopology =
+    val maxRepairLength = filters.repairReach * filters.maxEdgeFactor * cell
+    val alphas = workspace.edgeAlphas
+    val triangles = edges.triangles
+    // Only a strict mesh with the connectivity rules counts edges by how visibly they're drawn at rest.
+    val visibleAtRest = keepConnectivity && filters.strictTriangles
+    if (visibleAtRest) fillRestAlphas(alphas, edges, xs, ys, presence, filters, cell, depths)
+    val facesFirst = if (filters.strictTriangles && triangles != null) {
+        workspace.settleFacesFirst(
+            count = count,
+            xs = xs,
+            ys = ys,
+            baseEdges = edges.base,
+            candidateEdges = edges.candidates,
+            maxRepairLength = maxRepairLength,
+            triangles = triangles,
+            keepConnectivity = keepConnectivity,
+            visible = if (visibleAtRest) EdgeFilter { key -> alphas.guessed(key) >= visibleAlpha } else EdgeFilter.All,
+            restVisible = if (visibleAtRest) EdgeFilter { key -> alphas.rest(key) >= visibleAlpha } else EdgeFilter.All,
+        )
+    } else {
+        null
+    }
+    // Built from faces, every edge is visible; only a fallback's repairs can leave one faint.
+    if (facesFirst != null && (!keepConnectivity || !workspace.facesFirstFellBack)) return facesFirst
+    // Every settle of a fallback starts where the faces left off, so later ones keep what they removed and pruned.
+    fun settle(visible: EdgeFilter): MeshTopology = if (facesFirst != null) {
+        workspace.resettleFromFacesFirst(
+            count = count,
+            xs = xs,
+            ys = ys,
+            candidateEdges = edges.candidates,
+            maxRepairLength = maxRepairLength,
+            triangles = triangles,
+            keepConnectivity = keepConnectivity,
+            visible = visible,
+        )
+    } else {
         workspace.enforceMinDegree(
             count = count,
             xs = xs,
             ys = ys,
             baseEdges = edges.base,
             candidateEdges = edges.candidates,
-            maxRepairLength = filters.repairReach * filters.maxEdgeFactor * cell,
+            maxRepairLength = maxRepairLength,
             strictTriangles = filters.strictTriangles,
-            triangles = edges.triangles,
+            triangles = triangles,
             keepConnectivity = keepConnectivity,
             visible = visible,
         )
-    if (!keepConnectivity) return settle(EdgeFilter.All)
-    if (!filters.strictTriangles) return settle { key -> restAlphaOf(key) >= visibleAlpha }
-    val alphas = workspace.edgeAlphas
+    }
+    return when {
+        !keepConnectivity -> settle(EdgeFilter.All)
+        !filters.strictTriangles -> settle { key -> restEdgeAlpha(key, xs, ys, presence, filters, cell, depths) >= visibleAlpha }
+        else -> withoutFaintEdges(workspace, count, visibleAlpha, settled = facesFirst, settle = ::settle)
+    }
+}
+
+/** Fills [alphas] with every edge's [restEdgeAlpha], lifted by the Delaunay triangles (see [EdgeAlphas]). */
+private fun fillRestAlphas(
+    alphas: EdgeAlphas,
+    edges: RuleEdges,
+    xs: FloatArray,
+    ys: FloatArray,
+    presence: FloatArray,
+    filters: MorpheusGraphLayerSpec,
+    cell: Float,
+    depths: NodeDepths,
+) {
     alphas.clear()
-    for (key in edges.candidates) alphas[key] = restAlphaOf(key)
-    for (key in edges.base) if (key !in alphas) alphas[key] = restAlphaOf(key)
-    // Strict meshes lift a faint edge to its triangle's other sides (see [fillTriangles]). Which
-    // triangles the mesh keeps is known only once it settles, so this first guess counts every
-    // triangle, and an edge the settled mesh leaves faint after all is dropped and the mesh re-settled.
+    for (key in edges.candidates) alphas[key] = restEdgeAlpha(key, xs, ys, presence, filters, cell, depths)
+    for (key in edges.base) if (key !in alphas) alphas[key] = restEdgeAlpha(key, xs, ys, presence, filters, cell, depths)
     alphas.liftGuesses(edges.triangles)
+}
+
+/**
+ * [settled], or else [settle]'s mesh, settled again without each edge its own triangles leave fainter than
+ * [visibleAlpha], up to [MAX_VISIBILITY_PASSES] settles in all. The first settle can only guess by counting
+ * every triangle (see [EdgeAlphas.guessed]).
+ */
+private inline fun withoutFaintEdges(
+    workspace: MeshWorkspace,
+    count: Int,
+    visibleAlpha: Float,
+    settled: MeshTopology?,
+    settle: (EdgeFilter) -> MeshTopology,
+): MeshTopology {
+    val alphas = workspace.edgeAlphas
     val faint = workspace.faintKeys
     faint.clear()
-    var passes = 0
-    while (true) {
-        val topology = settle { key -> key !in faint && alphas.guessed(key) >= visibleAlpha }
-        if (++passes == MAX_VISIBILITY_PASSES) return topology
+    val visible = EdgeFilter { key -> key !in faint && alphas.guessed(key) >= visibleAlpha }
+    var topology = settled ?: settle(visible)
+    var passes = 1
+    while (passes < MAX_VISIBILITY_PASSES) {
         alphas.liftChecks(workspace.triangleSearch.meshTriangles(count, topology.edges))
         var newlyFaint = 0
         for (key in topology.edges) {
@@ -1677,6 +1746,9 @@ private fun enforceOnVisibleEdges(
             faint.add(key)
             newlyFaint++
         }
-        if (newlyFaint == 0) return topology
+        if (newlyFaint == 0) break
+        topology = settle(visible)
+        passes++
     }
+    return topology
 }

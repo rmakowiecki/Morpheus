@@ -7,8 +7,8 @@ import kotlin.test.Test
 
 /**
  * The mesh code's primitive collections against the standard ones, over random sequences of inserts,
- * removals and lookups. The hash tables grow from the smallest table through several resizes, empty most
- * of it again (leaving tombstones), and are cleared and refilled; the adjacency outgrows its stride.
+ * removals, lookups and iteration. The hash tables grow from the smallest table through several resizes,
+ * empty most of it again (leaving tombstones), and are cleared and refilled; the adjacency outgrows its stride.
  */
 class PrimitiveCollectionsTest {
 
@@ -30,15 +30,27 @@ class PrimitiveCollectionsTest {
                     set.size shouldBe reference.size
                 }
             }
-            withClue("after phase $phase") { keys.forEach { key -> (key in set) shouldBe (key in reference) } }
+            withClue("after phase $phase") {
+                keys.forEach { key -> (key in set) shouldBe (key in reference) }
+                set.visited() shouldBe reference.sorted()
+            }
         }
         set.clear()
         reference.clear()
         set.size shouldBe 0
+        set.visited() shouldBe emptyList()
         keys.forEach { key -> (key in set) shouldBe false }
         keys.take(OPERATIONS_PER_PHASE).forEach { key -> set.add(key) shouldBe reference.add(key) }
         set.size shouldBe reference.size
         keys.forEach { key -> (key in set) shouldBe (key in reference) }
+        set.visited() shouldBe reference.sorted()
+    }
+
+    /** Every key [LongHashSet.forEach] visits, sorted, so a key visited twice or skipped shows. */
+    private fun LongHashSet.visited(): List<Long> {
+        val visited = ArrayList<Long>()
+        forEach { key -> visited += key }
+        return visited.sorted()
     }
 
     @Test
@@ -99,6 +111,7 @@ class PrimitiveCollectionsTest {
             }
         }
         reference.forEach { key -> (key in set) shouldBe true }
+        set.visited() shouldBe reference.sorted()
     }
 
     @Test
