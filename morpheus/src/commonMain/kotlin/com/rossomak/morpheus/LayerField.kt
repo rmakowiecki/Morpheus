@@ -1060,6 +1060,26 @@ internal class LayerField(
      */
     private fun DrawScope.drawViolations(timeSeconds: Float): Int {
         val stroke = Stroke(width = VIOLATION_RING_STROKE_DP * pxPerDp)
+        val nodeViolations = nodeViolations(timeSeconds)
+        nodeViolations.forEach { drawViolationRing(it, ViolationColor, stroke) }
+        val connectivity = ringedConnectivityViolations()
+        connectivity.smallGraphNodes.forEach { drawViolationRing(it, SmallGraphColor, stroke) }
+        connectivity.cutNodes.forEach { drawViolationRing(it, ViolationColor, stroke) }
+        return nodeViolations.size + connectivity.smallGraphNodes.size + connectivity.cutNodes.size
+    }
+
+    /**
+     * The [drawnConnectivityViolations] "Show violations" rings: none unless the mesh keeps the connectivity
+     * rules, which only [EdgeRule.FixedTriangulation] meshes do (see [settleTopology]).
+     */
+    internal fun ringedConnectivityViolations(): ConnectivityViolations =
+        if (spec.edgeRule == EdgeRule.FixedTriangulation) drawnConnectivityViolations() else ConnectivityViolations(emptyList(), emptyList())
+
+    /**
+     * The nodes "Show violations" rings for themselves, as of the last [advance]: a visible node with fewer
+     * than two visible edges, or a dot fainter than an edge it anchors. [ringedConnectivityViolations] adds the rest.
+     */
+    internal fun nodeViolations(timeSeconds: Float): List<Int> {
         val brightestDrawn = FloatArray(count)
         for (edge in 0 until edgeCount) {
             val key = edgeKeys[edge]
@@ -1067,18 +1087,11 @@ internal class LayerField(
             brightestDrawn[edgeStart(key)] = max(brightestDrawn[edgeStart(key)], alpha)
             brightestDrawn[edgeEnd(key)] = max(brightestDrawn[edgeEnd(key)], alpha)
         }
-        var rings = 0
-        for (index in 0 until count) {
+        return (0 until count).filter { index ->
             val underconnected = nodeAlphas[index] >= NODE_VISIBLE_ALPHA && visibleEdgeCounts[index] < 2
             val fainterThanEdge = brightestDrawn[index] > nodeAlphas[index] + ALPHA_RULE_TOLERANCE
-            if (!underconnected && !fainterThanEdge) continue
-            drawViolationRing(index, ViolationColor, stroke)
-            rings++
+            underconnected || fainterThanEdge
         }
-        val connectivity = drawnConnectivityViolations()
-        connectivity.smallGraphNodes.forEach { drawViolationRing(it, SmallGraphColor, stroke) }
-        connectivity.cutNodes.forEach { drawViolationRing(it, ViolationColor, stroke) }
-        return rings + connectivity.smallGraphNodes.size + connectivity.cutNodes.size
     }
 
     private fun DrawScope.drawViolationRing(index: Int, color: Color, stroke: Stroke) {
