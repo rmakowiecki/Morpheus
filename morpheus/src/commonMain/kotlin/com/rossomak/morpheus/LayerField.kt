@@ -1339,12 +1339,12 @@ private class MorphMesh(
 }
 
 /** Every present pair within [reach] of each other that passes its [keepChance]. */
-private fun proximityEdges(presentIndices: IntArray, xs: FloatArray, ys: FloatArray, reach: Float, keepChance: Float, seed: Int): LongArray {
+private fun proximityEdges(presentIndices: IntArray, presentCount: Int, xs: FloatArray, ys: FloatArray, reach: Float, keepChance: Float, seed: Int): LongArray {
     val reachSquared = reach * reach
     val keys = ArrayList<Long>()
-    for (firstSlot in presentIndices.indices) {
+    for (firstSlot in 0 until presentCount) {
         val first = presentIndices[firstSlot]
-        for (secondSlot in firstSlot + 1 until presentIndices.size) {
+        for (secondSlot in firstSlot + 1 until presentCount) {
             val second = presentIndices[secondSlot]
             val deltaX = xs[second] - xs[first]
             val deltaY = ys[second] - ys[first]
@@ -1578,23 +1578,6 @@ private fun FloatArray.raise(index: Int, value: Float): Boolean {
     return true
 }
 
-/** [restAlphas] with each edge of [triangles] lifted to the dimmer of its triangle's other two, as [fillTriangles] does. */
-private fun liftedByTriangles(restAlphas: Map<Long, Float>, triangles: IntArray): Map<Long, Float> {
-    val lifted = HashMap(restAlphas)
-    for (base in triangles.indices step 3) {
-        val sides = longArrayOf(
-            edgeKey(triangles[base], triangles[base + 1]),
-            edgeKey(triangles[base + 1], triangles[base + 2]),
-            edgeKey(triangles[base + 2], triangles[base]),
-        )
-        for (side in 0 until 3) {
-            val others = min(restAlphas.getValue(sides[(side + 1) % 3]), restAlphas.getValue(sides[(side + 2) % 3]))
-            if (others > lifted.getValue(sides[side])) lifted[sides[side]] = others
-        }
-    }
-    return lifted
-}
-
 /** [edgeRule]'s filtered edges over the nodes in [mask] under [filters], with its repair candidates. */
 private fun ruleEdges(
     workspace: MeshWorkspace,
@@ -1606,18 +1589,18 @@ private fun ruleEdges(
     cell: Float,
     seed: Int,
 ): RuleEdges {
-    val presentIndices = mask.indices.filter { mask[it] }.toIntArray()
-    val presentX = FloatArray(presentIndices.size) { xs[presentIndices[it]] }
-    val presentY = FloatArray(presentIndices.size) { ys[presentIndices[it]] }
+    val present = workspace.presentNodes
+    present.load(mask, xs, ys)
+    val presentIndices = present.indices
     if (edgeRule == EdgeRule.Proximity) {
-        val nearest = nearestNeighbourEdgeKeys(presentIndices.size, presentX, presentY, PROXIMITY_REPAIR_NEIGHBOURS)
+        val nearest = nearestNeighbourEdgeKeys(present.count, present.xs, present.ys, PROXIMITY_REPAIR_NEIGHBOURS)
         return RuleEdges(
-            base = proximityEdges(presentIndices, xs, ys, reach = filters.maxEdgeFactor * cell, keepChance = filters.edgeKeepChance, seed = seed),
+            base = proximityEdges(presentIndices, present.count, xs, ys, reach = filters.maxEdgeFactor * cell, keepChance = filters.edgeKeepChance, seed = seed),
             candidates = LongArray(nearest.size) { edge -> edgeKey(presentIndices[edgeStart(nearest[edge])], presentIndices[edgeEnd(nearest[edge])]) },
             triangles = null,
         )
     }
-    val triangles = Delaunay.triangulate(presentX, presentY, presentIndices.size)
+    val triangles = Delaunay.triangulate(present.xs, present.ys, present.count)
     // Back to pool indices, so each pair's keep chance stays the same whoever else is present.
     for (corner in triangles.indices) triangles[corner] = presentIndices[triangles[corner]]
     val base = meshEdgeKeys(
@@ -1673,21 +1656,27 @@ private fun enforceOnVisibleEdges(
         )
     if (!keepConnectivity) return settle(EdgeFilter.All)
     if (!filters.strictTriangles) return settle { key -> restAlphaOf(key) >= visibleAlpha }
-    val restAlphas = HashMap<Long, Float>()
-    for (key in edges.candidates) restAlphas[key] = restAlphaOf(key)
-    for (key in edges.base) restAlphas.getOrPut(key) { restAlphaOf(key) }
+    val alphas = workspace.edgeAlphas
+    alphas.clear()
+    for (key in edges.candidates) alphas[key] = restAlphaOf(key)
+    for (key in edges.base) if (key !in alphas) alphas[key] = restAlphaOf(key)
     // Strict meshes lift a faint edge to its triangle's other sides (see [fillTriangles]). Which
     // triangles the mesh keeps is known only once it settles, so this first guess counts every
     // triangle, and an edge the settled mesh leaves faint after all is dropped and the mesh re-settled.
-    val liftedAlphas = edges.triangles?.let { liftedByTriangles(restAlphas, it) } ?: restAlphas
-    val faint = HashSet<Long>()
+    alphas.liftGuesses(edges.triangles)
+    val faint = workspace.faintKeys
+    faint.clear()
     var passes = 0
     while (true) {
-        val topology = settle { key -> key !in faint && liftedAlphas.getValue(key) >= visibleAlpha }
+        val topology = settle { key -> key !in faint && alphas.guessed(key) >= visibleAlpha }
         if (++passes == MAX_VISIBILITY_PASSES) return topology
-        val settled = liftedByTriangles(restAlphas, workspace.triangleSearch.meshTriangles(count, topology.edges))
-        val newlyFaint = topology.edges.filter { settled.getValue(it) < visibleAlpha }
-        if (newlyFaint.isEmpty()) return topology
-        faint += newlyFaint
+        alphas.liftChecks(workspace.triangleSearch.meshTriangles(count, topology.edges))
+        var newlyFaint = 0
+        for (key in topology.edges) {
+            if (alphas.checked(key) >= visibleAlpha) continue
+            faint.add(key)
+            newlyFaint++
+        }
+        if (newlyFaint == 0) return topology
     }
 }
