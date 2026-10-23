@@ -86,11 +86,13 @@ private fun LongArray.distinctSorted(size: Int): LongArray {
 private fun LongArray.atLeast(size: Int): LongArray = if (this.size >= size) this else LongArray(size)
 
 /** Copies into [target] the elements [visible] keeps, in order; returns how many. */
-private fun LongArray.keepInto(target: LongArray, visible: EdgeFilter): Int {
+private fun LongArray.keepInto(target: LongArray, visible: EdgeFilter, count: Int = size): Int {
     var kept = 0
-    for (key in this) if (visible.keeps(key)) target[kept++] = key
+    for (index in 0 until count) if (visible.keeps(this[index])) target[kept++] = this[index]
     return kept
 }
+
+private fun IntArray.atLeast(size: Int): IntArray = if (this.size >= size) this else IntArray(size)
 
 private fun squaredDistance(first: Int, second: Int, xs: FloatArray, ys: FloatArray): Float {
     val deltaX = xs[first] - xs[second]
@@ -139,6 +141,7 @@ internal class PresentNodes {
  * order, which differs between the JVM and wasm; this is why neighbours are kept ascending. Repair
  * candidates are the exception: nearest first, ties in the order the candidate edges came in.
  */
+@Suppress("LargeClass") // Both settles share one graph and its scratch.
 internal class MeshWorkspace {
     private var poolCount = 0
     private var nodeCount = 0
@@ -161,10 +164,45 @@ internal class MeshWorkspace {
     /** The Delaunay triangles' corners in compact indices, -1 for a corner left out; [faceCornerCount] of them. */
     private var faceCorners = IntArray(0)
     private var faceCornerCount = 0
+    private val faceCount get() = faceCornerCount / TRIANGLE_CORNERS
+
+    /** Each Delaunay triangle's visibility for [settleFacesFirst], by its place in [faceCorners]. */
+    private var faceVisible = BooleanArray(0)
+
+    /** Each Delaunay edge's index by compact key; its triangles are `edgeFaces[2 * index]` and `[2 * index + 1]`, -1 for none. */
+    private val faceEdgeIndices = LongIntHashMap()
+    private var edgeFaces = IntArray(0)
+    private var faceQueue = IntArray(0)
+    private var faceQueued = BooleanArray(0)
+    private var edgeStack = LongArray(0)
+
+    /** Whether the last [settleFacesFirst] fell back to the repair rounds. */
+    var facesFirstFellBack = false
+        private set
+
+    /**
+     * Where the last fallback started, in pool indices, for [resettleFromFacesFirst]: the first
+     * [fallbackEdgeCount] of [fallbackEdges], the [fallbackRemovedCount] edges it had removed, and the
+     * [fallbackPrunedCount] nodes it had pruned.
+     */
+    private var fallbackEdges = LongArray(0)
+    private var fallbackEdgeCount = 0
+    private var fallbackRemoved = LongArray(0)
+    private var fallbackRemovedCount = 0
+    private var fallbackPruned = IntArray(0)
+    private var fallbackPrunedCount = 0
+
+    /** How many times [settleFacesFirst] ran, and how many of those it handed to a fallback. */
+    var facesFirstSettles = 0
+        private set
+    var facesFirstFallbacks = 0
+        private set
 
     // Scratch for the walks, sized to the nodes or edges they hold.
     private var visibleBase = LongArray(0)
+    private var visibleBaseCount = 0
     private var visibleCandidates = LongArray(0)
+    private var visibleCandidateCount = 0
     private var edgeSnapshot = LongArray(0)
     private var cutNodeIds = IntArray(0)
     private var seen = BooleanArray(0)
@@ -230,24 +268,298 @@ internal class MeshWorkspace {
         keepConnectivity: Boolean = true,
         visible: EdgeFilter = EdgeFilter.All,
     ): MeshTopology {
-        visibleBase = visibleBase.atLeast(baseEdges.size)
-        visibleCandidates = visibleCandidates.atLeast(candidateEdges.size)
-        val baseCount = baseEdges.keepInto(visibleBase, visible)
-        val candidateCount = candidateEdges.keepInto(visibleCandidates, visible)
+        keepVisible(baseEdges, candidateEdges, visible)
         try {
-            load(count, xs, ys, baseCount, candidateCount, maxRepairLength, triangles)
-            var converged = false
-            var rounds = 0
-            while (!converged && rounds < MAX_ENFORCEMENT_ROUNDS) {
-                converged = !repairRound(strictTriangles, keepConnectivity)
-                rounds++
-            }
-            while (removalRound(strictTriangles, keepConnectivity)) Unit
-            return toTopology(converged)
+            load(count, xs, ys, visibleBaseCount, visibleCandidateCount, maxRepairLength, triangles)
+            return repair(strictTriangles, keepConnectivity)
         } finally {
             release()
         }
     }
+
+    /** [enforceMinDegree]'s repair rounds and removal-only pass over the loaded graph. */
+    private fun repair(strictTriangles: Boolean, keepConnectivity: Boolean): MeshTopology {
+        var converged = false
+        var rounds = 0
+        while (!converged && rounds < MAX_ENFORCEMENT_ROUNDS) {
+            converged = !repairRound(strictTriangles, keepConnectivity)
+            rounds++
+        }
+        while (removalRound(strictTriangles, keepConnectivity)) Unit
+        return toTopology(converged)
+    }
+
+    /**
+     * Settles a strict mesh over Delaunay [triangles] from its faces in one pass: a triangle is visible when
+     * [restVisible] keeps two of its sides, closed visible triangles are added, edges no visible triangle
+     * holds are dropped, cut nodes are resolved, and stranded nodes and small graphs are pruned. Closing
+     * reaches the same edges in any order, and so does dropping, and every edge left is visible at rest.
+     *
+     * If the result breaks a rule only [enforceMinDegree]'s rounds can fix, they run in place from the state
+     * reached so far, its edges as base: [facesFirstFellBack] is true, and [resettleFromFacesFirst] settles
+     * again from that same state.
+     */
+    @Suppress("LongParameterList") // enforceMinDegree's inputs, plus the rest visibility its faces need.
+    fun settleFacesFirst(
+        count: Int,
+        xs: FloatArray,
+        ys: FloatArray,
+        baseEdges: LongArray,
+        candidateEdges: LongArray,
+        maxRepairLength: Float,
+        triangles: IntArray,
+        keepConnectivity: Boolean,
+        visible: EdgeFilter,
+        restVisible: EdgeFilter,
+    ): MeshTopology {
+        facesFirstSettles++
+        keepVisible(baseEdges, candidateEdges, visible)
+        try {
+            load(count, xs, ys, visibleBaseCount, visibleCandidateCount, maxRepairLength, triangles)
+            loadFaces(restVisible)
+            closeVisibleFaces()
+            dropUnheldEdges(restVisible)
+            if (keepConnectivity && fixCutNodes(allowAdding = true, strictTriangles = true)) {
+                closeVisibleFaces()
+                dropUnheldEdges(restVisible)
+            }
+            var holds = pruneEdgelessNodes()
+            if (holds && keepConnectivity) {
+                pruneSmallGraphs()
+                holds = findCutNodes() == 0
+            }
+            if (holds) holds = !leavesClosableFace()
+            facesFirstFellBack = !holds
+            if (holds) return toTopology(converged = true, everyEdgeIsBase = true)
+            facesFirstFallbacks++
+            saveFallbackStart()
+            return repair(strictTriangles = true, keepConnectivity = keepConnectivity)
+        } finally {
+            release()
+        }
+    }
+
+    /**
+     * The last fallback's repair rounds again, from the state [settleFacesFirst] handed them (its edges as
+     * base, the edges it removed and the nodes it pruned), over the edges [visible] keeps.
+     */
+    @Suppress("LongParameterList") // enforceMinDegree's inputs, less the base the fallback brings.
+    fun resettleFromFacesFirst(
+        count: Int,
+        xs: FloatArray,
+        ys: FloatArray,
+        candidateEdges: LongArray,
+        maxRepairLength: Float,
+        triangles: IntArray?,
+        keepConnectivity: Boolean,
+        visible: EdgeFilter,
+    ): MeshTopology {
+        visibleBase = visibleBase.atLeast(fallbackEdgeCount)
+        visibleCandidates = visibleCandidates.atLeast(candidateEdges.size)
+        visibleBaseCount = fallbackEdges.keepInto(visibleBase, visible, fallbackEdgeCount)
+        visibleCandidateCount = candidateEdges.keepInto(visibleCandidates, visible)
+        try {
+            load(count, xs, ys, visibleBaseCount, visibleCandidateCount, maxRepairLength, triangles)
+            for (index in 0 until fallbackRemovedCount) {
+                val key = fallbackRemoved[index]
+                if (compactOf[edgeStart(key)] >= 0 && compactOf[edgeEnd(key)] >= 0) removedKeys.add(compactKey(key))
+            }
+            for (index in 0 until fallbackPrunedCount) {
+                val node = compactOf[fallbackPruned[index]]
+                if (node >= 0) prune(node)
+            }
+            // As in the fallback itself, whose face-first pass already reported the nodes left out.
+            prunesLeftOut = false
+            return repair(strictTriangles = true, keepConnectivity = keepConnectivity)
+        } finally {
+            release()
+        }
+    }
+
+    /** Saves the current state as [resettleFromFacesFirst]'s start, and makes its edges the base. */
+    private fun saveFallbackStart() {
+        val keyCount = snapshotKeys()
+        fallbackEdges = fallbackEdges.atLeast(keyCount)
+        baseKeys.clear()
+        for (index in 0 until keyCount) {
+            fallbackEdges[index] = poolKey(edgeSnapshot[index])
+            baseKeys.add(edgeSnapshot[index])
+        }
+        fallbackEdgeCount = keyCount
+        fallbackRemoved = fallbackRemoved.atLeast(removedKeys.size)
+        fallbackRemovedCount = 0
+        removedKeys.forEach { key -> fallbackRemoved[fallbackRemovedCount++] = poolKey(key) }
+        fallbackPruned = fallbackPruned.atLeast(nodeCount)
+        fallbackPrunedCount = 0
+        for (node in 0 until nodeCount) if (!alive[node]) fallbackPruned[fallbackPrunedCount++] = poolOf[node]
+    }
+
+    /** Copies the edges of [baseEdges] and [candidateEdges] that [visible] keeps into [visibleBase] and [visibleCandidates]. */
+    private fun keepVisible(baseEdges: LongArray, candidateEdges: LongArray, visible: EdgeFilter) {
+        visibleBase = visibleBase.atLeast(baseEdges.size)
+        visibleCandidates = visibleCandidates.atLeast(candidateEdges.size)
+        visibleBaseCount = baseEdges.keepInto(visibleBase, visible)
+        visibleCandidateCount = candidateEdges.keepInto(visibleCandidates, visible)
+    }
+
+    /** Marks each Delaunay triangle visible or not under [restVisible], and indexes the triangles on each of their edges. */
+    private fun loadFaces(restVisible: EdgeFilter) {
+        if (faceVisible.size < faceCount) {
+            faceVisible = BooleanArray(faceCount)
+            faceQueued = BooleanArray(faceCount)
+            faceQueue = IntArray(faceCount)
+        }
+        if (edgeFaces.size < faceCornerCount * 2) edgeFaces = IntArray(faceCornerCount * 2)
+        faceEdgeIndices.clear()
+        var edgeCount = 0
+        for (face in 0 until faceCount) {
+            faceVisible[face] = false
+            faceQueued[face] = false
+            val base = face * TRIANGLE_CORNERS
+            if (!faceIsLive(face)) continue
+            var restVisibleSides = 0
+            for (side in 0 until TRIANGLE_CORNERS) {
+                val key = edgeKey(faceCorners[base + side], faceCorners[base + (side + 1) % TRIANGLE_CORNERS])
+                if (restVisible.keeps(poolKey(key))) restVisibleSides++
+                val edge = faceEdgeIndices.get(key, missing = -1)
+                if (edge < 0) {
+                    faceEdgeIndices[key] = edgeCount
+                    edgeFaces[edgeCount * 2] = face
+                    edgeFaces[edgeCount * 2 + 1] = -1
+                    edgeCount++
+                } else {
+                    edgeFaces[edge * 2 + 1] = face
+                }
+            }
+            faceVisible[face] = restVisibleSides >= 2
+        }
+    }
+
+    private fun faceIsLive(face: Int): Boolean {
+        val base = face * TRIANGLE_CORNERS
+        return faceCorners[base] >= 0 && faceCorners[base + 1] >= 0 && faceCorners[base + 2] >= 0
+    }
+
+    /** Closes visible triangles until none closes, re-checking only the triangles on each new edge. */
+    private fun closeVisibleFaces() {
+        var queued = 0
+        for (face in 0 until faceCount) {
+            if (!faceVisible[face]) continue
+            faceQueue[queued++] = face
+            faceQueued[face] = true
+        }
+        while (queued > 0) {
+            val face = faceQueue[--queued]
+            faceQueued[face] = false
+            val added = closeFaceAt(face)
+            if (added < 0) continue
+            val edge = faceEdgeIndices.get(added, missing = -1)
+            for (slot in edge * 2..edge * 2 + 1) {
+                val next = edgeFaces[slot]
+                if (next < 0 || !faceVisible[next] || faceQueued[next]) continue
+                faceQueue[queued++] = next
+                faceQueued[next] = true
+            }
+        }
+    }
+
+    /** Adds [face]'s missing edge if [closableSide] finds one; returns its key, or -1. */
+    private fun closeFaceAt(face: Int): Long {
+        val missing = closableSide(face)
+        if (missing >= 0) connect(edgeStart(missing), edgeEnd(missing))
+        return missing
+    }
+
+    /** The key of triangle [face]'s one missing edge if its corners are alive and [canAdd] allows it, else -1. */
+    private fun closableSide(face: Int): Long {
+        val base = face * TRIANGLE_CORNERS
+        val first = faceCorners[base]
+        val second = faceCorners[base + 1]
+        val third = faceCorners[base + 2]
+        if (!alive[first] || !alive[second] || !alive[third]) return -1
+        val firstSecond = isConnected(first, second)
+        val secondThird = isConnected(second, third)
+        val thirdFirst = isConnected(third, first)
+        val missing = when {
+            !firstSecond && secondThird && thirdFirst -> edgeKey(first, second)
+            firstSecond && !secondThird && thirdFirst -> edgeKey(second, third)
+            firstSecond && secondThird && !thirdFirst -> edgeKey(third, first)
+            else -> -1
+        }
+        return if (missing >= 0 && canAdd(edgeStart(missing), edgeEnd(missing))) missing else -1
+    }
+
+    /** Removes every edge [heldByFace] doesn't hold, re-checking the other sides of its triangles, until all left are held. */
+    private fun dropUnheldEdges(restVisible: EdgeFilter) {
+        var pending = snapshotKeys()
+        edgeStack = edgeStack.atLeast(pending)
+        edgeSnapshot.copyInto(edgeStack, endIndex = pending)
+        while (pending > 0) {
+            val key = edgeStack[--pending]
+            val start = edgeStart(key)
+            val end = edgeEnd(key)
+            if (!isConnected(start, end) || heldByFace(start, end, restVisible)) continue
+            forEachCommonNeighbour(start, end) { third ->
+                if (edgeStack.size < pending + 2) edgeStack = edgeStack.copyOf(max(edgeStack.size * 2, pending + 2))
+                edgeStack[pending++] = edgeKey(start, third)
+                edgeStack[pending++] = edgeKey(end, third)
+                false
+            }
+            disconnect(start, end)
+        }
+    }
+
+    /**
+     * True if the edge `start–end` is in a triangle of the mesh and drawn visibly at rest: [restVisible]
+     * keeps it, or keeps both other sides of one of its triangles.
+     */
+    private fun heldByFace(start: Int, end: Int, restVisible: EdgeFilter): Boolean {
+        val visibleItself = restVisible.keeps(poolKey(edgeKey(start, end)))
+        return forEachCommonNeighbour(start, end) { third ->
+            visibleItself || restVisible.keeps(poolKey(edgeKey(start, third))) && restVisible.keeps(poolKey(edgeKey(end, third)))
+        }
+    }
+
+    /** Calls [visit] for each neighbour [first] and [second] share, in ascending order, until it returns true; returns whether one did. */
+    private inline fun forEachCommonNeighbour(first: Int, second: Int, visit: (Int) -> Boolean): Boolean {
+        var firstSlot = 0
+        var secondSlot = 0
+        while (firstSlot < neighbours.degree(first) && secondSlot < neighbours.degree(second)) {
+            val fromFirst = neighbours.neighbour(first, firstSlot)
+            val fromSecond = neighbours.neighbour(second, secondSlot)
+            when {
+                fromFirst < fromSecond -> firstSlot++
+                fromFirst > fromSecond -> secondSlot++
+                else -> {
+                    if (visit(fromFirst)) return true
+                    firstSlot++
+                    secondSlot++
+                }
+            }
+        }
+        return false
+    }
+
+    /** Prunes live nodes left edgeless that repairs couldn't join either; false if one has a single edge or could be repaired. */
+    private fun pruneEdgelessNodes(): Boolean {
+        prunesLeftOut = false
+        for (node in 0 until nodeCount) {
+            if (!alive[node] || neighbours.degree(node) >= 2) continue
+            if (neighbours.degree(node) > 0 || canRepairWithNewTriangle(node)) return false
+            alive[node] = false
+        }
+        return true
+    }
+
+    private fun canRepairWithNewTriangle(node: Int): Boolean = findRepairPair(node) >= 0
+
+    /** True if any live triangle, visible or not, has two edges and a third [canAdd] allows, as [closeFaces] would close. */
+    private fun leavesClosableFace(): Boolean {
+        for (face in 0 until faceCount) if (faceIsLive(face) && closableSide(face) >= 0) return true
+        return false
+    }
+
+    private fun poolKey(compactKey: Long): Long = edgeKey(poolOf[edgeStart(compactKey)], poolOf[edgeEnd(compactKey)])
 
     fun connectivityViolations(count: Int, edges: LongArray): ConnectivityViolations {
         try {
@@ -489,13 +801,13 @@ internal class MeshWorkspace {
         return small
     }
 
-    private fun toTopology(converged: Boolean): MeshTopology {
+    private fun toTopology(converged: Boolean, everyEdgeIsBase: Boolean = false): MeshTopology {
         val keyCount = snapshotKeys()
         val edges = LongArray(keyCount)
         var repaired = 0
         for (index in 0 until keyCount) {
             val key = edgeSnapshot[index]
-            if (key !in baseKeys) repaired++
+            if (!everyEdgeIsBase && key !in baseKeys) repaired++
             edges[index] = edgeKey(poolOf[edgeStart(key)], poolOf[edgeEnd(key)])
         }
         val poolAlive = BooleanArray(poolCount)
@@ -571,21 +883,29 @@ internal class MeshWorkspace {
 
     /** Edges to two candidates that are, or can become, connected to each other. */
     private fun repairWithNewTriangle(node: Int): Boolean {
+        val pair = findRepairPair(node)
+        if (pair < 0) return false
+        val first = (pair ushr Int.SIZE_BITS).toInt()
+        val second = pair.toInt()
+        connect(node, first)
+        connect(node, second)
+        if (!isConnected(first, second)) connect(first, second)
+        return true
+    }
+
+    /** The first pair of [node]'s candidates that could close a triangle with it, packed as `first shl 32 or second`, or -1. */
+    private fun findRepairPair(node: Int): Long {
         val end = repairCandidates.end(node)
-        // Nothing changes until a pair is found, so both loops see the graph as it was.
         for (firstSlot in repairCandidates.first(node) until end) {
             val first = repairCandidates.at(firstSlot)
             if (!canAdd(node, first)) continue
             for (secondSlot in repairCandidates.first(node) until end) {
                 val second = repairCandidates.at(secondSlot)
                 if (second == first || !canAdd(node, second) || !isConnected(first, second) && !canAdd(first, second)) continue
-                connect(node, first)
-                connect(node, second)
-                if (!isConnected(first, second)) connect(first, second)
-                return true
+                return first.toLong() shl Int.SIZE_BITS or second.toLong()
             }
         }
-        return false
+        return -1
     }
 
     /**
@@ -822,10 +1142,9 @@ internal class TriangleSearch {
 }
 
 /**
- * Each edge's alpha at rest, and the same lifted by triangles, without boxing: the alphas sit in arrays
- * in the order the edges were first set, found through a map from edge key. Two lifts are kept side by
- * side, [guessed] and [checked], since a strict settle reads the first while it computes the second.
- * Kept by [MeshWorkspace], so refilling it allocates only to grow.
+ * Each edge's alpha at rest and lifted by triangles, as fillTriangles draws it: an edge is raised to the
+ * dimmer of its triangle's other two sides. Two lifts are kept, [guessed] and [checked], since a strict
+ * settle reads the first while it computes the second. Kept by [MeshWorkspace]; refilling allocates only to grow.
  */
 internal class EdgeAlphas {
     private val indices = LongIntHashMap()
@@ -836,13 +1155,11 @@ internal class EdgeAlphas {
 
     operator fun contains(key: Long): Boolean = key in indices
 
-    /** Empties it, ready for the next settle. */
     fun clear() {
         indices.clear()
         size = 0
     }
 
-    /** Sets [key]'s rest alpha, adding the key if it is new. */
     operator fun set(key: Long, alpha: Float) {
         val existing = indices.get(key, missing = -1)
         if (existing >= 0) {
@@ -862,17 +1179,13 @@ internal class EdgeAlphas {
     /** [key]'s alpha as the last [liftChecks] left it. */
     fun checked(key: Long): Float = checks[indexOf(key)]
 
-    /** Lifts every rest alpha by [triangles] (none if null) into the [guessed] alphas. */
+    /** Lifts every rest alpha by [triangles] (none if null) into [guessed]. */
     fun liftGuesses(triangles: IntArray?) = lift(triangles, guesses)
 
-    /** Lifts every rest alpha by [triangles] into the [checked] alphas. */
+    /** Lifts every rest alpha by [triangles] into [checked]. */
     fun liftChecks(triangles: IntArray) = lift(triangles, checks)
 
-    /**
-     * Writes into [into] each rest alpha raised to the dimmer of the other two sides of any of
-     * [triangles] (node index triples) it is a side of, as LayerField's fillTriangles does when drawing.
-     * Every side must have a rest alpha.
-     */
+    /** Writes each rest alpha into [into], raised by [triangles] (node index triples); every side needs a rest alpha. */
     private fun lift(triangles: IntArray?, into: FloatArray) {
         rest.copyInto(into, endIndex = size)
         if (triangles == null) return
