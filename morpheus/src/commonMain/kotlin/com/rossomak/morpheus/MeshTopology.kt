@@ -98,6 +98,34 @@ private fun squaredDistance(first: Int, second: Int, xs: FloatArray, ys: FloatAr
     return deltaX * deltaX + deltaY * deltaY
 }
 
+/** The nodes a mask keeps, ascending, with their positions: the first [count] of each array, reused across loads. */
+internal class PresentNodes {
+    var indices = IntArray(0)
+        private set
+    var xs = FloatArray(0)
+        private set
+    var ys = FloatArray(0)
+        private set
+    var count = 0
+        private set
+
+    fun load(mask: BooleanArray, poolXs: FloatArray, poolYs: FloatArray) {
+        if (indices.size < mask.size) {
+            indices = IntArray(mask.size)
+            xs = FloatArray(mask.size)
+            ys = FloatArray(mask.size)
+        }
+        count = 0
+        for (node in mask.indices) {
+            if (!mask[node]) continue
+            indices[count] = node
+            xs[count] = poolXs[node]
+            ys[count] = poolYs[node]
+            count++
+        }
+    }
+}
+
 /**
  * The memory [enforceMinDegree] works in, kept by a layer and reused by every settle: cleared, never
  * reallocated, and grown only when a settle needs more than any before. A settle allocates only its
@@ -150,6 +178,15 @@ internal class MeshWorkspace {
     private val cutSearch = CutSearch()
 
     val triangleSearch = TriangleSearch()
+
+    /** The nodes an edge rule meshes, gathered from the settle's mask. */
+    val presentNodes = PresentNodes()
+
+    /** A strict settle's rest alphas and lifts, over pool edge keys; see LayerField's enforceOnVisibleEdges. */
+    val edgeAlphas = EdgeAlphas()
+
+    /** The edges a strict settle found too faint over its own triangles, as pool keys. */
+    val faintKeys = LongHashSet()
 
     /**
      * Enforces the network-graph invariant: every node that is drawn has at least two edges. A node with
@@ -781,6 +818,85 @@ internal class TriangleSearch {
         found[corners + 1] = second
         found[corners + 2] = third
         return corners + TRIANGLE_CORNERS
+    }
+}
+
+/**
+ * Each edge's alpha at rest, and the same lifted by triangles, without boxing: the alphas sit in arrays
+ * in the order the edges were first set, found through a map from edge key. Two lifts are kept side by
+ * side, [guessed] and [checked], since a strict settle reads the first while it computes the second.
+ * Kept by [MeshWorkspace], so refilling it allocates only to grow.
+ */
+internal class EdgeAlphas {
+    private val indices = LongIntHashMap()
+    private var rest = FloatArray(0)
+    private var guesses = FloatArray(0)
+    private var checks = FloatArray(0)
+    private var size = 0
+
+    operator fun contains(key: Long): Boolean = key in indices
+
+    /** Empties it, ready for the next settle. */
+    fun clear() {
+        indices.clear()
+        size = 0
+    }
+
+    /** Sets [key]'s rest alpha, adding the key if it is new. */
+    operator fun set(key: Long, alpha: Float) {
+        val existing = indices.get(key, missing = -1)
+        if (existing >= 0) {
+            rest[existing] = alpha
+            return
+        }
+        if (size == rest.size) grow()
+        indices[key] = size
+        rest[size++] = alpha
+    }
+
+    fun rest(key: Long): Float = rest[indexOf(key)]
+
+    /** [key]'s alpha as the last [liftGuesses] left it. */
+    fun guessed(key: Long): Float = guesses[indexOf(key)]
+
+    /** [key]'s alpha as the last [liftChecks] left it. */
+    fun checked(key: Long): Float = checks[indexOf(key)]
+
+    /** Lifts every rest alpha by [triangles] (none if null) into the [guessed] alphas. */
+    fun liftGuesses(triangles: IntArray?) = lift(triangles, guesses)
+
+    /** Lifts every rest alpha by [triangles] into the [checked] alphas. */
+    fun liftChecks(triangles: IntArray) = lift(triangles, checks)
+
+    /**
+     * Writes into [into] each rest alpha raised to the dimmer of the other two sides of any of
+     * [triangles] (node index triples) it is a side of, as LayerField's fillTriangles does when drawing.
+     * Every side must have a rest alpha.
+     */
+    private fun lift(triangles: IntArray?, into: FloatArray) {
+        rest.copyInto(into, endIndex = size)
+        if (triangles == null) return
+        for (base in triangles.indices step TRIANGLE_CORNERS) {
+            val first = indexOf(edgeKey(triangles[base], triangles[base + 1]))
+            val second = indexOf(edgeKey(triangles[base + 1], triangles[base + 2]))
+            val third = indexOf(edgeKey(triangles[base + 2], triangles[base]))
+            into[first] = max(into[first], min(rest[second], rest[third]))
+            into[second] = max(into[second], min(rest[third], rest[first]))
+            into[third] = max(into[third], min(rest[first], rest[second]))
+        }
+    }
+
+    private fun indexOf(key: Long): Int = indices.get(key, missing = -1)
+
+    private fun grow() {
+        val capacity = max(INITIAL_ALPHA_CAPACITY, rest.size * 2)
+        rest = rest.copyOf(capacity)
+        guesses = FloatArray(capacity)
+        checks = FloatArray(capacity)
+    }
+
+    private companion object {
+        const val INITIAL_ALPHA_CAPACITY = 64
     }
 }
 
