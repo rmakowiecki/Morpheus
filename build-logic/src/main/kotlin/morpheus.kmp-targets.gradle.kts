@@ -39,5 +39,6 @@ extensions.configure<DetektExtension> {
         "src/jvmMain/kotlin",
         "src/jvmTest/kotlin",
         "src/wasmJsMain/kotlin",
+        "src/wasmJsTest/kotlin",
     )
 }

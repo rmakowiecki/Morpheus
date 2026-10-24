@@ -2,7 +2,8 @@
 
 One way to measure the graph renderer's cost, on desktop and in the browser. Every pull request that
 claims a performance change reports before and after numbers from this recipe, for the JVM and for
-wasm, and links here rather than repeating the steps.
+wasm, and links here rather than repeating the steps. A change to the frame's CPU phases (shape, mesh,
+edge fades, alpha settle) also reports the [headless timing](#headless-timing-settlebenchmark).
 
 ## What is measured
 
@@ -95,3 +96,34 @@ Report one table per platform in the pull request:
 | skip fill recolor  |          |           |          |          |         |         |
 
 Add the machine, OS, and browser or JDK version, and the full phase table for the baseline row.
+
+## Headless timing (`SettleBenchmark`)
+
+The second way to measure: a test that runs the frame's CPU phases without drawing, on the JVM and in
+headless Chrome, with no window and no one watching it. It replays the showcase's loop as the gallery
+does: the canvas above in a 1440 dp wide window, 60 frames a second. Each frame's phases go through the
+gallery's own probe, and each field is kept across frames as the modifier keeps it.
+
+```sh
+MORPHEUS_BENCHMARK=1 ./gradlew :morpheus:jvmTest --tests '*SettleBenchmark*' --rerun :morpheus:wasmJsBrowserTest --tests '*SettleBenchmark*' --rerun -i
+```
+
+`--tests` and `--rerun` apply to the task named just before them, hence twice. On wasm, set `CHROME_BIN` to a Chrome or Chrome for Testing binary if Karma can't find one. Without
+`MORPHEUS_BENCHMARK` the tests return at once, so CI never runs them.
+
+It prints:
+
+- **The showcase's loop:** the shape, mesh, edge fades and alpha settle phases, every layer summed. It
+  prints them for the frame where the morph starts or ends, and as a mean over the half second from
+  there. That mean is the window the readout averages over, and it dilutes a one-frame spike such as a
+  morph's start.
+- **The morph meshes:** rebuilding the showcase's morph meshes, front and back layer, and the front
+  layer without comets. The transit mesh's settle is the difference.
+- **Living Delaunay:** that preset's mesh phase per frame. It settles every frame.
+
+Use it next to the recipe, not instead of it. It covers the `advance` phases only: it doesn't draw, so
+frame time and the fill, edges, halos, dots and composite phases still come from the recipe. The
+browser's timer ticks at about 100 µs, so treat a difference of a tick or two as noise.
+
+Report one table per platform, base and change side by side, with the machine and the JDK or Chrome
+version. Run them interleaved, at least three rounds, and give medians.
