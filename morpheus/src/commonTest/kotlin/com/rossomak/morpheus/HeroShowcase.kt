@@ -8,7 +8,7 @@ import com.rossomak.morpheus.ShapePrimitive.Uniform
 // can't depend on the samples). Fills are left out: they never touch the mesh.
 
 internal val heroFront = MorpheusGraphLayerSpec(
-    density = 70f,
+    density = 95f,
     jitter = 0.4f,
     driftAmplitude = 0.3f,
     envelopeFloor = 0.01f,
@@ -22,7 +22,7 @@ internal val heroFront = MorpheusGraphLayerSpec(
     hotNodeShare = 0.12f,
     glowRadiusDp = 10f,
     glowStrength = 0.4f,
-    cometStrength = 0.25f,
+    cometStrength = 0.5f,
     cometSpark = 0.6f,
 )
 

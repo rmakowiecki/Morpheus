@@ -318,6 +318,9 @@ internal class LayerField(
     /** How many comets the current morph sends, 0 when not morphing. */
     internal val cometCount: Int get() = if (shape is LayerShape.Morph) cometTracks.topLevel?.cometCount ?: 0 else 0
 
+    /** How many nodes only a comet lights that the current morph's mesh joins, 0 when not morphing. */
+    internal val cometOnlyNodeCount: Int get() = if (shape is LayerShape.Morph) morphMesh?.cometOnlyNodeCount ?: 0 else 0
+
     /** How many times any node joined or left the mesh since the field was built. */
     internal var meshMembershipChanges = 0
         private set
@@ -1231,6 +1234,8 @@ private class MorphMesh(
     switches: NodeSwitches,
 ) {
     val union: MeshTopology
+    var cometOnlyNodeCount = 0
+        private set
     val leavingEdgeSwitches: Map<Long, Float>
     val arrivingEdgeSwitches: Map<Long, Float>
 
@@ -1293,7 +1298,11 @@ private class MorphMesh(
             short.forEach { candidates[it] = false }
             edges = edges.filter { key -> keeps(edgeStart(key), transit, candidates) && keeps(edgeEnd(key), transit, candidates) }
         } while (short.isNotEmpty())
-        for (node in 0 until nodeCount) if (candidates[node]) alive[node] = true
+        for (node in 0 until nodeCount) {
+            if (!candidates[node]) continue
+            alive[node] = true
+            cometOnlyNodeCount++
+        }
         return edges
     }
 

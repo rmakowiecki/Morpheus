@@ -22,8 +22,8 @@ import kotlin.test.fail
  * frame, on the showcase's dense front mesh, and in the morphs. Those run the first seed only, which
  * keeps the whole test within a few seconds on the JVM.
  *
- * Per case and frame, the record holds the edge, alive, repaired-edge and pruned-node counts, and a
- * 64-bit hash of the sorted edge keys and the alive mask. Alphas aren't recorded; capture-renderer
+ * Per case and frame, the record holds the edge, alive, repaired-edge and pruned-node counts, the nodes
+ * only a comet lights that a morph's mesh joins, and a 64-bit hash of the sorted edge keys and the alive mask. Alphas aren't recorded; capture-renderer
  * comparisons cover them. The hash mixer is deliberately separate from the hash tables', so retuning
  * one doesn't invalidate the record.
  *
@@ -41,6 +41,18 @@ class GoldenTopologyTest {
     @Test
     fun `every layer settles on the recorded mesh at every recorded frame`() {
         assertRecorded(recordAll(stillCases() + morphCases()), goldenTopology, "goldenTopology")
+    }
+
+    /** The showcase's comets must keep lighting nodes outside both ends, or the record stops covering the transit mesh. */
+    @Test
+    fun `the showcase morph joins comet-only nodes on every recorded surface`() {
+        val case = morphCases().first { it.name == SHOWCASE_MORPH }
+        for (seed in case.seeds) {
+            for ((width, height) in case.surfaces) {
+                val joined = case.record(seed, width, height).maxOf { (_, record) -> record.cometNodes }
+                if (joined == 0) fail("$SHOWCASE_MORPH/seed $seed/${width.toInt()}x${height.toInt()} joins no comet-only node")
+            }
+        }
     }
 
     @Test
@@ -93,7 +105,7 @@ class GoldenTopologyTest {
 
     private fun morphCases(): List<GoldenCase> = listOf(
         // Same density at both ends: one morph family.
-        MorphCase("hero pills to ribbons", heroPills, heroRibbons, HERO_SURFACES),
+        MorphCase(SHOWCASE_MORPH, heroPills, heroRibbons, HERO_SURFACES),
         // A different density is a different morph family, so the front layer dissolves into another mesh.
         MorphCase(
             "hero pills dissolving",
@@ -180,17 +192,25 @@ class GoldenTopologyTest {
         const val MORPH_SETTLED_FRAME = 75
         val MORPH_RECORDED_FRAMES = listOf(15, 30, 45, MORPH_FRAMES, MORPH_SETTLED_FRAME)
         const val DISSOLVE_DENSITY = 48f
+        const val SHOWCASE_MORPH = "hero pills to ribbons"
         const val PX_PER_DP = 2.75f
         val TEST_FILL = MorpheusGraphFill.Solid(Color.White)
     }
 }
 
-/** One recorded mesh: its counts, and [hash] over its sorted edge keys and alive mask (see [topologyHash]). */
-internal data class TopologyRecord(val edges: Int, val alive: Int, val repaired: Int, val pruned: Int, val hash: ULong) {
+/**
+ * One recorded mesh: its counts, [cometNodes] (the comet-only nodes a morph's mesh joins, left out of the
+ * source when 0), and [hash] over its sorted edge keys and alive mask (see [topologyHash]).
+ */
+internal data class TopologyRecord(val edges: Int, val alive: Int, val repaired: Int, val pruned: Int, val hash: ULong, val cometNodes: Int = 0) {
 
-    fun describe(): String = "edges=$edges alive=$alive repaired=$repaired pruned=$pruned hash=${hash.toHex()}"
+    fun describe(): String = "edges=$edges alive=$alive repaired=$repaired pruned=$pruned cometNodes=$cometNodes hash=${hash.toHex()}"
 
-    fun toSource(): String = "TopologyRecord(edges = $edges, alive = $alive, repaired = $repaired, pruned = $pruned, hash = 0x${hash.toHex()}uL)"
+    /** One line, or with [cometNodes] wrapped onto three to fit the line length. */
+    fun toSource(): String {
+        val counts = "edges = $edges, alive = $alive, repaired = $repaired, pruned = $pruned, hash = 0x${hash.toHex()}uL"
+        return if (cometNodes == 0) "TopologyRecord($counts)" else "TopologyRecord(\n        $counts,\n        cometNodes = $cometNodes,\n    )"
+    }
 
     companion object {
         fun of(field: LayerField): TopologyRecord = with(field.topology) {
@@ -200,6 +220,7 @@ internal data class TopologyRecord(val edges: Int, val alive: Int, val repaired:
                 repaired = repairedEdgeCount,
                 pruned = field.prunedNodeCount,
                 hash = topologyHash(edges, alive),
+                cometNodes = field.cometOnlyNodeCount,
             )
         }
     }
