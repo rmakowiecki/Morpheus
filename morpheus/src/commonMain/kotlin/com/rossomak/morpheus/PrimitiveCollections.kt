@@ -68,6 +68,17 @@ internal class LongHashSet(initialCapacity: Int = INITIAL_CAPACITY) {
         removed = 0
     }
 
+    /** Calls [action] on every key, in table order: the same on every platform, but no order to rely on. */
+    inline fun forEach(action: (Long) -> Unit) {
+        for (slot in 0 until tableSize) if (isFull(slot)) action(keyAt(slot))
+    }
+
+    @PublishedApi internal val tableSize: Int get() = keys.size
+
+    @PublishedApi internal fun isFull(slot: Int): Boolean = states[slot] == FULL
+
+    @PublishedApi internal fun keyAt(slot: Int): Long = keys[slot]
+
     private fun find(key: Long): Int {
         val mask = keys.size - 1
         var slot = slotOf(key, mask)
