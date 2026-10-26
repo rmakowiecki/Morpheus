@@ -14,6 +14,7 @@ Which tier a pull request that claims a performance change reports depends on wh
   in Chrome, reports the headless JVM numbers from the same run, and reports the recipe's wasm frame
   time once.
 - **A change to drawing** gates on the recipe on wasm.
+- **The per-frame allocations** (#42) gate on their zero-allocation test, not on timings.
 - **JVM recipe timings** are reported only by #33, not per pull request.
 
 Either way it reports before and after numbers, as [Comparing a change](#comparing-a-change) says, and
@@ -86,7 +87,7 @@ Phases under the timer's resolution read 0.00 until enough frames add up: in the
 ### Browser, scripted
 
 ```sh
-python3 scripts/gallery_benchmark.py [--loops 3] [--skip-build] [--chrome PATH]
+python3 scripts/gallery_benchmark.py [--loops 3] [--skip edges,halos,dots,fill|all] [--skip-build] [--chrome PATH]
 ```
 
 It builds the production bundle, serves it, and opens it in a separate Chrome with the flags above and
@@ -95,8 +96,21 @@ prints each half-second reading to the console as a `morpheus-benchmark` line. T
 from Chrome's log, skips a 6 s warm-up, and prints the frame, graphs and phase-table totals per frame,
 per 10 s loop and as the median of the loops. It warns about readings flagged capped, canvas scaled or
 debug switches on. A Chrome window opens for the run: leave it in front and the machine otherwise idle,
-or Chrome slows it down. It uses `$CHROME_BIN` when set, else Google Chrome. It covers the baseline row,
-with every switch off; the skip rows still come from the steps below.
+or Chrome slows it down. It uses `$CHROME_BIN` when set, else Google Chrome.
+
+One run measures one row of the [report](#reporting). Without `--skip` it is the row with every switch
+off. `--skip halos` opens the gallery with `?benchmark&skip=halos` and measures the skip halos row, and
+so on; `--skip all` turns every skip switch on, for the all skips on row. With `--skip`, every reading
+must show its switches on, or the script stops: the bundle didn't read `&skip=`.
+
+```sh
+python3 scripts/gallery_benchmark.py
+python3 scripts/gallery_benchmark.py --skip-build --skip edges
+python3 scripts/gallery_benchmark.py --skip-build --skip halos
+python3 scripts/gallery_benchmark.py --skip-build --skip dots
+python3 scripts/gallery_benchmark.py --skip-build --skip fill
+python3 scripts/gallery_benchmark.py --skip-build --skip all
+```
 
 ### Then, on either platform
 
@@ -108,6 +122,9 @@ with every switch off; the skip rows still come from the steps below.
 4. Check that the button says neither "capped" nor "canvas scaled".
 5. With every switch off, watch a full loop and record frame, graphs and the phase table.
 6. Turn on each skip switch in turn, alone, and record the same over a loop.
+7. Turn on every skip switch at once and record the same over a loop.
+
+In the browser, [the script](#browser-scripted) runs steps 5 to 7 with `--skip`.
 
 Changing the sample, theme or preview, editing a spec, pausing or resuming, or flipping a switch
 starts a fresh window, so no reading mixes two setups.
@@ -123,6 +140,7 @@ Report the recipe's table in the pull request, for wasm, and for the JVM only in
 | skip halos         |          |           |          |          |         |         |
 | skip dots          |          |           |          |          |         |         |
 | skip fill recolor  |          |           |          |          |         |         |
+| all skips on       |          |           |          |          |         |         |
 
 Add the machine, OS, and browser or JDK version, and the full phase table for the baseline row.
 
@@ -152,7 +170,8 @@ They print:
 - **`LivingDelaunayBenchmark`:** that preset's phases per frame, still. It settles its mesh every frame.
 
 Each run starts with a header line naming the benchmark, the platform and the timer's measured step.
-No header means the benchmark was skipped. In headless Chrome the Karma page is cross-origin isolated, so `performance.now()` steps at about 5 µs
+Without `MORPHEUS_BENCHMARK`, each benchmark class prints `<Class> skipped: MORPHEUS_BENCHMARK not set`
+once instead, so a skip line means the flag didn't reach that platform. In headless Chrome the Karma page is cross-origin isolated, so `performance.now()` steps at about 5 µs
 rather than 100 µs.
 
 Use them next to the recipe, not instead of it. They cover the `advance` phases only: they don't draw,
@@ -166,9 +185,9 @@ MORPHEUS_BENCHMARK=1 ./gradlew :morpheus:jvmTest --tests '*LivingDelaunayBenchma
 
 `--tests` applies to the task named just before it, hence twice. On wasm, the filter needs the trailing
 `*`. With `MORPHEUS_BENCHMARK` set, the test tasks always run, never up to date or from the cache.
-Without it, or with it empty, the benchmarks return at once on both platforms, so CI never runs them.
-With it set, the wasm run also logs `MORPHEUS_BENCHMARK set: the benchmarks run in the page`, so a wasm
-run that logs that but no header shows the page didn't get the flag.
+Without it, or with it empty, the benchmarks return at once on both platforms after the skip line, so
+CI never runs them. With it set, the wasm run also logs `MORPHEUS_BENCHMARK set: the benchmarks run in
+the page`, so a wasm run that logs that and then a skip line shows the page didn't get the flag.
 A filter that matches more than one benchmark runs them in one JVM or page, and every benchmark after
 the first prints a "not run alone" warning: don't compare those numbers.
 
@@ -186,8 +205,10 @@ whose `--user-data-dir` ends in `karma-…`.
 
 ### Writing a benchmark
 
-A benchmark is a test in `morpheus/src/commonTest` whose body runs through `benchmark("Name") { … }`,
-written as ``fun `what it times`() = benchmark(…)``: that is the form the script finds. The harness, in
+A benchmark is a test in `morpheus/src/commonTest` whose body runs through
+`benchmark(this::class, "case") { … }`, written as ``fun `what it times`() = benchmark(…)``: that is the
+form the script finds. The class names the header and the skip line; the case, when a class has more
+than one test, tells its headers apart. The harness, in
 `BenchmarkHarness.kt`, gives it:
 
 - `timeCalls`, for a call too short for the timer: it batches calls until a batch lasts at least 2 ms.
@@ -226,7 +247,14 @@ specs don't compare with a new run; measure the base again instead.
 3. Report each cell as the range of the rounds' medians, low-high, as PR #40 did. Within one checkout,
    `scripts/headless_benchmark.py --rounds N` prints that range for you; it can't alternate checkouts,
    so use it to check a side's spread, and take a comparison's cells from the alternated rounds.
-4. When you're done, remove the worktree with `git worktree remove ../morpheus-base`.
+4. Judge the change by those ranges:
+   - **faster** means the change's slowest round median beats the base's fastest round median, for the
+     phase the change targets;
+   - **not worse** means, for every other phase, the two ranges overlap or the change is better;
+   - anything else is a regression: report it and explain it in the pull request.
+
+   A drawing change applies the same rules to the recipe's frame and phase columns.
+5. When you're done, remove the worktree with `git worktree remove ../morpheus-base`.
 
 Report one table per tier and platform, base and change side by side, with the machine, the OS, and
 the JDK or Chrome for Testing version.
