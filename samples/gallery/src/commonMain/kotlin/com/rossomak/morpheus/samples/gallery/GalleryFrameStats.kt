@@ -184,7 +184,7 @@ private fun DebugSwitches(stats: MorpheusGraphFrameStats) {
     }
 }
 
-private val PHASE_ROWS: List<Pair<String, (MorpheusGraphLayerBreakdown) -> Float>> = listOf(
+internal val PHASE_ROWS: List<Pair<String, (MorpheusGraphLayerBreakdown) -> Float>> = listOf(
     "shape" to { it.shapeMillis },
     "mesh" to { it.meshMillis },
     "edge fades" to { it.edgeFadesMillis },
@@ -216,13 +216,13 @@ private val WINDOW_COUNT_ROWS: List<Pair<String, (MorpheusGraphLayerBreakdown) -
  * take well under it ([drawMillis] below [CAP_BUSY_SHARE] of it): the frame is waiting for the display, so the
  * frame-rate cap, not the work, sets the frame time. See docs/benchmark.md for running without the cap.
  */
-private fun isCapped(frameMillis: Float, drawMillis: Float): Boolean =
+internal fun isCapped(frameMillis: Float, drawMillis: Float): Boolean =
     frameMillis > 0f &&
         drawMillis < frameMillis * CAP_BUSY_SHARE &&
         COMMON_REFRESH_RATES.any { rate -> abs(frameMillis * rate / MILLIS_PER_SECOND - 1f) <= CAP_TOLERANCE }
 
 /** The value with exactly [decimals] digits after the point, rounded half up: common code has no `String.format`. */
-private fun Float.toFixed(decimals: Int): String {
+internal fun Float.toFixed(decimals: Int): String {
     var factor = 1L
     repeat(decimals) { factor *= DECIMAL_BASE }
     val scaled = floor(abs(toDouble()) * factor + ROUNDING_HALF).toLong()

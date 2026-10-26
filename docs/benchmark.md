@@ -1,9 +1,24 @@
 # Benchmark recipe
 
-One way to measure the graph renderer's cost, on desktop and in the browser. Every pull request that
-claims a performance change reports before and after numbers from this recipe, for the JVM and for
-wasm, and links here rather than repeating the steps. A change to the frame's CPU phases (shape, mesh,
-edge fades, alpha settle) also reports the [headless timing](#headless-timing-settlebenchmark).
+How to measure the graph renderer's cost, on desktop and in the browser, in two tiers:
+
+- **The recipe**, in the gallery: the whole frame, drawing included, as someone watching it sees it.
+  Run it by hand, or in the browser with [a script](#browser-scripted).
+- **The [headless benchmarks](#headless-benchmarks)**: the frame's CPU phases (shape, mesh, edge fades,
+  alpha settle) without drawing, as tests on the JVM and in headless Chrome. They are quicker to run
+  and steadier, but they don't cover drawing.
+
+Which tier a pull request that claims a performance change reports depends on what it changes:
+
+- **A change to the CPU phases** (shape, mesh, edge fades, alpha settle) gates on the headless numbers
+  in Chrome, reports the headless JVM numbers from the same run, and reports the recipe's wasm frame
+  time once.
+- **A change to drawing** gates on the recipe on wasm.
+- **The per-frame allocations** (#42) gate on their zero-allocation test, not on timings.
+- **JVM recipe timings** are reported only by #33, not per pull request.
+
+Either way it reports before and after numbers, as [Comparing a change](#comparing-a-change) says, and
+links here rather than repeating the steps.
 
 ## What is measured
 
@@ -69,6 +84,34 @@ Phases under the timer's resolution read 0.00 until enough frames add up: in the
    On Linux or Windows, pass the same flags to the `google-chrome` or `chrome.exe` binary.
 3. Maximize the window, at least about 1,370 dp wide, and check that browser zoom is at 100%.
 
+### Browser, scripted
+
+```sh
+python3 scripts/gallery_benchmark.py [--loops 3] [--skip edges,halos,dots,fill|all] [--skip-build] [--chrome PATH]
+```
+
+It builds the production bundle, serves it, and opens it in a separate Chrome with the flags above and
+`?benchmark`. That opens "Pills to ribbons" on the 16:9 preview with Scale to fit off, and the gallery
+prints each half-second reading to the console as a `morpheus-benchmark` line. The script reads them
+from Chrome's log, skips a 6 s warm-up, and prints the frame, graphs and phase-table totals per frame,
+per 10 s loop and as the median of the loops. It warns about readings flagged capped, canvas scaled or
+debug switches on. A Chrome window opens for the run: leave it in front and the machine otherwise idle,
+or Chrome slows it down. It uses `$CHROME_BIN` when set, else Google Chrome.
+
+One run measures one row of the [report](#reporting). Without `--skip` it is the row with every switch
+off. `--skip halos` opens the gallery with `?benchmark&skip=halos` and measures the skip halos row, and
+so on; `--skip all` turns every skip switch on, for the all skips on row. With `--skip`, every reading
+must show its switches on, or the script stops: the bundle didn't read `&skip=`.
+
+```sh
+python3 scripts/gallery_benchmark.py
+python3 scripts/gallery_benchmark.py --skip-build --skip edges
+python3 scripts/gallery_benchmark.py --skip-build --skip halos
+python3 scripts/gallery_benchmark.py --skip-build --skip dots
+python3 scripts/gallery_benchmark.py --skip-build --skip fill
+python3 scripts/gallery_benchmark.py --skip-build --skip all
+```
+
 ### Then, on either platform
 
 1. Open "Pills to ribbons". Press Reset to defaults if it was tuned.
@@ -79,13 +122,16 @@ Phases under the timer's resolution read 0.00 until enough frames add up: in the
 4. Check that the button says neither "capped" nor "canvas scaled".
 5. With every switch off, watch a full loop and record frame, graphs and the phase table.
 6. Turn on each skip switch in turn, alone, and record the same over a loop.
+7. Turn on every skip switch at once and record the same over a loop.
+
+In the browser, [the script](#browser-scripted) runs steps 5 to 7 with `--skip`.
 
 Changing the sample, theme or preview, editing a spec, pausing or resuming, or flipping a switch
 starts a fresh window, so no reading mixes two setups.
 
 ## Reporting
 
-Report one table per platform in the pull request:
+Report the recipe's table in the pull request, for wasm, and for the JVM only in #33 (see the tiers above):
 
 | Setup              | frame ms | graphs ms | edges ms | halos ms | dots ms | fill ms |
 |--------------------|----------|-----------|----------|----------|---------|---------|
@@ -94,36 +140,121 @@ Report one table per platform in the pull request:
 | skip halos         |          |           |          |          |         |         |
 | skip dots          |          |           |          |          |         |         |
 | skip fill recolor  |          |           |          |          |         |         |
+| all skips on       |          |           |          |          |         |         |
 
 Add the machine, OS, and browser or JDK version, and the full phase table for the baseline row.
 
-## Headless timing (`SettleBenchmark`)
+## Headless benchmarks
 
-The second way to measure: a test that runs the frame's CPU phases without drawing, on the JVM and in
-headless Chrome, with no window and no one watching it. It replays the showcase's loop as the gallery
-does: the canvas above in a 1440 dp wide window, 60 frames a second. Each frame's phases go through the
-gallery's own probe, and each field is kept across frames as the modifier keeps it.
+The second tier: tests that run the frame's CPU phases without drawing, on the JVM and in headless
+Chrome, with no window and no one watching. Run them with:
 
 ```sh
-MORPHEUS_BENCHMARK=1 ./gradlew :morpheus:jvmTest --tests '*SettleBenchmark*' --rerun :morpheus:wasmJsBrowserTest --tests '*SettleBenchmark*' --rerun -i
+python3 scripts/headless_benchmark.py [--rounds 3] [--platform jvm|wasm|both] [--tests SUBSTRING]
 ```
 
-`--tests` and `--rerun` apply to the task named just before them, hence twice. On wasm, set `CHROME_BIN` to a Chrome or Chrome for Testing binary if Karma can't find one. Without
-`MORPHEUS_BENCHMARK`, or with it empty, the tests return at once on both platforms, so CI never runs them.
+It runs each benchmark test alone, in its own Gradle test run, so each gets a fresh JVM or a fresh Karma
+page; see [why alone](#why-each-test-runs-alone). With more than one round it interleaves the tests and
+prints each line's numbers as their range over the rounds, low-high. On wasm, set `CHROME_BIN` to a Chrome or Chrome
+for Testing binary if Karma can't find one.
 
-It prints:
+They print:
 
-- **The showcase's loop:** the shape, mesh, edge fades and alpha settle phases, every layer summed. It
-  prints them for the frame where the morph starts or ends, and as a mean over the half second from
-  there. That mean is the window the readout averages over, and it dilutes a one-frame spike such as a
-  morph's start.
-- **The morph meshes:** rebuilding the showcase's morph meshes, front and back layer, and the front
-  layer without comets. The transit mesh's settle is the difference.
-- **Living Delaunay:** that preset's mesh phase per frame. It settles every frame.
+- **`SettleBenchmark`, showcase loop:** the showcase's loop replayed as the gallery runs it (below), with
+  the shape, mesh, edge fades and alpha settle phases, every layer summed. It prints them for the frame
+  where the morph starts or ends, and as a mean over the half second from there, the window the readout
+  averages over, which dilutes a one-frame spike such as a morph's start. Then it prints the mean over
+  the whole loop, which compares with the gallery's readout over a loop.
+- **`SettleBenchmark`, morph meshes:** rebuilding the showcase's morph meshes, front and back layer, and
+  the front layer without comets, on the recipe's canvas. The transit mesh's settle is the difference.
+- **`LivingDelaunayBenchmark`:** that preset's phases per frame, still. It settles its mesh every frame.
 
-Use it next to the recipe, not instead of it. It covers the `advance` phases only: it doesn't draw, so
-frame time and the fill, edges, halos, dots and composite phases still come from the recipe. The
-browser's timer ticks at about 100 µs, so treat a difference of a tick or two as noise.
+Each run starts with a header line naming the benchmark, the platform and the timer's measured step.
+Without `MORPHEUS_BENCHMARK`, each benchmark class prints `<Class> skipped: MORPHEUS_BENCHMARK not set`
+once instead, so a skip line means the flag didn't reach that platform. In headless Chrome the Karma page is cross-origin isolated, so `performance.now()` steps at about 5 µs
+rather than 100 µs.
 
-Report one table per platform, base and change side by side, with the machine and the JDK or Chrome
-version. Run them interleaved, at least three rounds, and give medians.
+Use them next to the recipe, not instead of it. They cover the `advance` phases only: they don't draw,
+so frame time and the fill, edges, halos, dots and composite phases still come from the recipe.
+
+### Running one by hand
+
+```sh
+MORPHEUS_BENCHMARK=1 ./gradlew :morpheus:jvmTest --tests '*LivingDelaunayBenchmark*' :morpheus:wasmJsBrowserTest --tests '*LivingDelaunayBenchmark*' -i
+```
+
+`--tests` applies to the task named just before it, hence twice. On wasm, the filter needs the trailing
+`*`. With `MORPHEUS_BENCHMARK` set, the test tasks always run, never up to date or from the cache.
+Without it, or with it empty, the benchmarks return at once on both platforms after the skip line, so
+CI never runs them. With it set, the wasm run also logs `MORPHEUS_BENCHMARK set: the benchmarks run in
+the page`, so a wasm run that logs that and then a skip line shows the page didn't get the flag.
+A filter that matches more than one benchmark runs them in one JVM or page, and every benchmark after
+the first prints a "not run alone" warning: don't compare those numbers.
+
+### Why each test runs alone
+
+The JIT keeps what earlier code taught it. In the same Karma page, V8 inlines calls it has seen go one
+way, so a benchmark's wasm timings depend on which tests ran before it. For example, the showcase loop's
+edge fades measured about 9.6 ms a frame right after the morph-mesh test, and about 17 to 18 ms alone,
+close to the gallery's 18.8 ms. The JVM showed no such effect, but runs alone too, the same way.
+
+The script stops when a run reports the test more than once. That happens when a headless Chrome
+left over from a killed run is still open: it reconnects to Karma's port and runs the test at the same
+time as the new one, which slows both down. Quit the leftover `Google Chrome for Testing` process,
+whose `--user-data-dir` ends in `karma-…`.
+
+### Writing a benchmark
+
+A benchmark is a test in `morpheus/src/commonTest` whose body runs through
+`benchmark(this::class, "case") { … }`, written as ``fun `what it times`() = benchmark(…)``: that is the
+form the script finds. The class names the header and the skip line; the case, when a class has more
+than one test, tells its headers apart. The harness, in
+`BenchmarkHarness.kt`, gives it:
+
+- `timeCalls`, for a call too short for the timer: it batches calls until a batch lasts at least 2 ms.
+- `GalleryLoop`, which replays frames as the gallery's modifier runs them: one field per mesh, kept
+  across frames as the modifier keeps it, each frame's phases timed through the gallery's own probe. By
+  default it draws on the recipe's canvas at 60 frames a second. The gallery gives a sample a window of
+  its canvas's size, so the 1280 px canvas also sets the grid's cell size.
+- `meanFrame`, `medianPhases`, `meanPhases` and `millis`, so every benchmark averages and prints the same
+  way on both platforms.
+
+Print, don't assert: a benchmark reports and never fails a build.
+
+## Comparing a change
+
+Numbers only compare when they come from the same tier, the same benchmark and the same setup: specs,
+canvas, device scale, machine, and JDK or browser. Numbers from older reports, other machines or other
+specs don't compare with a new run; measure the base again instead.
+
+1. Check the base, the merge-base of the change, out into a git worktree next to the change's checkout:
+
+   ```sh
+   git worktree add ../morpheus-base "$(git merge-base origin/develop HEAD)"
+   ```
+
+2. Alternate between the two checkouts, at least three rounds each, on the same machine with nothing
+   else heavy running: base, change, base, change and so on. Alternating spreads the machine's drift
+   over both sides. Each round, run the same command in both:
+
+   ```sh
+   python3 scripts/headless_benchmark.py              # the headless tier
+   python3 scripts/gallery_benchmark.py --loops 3     # the recipe in the browser
+   ```
+
+   Each run already gives medians: the headless benchmarks over their loops or runs, the recipe over
+   its three loops.
+3. Report each cell as the range of the rounds' medians, low-high, as PR #40 did. Within one checkout,
+   `scripts/headless_benchmark.py --rounds N` prints that range for you; it can't alternate checkouts,
+   so use it to check a side's spread, and take a comparison's cells from the alternated rounds.
+4. Judge the change by those ranges:
+   - **faster** means the change's slowest round median beats the base's fastest round median, for the
+     phase the change targets;
+   - **not worse** means, for every other phase, the two ranges overlap or the change is better;
+   - anything else is a regression: report it and explain it in the pull request.
+
+   A drawing change applies the same rules to the recipe's frame and phase columns.
+5. When you're done, remove the worktree with `git worktree remove ../morpheus-base`.
+
+Report one table per tier and platform, base and change side by side, with the machine, the OS, and
+the JDK or Chrome for Testing version.

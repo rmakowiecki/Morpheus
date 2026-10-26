@@ -9,7 +9,7 @@ import kotlin.test.Test
  * for the showcase, how often they fall back to the repair rounds and how many edges those repair; and how
  * many interior edges the keep chance drops come back. Printed, not asserted; only runs with `MORPHEUS_BENCHMARK` set:
  *
- * `MORPHEUS_BENCHMARK=1 ./gradlew :morpheus:jvmTest --tests '*FacesFirstReport' --rerun -i`
+ * `MORPHEUS_BENCHMARK=1 ./gradlew :morpheus:jvmTest --tests '*FacesFirstReport' -i`
  *
  * It steps like [GoldenTopologyTest], on each [SURFACES] size with the first golden seed.
  */

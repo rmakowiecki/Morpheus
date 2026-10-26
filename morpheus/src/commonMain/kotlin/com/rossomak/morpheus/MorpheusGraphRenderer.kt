@@ -213,7 +213,7 @@ public class MorpheusGraphLayerStats {
  * changes, so a morph, a tuning edit or a resize never rebuilds it; only a new window size, which
  * changes the grid's cell size, rebuilds them all.
  */
-private class MorpheusGraphHolder {
+internal class MorpheusGraphHolder {
     /** Tells the holder's background apart in [MorpheusGraphFrameStats], without the stats holding on to it. */
     val id = nextHolderId++
 
