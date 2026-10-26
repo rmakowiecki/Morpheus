@@ -135,6 +135,12 @@ private const val COMET_SPARK_SHARE = 0.4f
 private const val COMET_SPARK_LEAD = 0.08f
 private const val COMET_SPARK_TRAIL = 0.06f
 
+/**
+ * How long a sparking node takes to heat up before it starts cooling, as a fraction of the morph: as long as
+ * it takes to cool, so a morph played backwards cools its sparks as gently as one played forwards.
+ */
+private const val COMET_SPARK_RISE = COMET_SPARK_LEAD + COMET_SPARK_TRAIL
+
 /** Per morph nesting level: presences at both ends, then closeness to each end's shape. */
 private const val SCRATCH_SLOTS_PER_LEVEL = 4
 
@@ -356,6 +362,9 @@ internal class LayerField(
 
     /** Node [index]'s dot alpha, as of the last [advance]. */
     internal fun nodeAlpha(index: Int): Float = nodeAlphas[index]
+
+    /** How hot node [index] is, from 0 to 1, as of the last [advance]: its dot's size and halo follow it. */
+    internal fun nodeHotWeight(index: Int): Float = hotWeights[index]
 
     /** Node [index]'s presence under [shape], border fade included, as of the last [advance]. */
     internal fun nodePresence(index: Int): Float = presences[index]
@@ -1446,11 +1455,18 @@ private class CometTrack(
         }
     }
 
-    /** How hot [node] is from the comet passing it, under [MorpheusGraphLayerSpec.cometSpark]: hot as the comet reaches it, cooling once it has passed. */
+    /**
+     * How hot [node] is from the comet passing it, under [MorpheusGraphLayerSpec.cometSpark]: heating up as
+     * the comet reaches it, cooling once it has passed. Both windows stay within the morph, so a node is cold
+     * at either end, as the still spec at that end draws it, even when its comet peaks right at an end.
+     */
     fun sparkAt(node: Int, hotRoll: Float, fraction: Float): Float {
         if (spark <= 0f || peaks[node] <= 0f) return 0f
-        val peakAt = peakFractions[node]
-        return rollWeight(hotRoll, COMET_SPARK_SHARE * spark.coerceIn(0f, 1f)) * (1f - smoothStep(peakAt - COMET_SPARK_LEAD, peakAt + COMET_SPARK_TRAIL, fraction))
+        val coolsBy = (peakFractions[node] + COMET_SPARK_TRAIL).coerceAtMost(1f)
+        val coolsFrom = coolsBy - COMET_SPARK_LEAD - COMET_SPARK_TRAIL
+        val heatsFrom = (coolsFrom - COMET_SPARK_RISE).coerceAtLeast(0f)
+        val heat = smoothStep(heatsFrom, heatsFrom + COMET_SPARK_RISE, fraction) * (1f - smoothStep(coolsFrom, coolsBy, fraction))
+        return rollWeight(hotRoll, COMET_SPARK_SHARE * spark.coerceIn(0f, 1f)) * heat
     }
 
     fun presenceAt(node: Int, fraction: Float): Float {
