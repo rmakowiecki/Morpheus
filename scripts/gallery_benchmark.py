@@ -5,11 +5,12 @@ Builds the gallery's production bundle, serves it, and opens it in a separate Ch
 flags and `?benchmark`, which opens "Pills to ribbons" on the 16:9 preview with scale to fit off and prints
 each half-second reading to the console. Chrome writes the console to stderr; this collects the readings
 over whole loops of the showcase and prints, per loop and as the median of the loops, the frame, graphs
-and phase-table totals in milliseconds per frame.
+and phase-table totals in milliseconds per frame. `--skip` turns skip switches on through `&skip=`, for the
+recipe's skip rows: one row per run.
 
 A Chrome window opens for the run. Leave it in front and the machine otherwise idle.
 
-    python3 scripts/gallery_benchmark.py [--chrome PATH] [--loops 3] [--skip-build]
+    python3 scripts/gallery_benchmark.py [--chrome PATH] [--loops 3] [--skip edges,halos,dots,fill|all] [--skip-build]
 """
 
 import argparse
@@ -36,6 +37,7 @@ FIRST_READING_SECONDS = 60.0
 STALL_SECONDS = 5.0
 COLUMNS = ["frame", "graphs", "shape", "mesh", "edge-fades", "alpha-settle", "fill", "edges", "halos", "dots", "composite"]
 FLAGS = ["capped", "scaled", "switches"]
+SKIPS = ["edges", "halos", "dots", "fill"]
 MAC_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
 
@@ -145,11 +147,17 @@ def completed_loops(readings):
     return int(readings[-1][0] // LOOP_SECONDS) if readings else 0
 
 
-def report(readings, loops):
-    """Warns about readings that aren't benchmark numbers, then prints each column's mean per loop and the median of the loops."""
-    flagged = [reading for _, reading in readings if any(reading[flag] for flag in FLAGS)]
+def report(readings, loops, skips):
+    """
+    Warns about readings that aren't benchmark numbers, then prints each column's mean per loop and the median of the loops.
+    With [skips], every reading must show its switches on; one that doesn't means the bundle ignored `&skip=`, so it exits.
+    """
+    if skips and not all(reading["switches"] for _, reading in readings):
+        sys.exit(f"asked for skip {','.join(skips)}, but readings show every switch off: does the bundle read &skip=?")
+    flags = [flag for flag in FLAGS if not (skips and flag == "switches")]
+    flagged = [reading for _, reading in readings if any(reading[flag] for flag in flags)]
     if flagged:
-        names = sorted({flag for reading in flagged for flag in FLAGS if reading[flag]})
+        names = sorted({flag for reading in flagged for flag in flags if reading[flag]})
         print(f"warning: {len(flagged)} of {len(readings)} readings flagged {', '.join(names)}; they are not benchmark numbers", file=sys.stderr)
     backgrounds = sorted({int(reading["backgrounds"]) for _, reading in readings})
     if backgrounds != [1]:
@@ -174,6 +182,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--chrome", default=os.environ.get("CHROME_BIN", MAC_CHROME), help="Chrome or Chrome for Testing binary (default: $CHROME_BIN, else Google Chrome)")
     parser.add_argument("--loops", type=positive_int, default=3, help="whole 10 s loops of the showcase to measure (default: 3)")
+    parser.add_argument("--skip", type=skip_list, default=[], help=f"skip switches to turn on, comma-separated from {', '.join(SKIPS)}, or all (default: none)")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--skip-build", action="store_true", help="serve the bundle as last built")
     args = parser.parse_args()
@@ -181,12 +190,14 @@ def main():
         subprocess.run([str(ROOT / "gradlew"), ":samples:gallery:wasmJsBrowserDistribution", "-q"], cwd=ROOT, check=True)
     version = subprocess.run([args.chrome, "--version"], capture_output=True, text=True).stdout.strip()
     print(f"browser: {version}", file=sys.stderr)
+    print(f"skip switches on: {', '.join(args.skip) if args.skip else 'none'}", file=sys.stderr)
+    url = f"http://127.0.0.1:{args.port}/?benchmark" + (f"&skip={','.join(args.skip)}" if args.skip else "")
     server = serve(BUNDLE, args.port)
     try:
-        readings = collect(args.chrome, f"http://127.0.0.1:{args.port}/?benchmark", args.loops)
+        readings = collect(args.chrome, url, args.loops)
     finally:
         server.shutdown()
-    report(readings, args.loops)
+    report(readings, args.loops, args.skip)
 
 
 def positive_int(text):
@@ -195,6 +206,15 @@ def positive_int(text):
     if value < 1:
         raise argparse.ArgumentTypeError(f"must be at least 1, not {value}")
     return value
+
+
+def skip_list(text):
+    """[text] as the skip switches it names, comma-separated, in [SKIPS] order; `all` names every one. An unknown name is a usage error."""
+    names = SKIPS if text == "all" else [name.strip() for name in text.split(",") if name.strip()]
+    unknown = [name for name in names if name not in SKIPS]
+    if unknown or not names:
+        raise argparse.ArgumentTypeError(f"expected names from {', '.join(SKIPS)}, or all, not {text!r}")
+    return [name for name in SKIPS if name in names]
 
 
 if __name__ == "__main__":

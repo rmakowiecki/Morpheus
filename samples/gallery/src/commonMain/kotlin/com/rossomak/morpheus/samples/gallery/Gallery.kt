@@ -44,19 +44,20 @@ internal const val GALLERY_TITLE = "Morpheus samples"
  * control and a tuning sheet. List and detail sit side by side from [WIDE_LAYOUT_MIN_WIDTH]; below it the
  * detail opens over the list. An exported spec's Kotlin source goes to the clipboard and [onSpecExport].
  *
- * In [benchmarkMode] it opens set up as `docs/benchmark.md`'s recipe asks: "Pills to ribbons" on the 16:9
- * preview with scale to fit off, and every reading of the frame stats also printed (see [LogBenchmarkReadings]).
+ * With a [benchmark] it opens set up as `docs/benchmark.md`'s recipe asks: "Pills to ribbons" on the 16:9
+ * preview with scale to fit off, the benchmark's skip switches on, and every reading of the frame stats also
+ * printed (see [LogBenchmarkReadings]).
  */
 @Composable
-fun Gallery(samples: List<Sample> = SampleRegistry.samples, onSpecExport: (source: String) -> Unit = {}, benchmarkMode: Boolean = false) {
+fun Gallery(samples: List<Sample> = SampleRegistry.samples, onSpecExport: (source: String) -> Unit = {}, benchmark: GalleryBenchmark? = null) {
     // Showcases first, then the catalog, each in registry order.
     val orderedSamples = remember(samples) { samples.sortedBy { it.category.ordinal } }
-    var selectedId by remember { mutableStateOf(if (benchmarkMode) BENCHMARK_SAMPLE_ID else null) }
+    var selectedId by remember { mutableStateOf(if (benchmark != null) BENCHMARK_SAMPLE_ID else null) }
     // Held here rather than in a pane, so a layout switch keeps the open sample's preparation and tuning.
     val session = remember(selectedId) { samples.firstOrNull { it.id == selectedId }?.let(::GallerySession) }
     var themeMode by remember { mutableStateOf(ThemeMode.System) }
-    val previewFrame = remember { PreviewFrame().apply { if (benchmarkMode) setUpForBenchmark() } }
-    val frameStats = remember { GalleryFrameStats() }
+    val previewFrame = remember { PreviewFrame().apply { if (benchmark != null) setUpForBenchmark() } }
+    val frameStats = remember { GalleryFrameStats().apply { benchmark?.let { stats.setUpForBenchmark(it.skips) } } }
     val clipboard = LocalClipboard.current
     val coroutineScope = rememberCoroutineScope()
 
@@ -76,7 +77,7 @@ fun Gallery(samples: List<Sample> = SampleRegistry.samples, onSpecExport: (sourc
                         frameStats = frameStats,
                         onThemeModeChange = { themeMode = it },
                         showsInlineBreakdown = !wide,
-                        logsBenchmarkReadings = benchmarkMode,
+                        logsBenchmarkReadings = benchmark != null,
                         onBack = if (wide) null else ({ selectedId = null }),
                         modifier = modifier,
                     )

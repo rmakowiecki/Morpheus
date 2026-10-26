@@ -38,10 +38,40 @@ internal fun benchmarkLine(stats: MorpheusGraphFrameStats, canvasScaled: Boolean
         "backgrounds=${stats.breakdown.backgroundCount} capped=$capped scaled=$canvasScaled switches=${stats.anySwitchOn}"
 }
 
+/**
+ * How the gallery opens for `docs/benchmark.md`'s recipe (see [Gallery]): with [skips]' switches on, for the
+ * recipe's skip rows, or with every switch off.
+ */
+data class GalleryBenchmark(val skips: Set<BenchmarkSkip> = emptySet()) {
+    companion object {
+        /** The setup a `skip` query value asks for: switch names separated by commas, or `all`. Unknown names are ignored. */
+        fun withSkips(parameter: String?): GalleryBenchmark {
+            val names = parameter.orEmpty().split(",").map { it.trim() }
+            return GalleryBenchmark(BenchmarkSkip.entries.filter { "all" in names || it.parameterName in names }.toSet())
+        }
+    }
+}
+
+/** A skip switch the benchmark can open with, by its name in the `skip` query value. */
+enum class BenchmarkSkip(internal val parameterName: String) {
+    Edges("edges"),
+    Halos("halos"),
+    Dots("dots"),
+    FillRecolor("fill"),
+}
+
 /** The recipe's preview: 16:9, shown at its own size. */
 internal fun PreviewFrame.setUpForBenchmark() {
     preset = PreviewPreset.Wide
     scalesToFit = false
+}
+
+/** Turns [skips]' switches on, once as the gallery opens; each switch then stays as set. */
+internal fun MorpheusGraphFrameStats.setUpForBenchmark(skips: Set<BenchmarkSkip>) {
+    skipEdges = BenchmarkSkip.Edges in skips
+    skipHalos = BenchmarkSkip.Halos in skips
+    skipDots = BenchmarkSkip.Dots in skips
+    skipFillRecolor = BenchmarkSkip.FillRecolor in skips
 }
 
 private const val BENCHMARK_DECIMALS = 3
