@@ -68,7 +68,8 @@ import kotlin.time.Duration.Companion.milliseconds
  * the frame time button and the preview canvas control. The frame time button opens the breakdown panel, which
  * the wide layout shows in its side column and [showsInlineBreakdown] shows under the preview instead; the
  * sample reports into [frameStats] through [LocalMorpheusGraphFrameStats], so neither needs anything from the
- * sample. [onBack] is the single-pane layout's way back to the list.
+ * sample. [onBack] is the single-pane layout's way back to the list. [logsBenchmarkReadings] prints each reading
+ * for the benchmark recipe's script.
  */
 @Suppress("LongParameterList") // The gallery-wide state the pane shows, one piece each.
 @Composable
@@ -79,6 +80,7 @@ internal fun SampleDetail(
     previewFrame: PreviewFrame,
     frameStats: GalleryFrameStats,
     showsInlineBreakdown: Boolean,
+    logsBenchmarkReadings: Boolean,
     onThemeModeChange: (ThemeMode) -> Unit,
     onBack: (() -> Unit)?,
     modifier: Modifier = Modifier,
@@ -89,6 +91,7 @@ internal fun SampleDetail(
     val canvasSize = previewFrame.canvasSize(sample.recipe)
     var canvasScaled by remember { mutableStateOf(false) }
     RecordFrameIntervals(frameStats.stats)
+    if (logsBenchmarkReadings) LogBenchmarkReadings(frameStats.stats) { canvasScaled }
     // No published reading straddles a change of what is measured.
     LaunchedEffect(frameStats, session, dark, canvasSize, previewFrame.scalesToFit) { frameStats.stats.reset() }
     LaunchedEffect(frameStats, session) {
