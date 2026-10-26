@@ -202,12 +202,12 @@ internal val goldenTopology: Map<String, TopologyRecord> = mapOf(
     ),
     "hero pills to ribbons/seed 1/640x360/fraction 50%/slot 1/density 16" to TopologyRecord(edges = 587, alive = 213, repaired = 0, pruned = 9, hash = 0xa7d8fdeeb19367d3uL),
     "hero pills to ribbons/seed 1/640x360/fraction 50%/slot 0/density 95" to TopologyRecord(
-        edges = 5687, alive = 2032, repaired = 0, pruned = 1, hash = 0xb57d9e3de3741451uL,
+        edges = 5687, alive = 2032, repaired = 0, pruned = 3, hash = 0xb57d9e3de3741451uL,
         cometNodes = 548,
     ),
     "hero pills to ribbons/seed 1/640x360/fraction 75%/slot 1/density 16" to TopologyRecord(edges = 587, alive = 213, repaired = 0, pruned = 9, hash = 0xa7d8fdeeb19367d3uL),
     "hero pills to ribbons/seed 1/640x360/fraction 75%/slot 0/density 95" to TopologyRecord(
-        edges = 5687, alive = 2032, repaired = 0, pruned = 2, hash = 0xb57d9e3de3741451uL,
+        edges = 5687, alive = 2032, repaired = 0, pruned = 5, hash = 0xb57d9e3de3741451uL,
         cometNodes = 548,
     ),
     "hero pills to ribbons/seed 1/640x360/fraction 100%/slot 1/density 16" to TopologyRecord(edges = 587, alive = 213, repaired = 0, pruned = 9, hash = 0xa7d8fdeeb19367d3uL),
@@ -216,17 +216,17 @@ internal val goldenTopology: Map<String, TopologyRecord> = mapOf(
     "hero pills to ribbons/seed 1/640x360/settled/slot 0/density 95" to TopologyRecord(edges = 2788, alive = 982, repaired = 0, pruned = 0, hash = 0xa51e33c59e2d6db8uL),
     "hero pills to ribbons/seed 1/360x640/fraction 25%/slot 1/density 16" to TopologyRecord(edges = 566, alive = 203, repaired = 0, pruned = 6, hash = 0x14e32b923328a566uL),
     "hero pills to ribbons/seed 1/360x640/fraction 25%/slot 0/density 95" to TopologyRecord(
-        edges = 4441, alive = 1484, repaired = 3, pruned = 0, hash = 0x84c0ec412aae0830uL,
+        edges = 4441, alive = 1484, repaired = 3, pruned = 1, hash = 0x84c0ec412aae0830uL,
         cometNodes = 25,
     ),
     "hero pills to ribbons/seed 1/360x640/fraction 50%/slot 1/density 16" to TopologyRecord(edges = 566, alive = 203, repaired = 0, pruned = 6, hash = 0x14e32b923328a566uL),
     "hero pills to ribbons/seed 1/360x640/fraction 50%/slot 0/density 95" to TopologyRecord(
-        edges = 4441, alive = 1484, repaired = 3, pruned = 5, hash = 0x84c0ec412aae0830uL,
+        edges = 4441, alive = 1484, repaired = 3, pruned = 8, hash = 0x84c0ec412aae0830uL,
         cometNodes = 25,
     ),
     "hero pills to ribbons/seed 1/360x640/fraction 75%/slot 1/density 16" to TopologyRecord(edges = 566, alive = 203, repaired = 0, pruned = 6, hash = 0x14e32b923328a566uL),
     "hero pills to ribbons/seed 1/360x640/fraction 75%/slot 0/density 95" to TopologyRecord(
-        edges = 4441, alive = 1484, repaired = 3, pruned = 2, hash = 0x84c0ec412aae0830uL,
+        edges = 4441, alive = 1484, repaired = 3, pruned = 4, hash = 0x84c0ec412aae0830uL,
         cometNodes = 25,
     ),
     "hero pills to ribbons/seed 1/360x640/fraction 100%/slot 1/density 16" to TopologyRecord(edges = 566, alive = 203, repaired = 0, pruned = 6, hash = 0x14e32b923328a566uL),
@@ -235,17 +235,17 @@ internal val goldenTopology: Map<String, TopologyRecord> = mapOf(
     "hero pills to ribbons/seed 1/360x640/settled/slot 0/density 95" to TopologyRecord(edges = 3118, alive = 1076, repaired = 3, pruned = 0, hash = 0xa03be0d060a50192uL),
     "hero pills to ribbons/seed 1/540x270/fraction 25%/slot 1/density 16" to TopologyRecord(edges = 535, alive = 194, repaired = 0, pruned = 8, hash = 0x03c1242c48a5bf8euL),
     "hero pills to ribbons/seed 1/540x270/fraction 25%/slot 0/density 95" to TopologyRecord(
-        edges = 5501, alive = 1973, repaired = 0, pruned = 0, hash = 0x239ebc88ed3f294duL,
+        edges = 5501, alive = 1973, repaired = 0, pruned = 1, hash = 0x239ebc88ed3f294duL,
         cometNodes = 564,
     ),
     "hero pills to ribbons/seed 1/540x270/fraction 50%/slot 1/density 16" to TopologyRecord(edges = 535, alive = 194, repaired = 0, pruned = 8, hash = 0x03c1242c48a5bf8euL),
     "hero pills to ribbons/seed 1/540x270/fraction 50%/slot 0/density 95" to TopologyRecord(
-        edges = 5501, alive = 1973, repaired = 0, pruned = 6, hash = 0x239ebc88ed3f294duL,
+        edges = 5501, alive = 1973, repaired = 0, pruned = 8, hash = 0x239ebc88ed3f294duL,
         cometNodes = 564,
     ),
     "hero pills to ribbons/seed 1/540x270/fraction 75%/slot 1/density 16" to TopologyRecord(edges = 535, alive = 194, repaired = 0, pruned = 8, hash = 0x03c1242c48a5bf8euL),
     "hero pills to ribbons/seed 1/540x270/fraction 75%/slot 0/density 95" to TopologyRecord(
-        edges = 5501, alive = 1973, repaired = 0, pruned = 4, hash = 0x239ebc88ed3f294duL,
+        edges = 5501, alive = 1973, repaired = 0, pruned = 3, hash = 0x239ebc88ed3f294duL,
         cometNodes = 564,
     ),
     "hero pills to ribbons/seed 1/540x270/fraction 100%/slot 1/density 16" to TopologyRecord(edges = 535, alive = 194, repaired = 0, pruned = 8, hash = 0x03c1242c48a5bf8euL),

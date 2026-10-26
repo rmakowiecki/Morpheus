@@ -2,7 +2,6 @@
 
 package com.rossomak.morpheus
 
-import androidx.compose.animation.core.FastOutSlowInEasing
 import kotlin.test.Test
 
 /**
@@ -50,17 +49,17 @@ class SettleBenchmark {
     @Test
     fun `the showcase's loop as the gallery runs it`() = benchmark(this::class, "showcase loop") {
         val loop = GalleryLoop()
-        val fractions = FloatArray(LOOP_FRAMES) { frame -> fractionAt(frame * FRAME_SECONDS) }
+        val fractions = FloatArray(SHOWCASE_LOOP_FRAMES) { frame -> showcaseFractionAt(frame * SHOWCASE_FRAME_SECONDS) }
         val spikes = HashMap<String, MutableList<LongArray>>()
         val windows = HashMap<String, MutableList<LongArray>>()
         val wholeLoops = mutableListOf<LongArray>()
         repeat(WARM_UP_LOOPS + MEASURED_LOOPS) { loopIndex ->
-            val frames = List(LOOP_FRAMES) { frame -> loop.frame(MorpheusGraphMorph(heroPills, heroRibbons, fractions[frame])) }
+            val frames = List(SHOWCASE_LOOP_FRAMES) { frame -> loop.frame(MorpheusGraphMorph(heroPills, heroRibbons, fractions[frame])) }
             if (loopIndex < WARM_UP_LOOPS) return@repeat
             wholeLoops += frames.meanFrame()
             for ((event, frame) in loopEvents(fractions)) {
                 spikes.getOrPut(event) { mutableListOf() } += frames[frame]
-                windows.getOrPut(event) { mutableListOf() } += frames.subList(frame, minOf(frame + WINDOW_FRAMES, LOOP_FRAMES)).meanFrame()
+                windows.getOrPut(event) { mutableListOf() } += frames.subList(frame, minOf(frame + WINDOW_FRAMES, SHOWCASE_LOOP_FRAMES)).meanFrame()
             }
         }
         for (event in spikes.keys.sorted()) {
@@ -80,24 +79,11 @@ class SettleBenchmark {
         )
     }
 
-    /** The showcase sample's own fraction at [time] into its loop: hold, morph, hold, then the same mirrored. */
-    private fun fractionAt(time: Float): Float {
-        val forward = if (time <= HALF_LOOP_SECONDS) time else HALF_LOOP_SECONDS * 2 - time
-        return FastOutSlowInEasing.transform(((forward - HOLD_SECONDS) / MORPH_SECONDS).coerceIn(0f, 1f))
-    }
-
     private companion object {
         const val MID_FRACTION = 0.5f
         const val END_SETTLES = 2
         const val WARM_UP_RUNS = 200
         const val MEASURED_BATCHES = 200
-
-        /** The showcase sample's loop at 60 fps: hold the pills, morph, hold the ribbons, then back. */
-        const val FRAME_SECONDS = 1f / 60f
-        const val HOLD_SECONDS = 0.75f
-        const val MORPH_SECONDS = 3.5f
-        const val HALF_LOOP_SECONDS = HOLD_SECONDS + MORPH_SECONDS + HOLD_SECONDS
-        const val LOOP_FRAMES = 600
         const val WINDOW_FRAMES = 30
         const val WARM_UP_LOOPS = 1
         const val MEASURED_LOOPS = 7
