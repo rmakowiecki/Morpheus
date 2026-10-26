@@ -15,7 +15,7 @@ import kotlin.test.Test
 class SettleBenchmark {
 
     @Test
-    fun `settling the showcase's morph meshes`() = benchmark("SettleBenchmark, morph meshes") {
+    fun `settling the showcase's morph meshes`() = benchmark(this::class, "morph meshes") {
         val morph = MorpheusGraphMorph(heroPills, heroRibbons, fraction = MID_FRACTION)
         for (layer in GalleryLoop.morphLayers(morph)) timeMorphMesh(layer, "")
         val withoutComets = MorpheusGraphMorph(heroPills.withoutFrontComets(), heroRibbons.withoutFrontComets(), fraction = MID_FRACTION)
@@ -48,14 +48,14 @@ class SettleBenchmark {
      * over the whole loop, which compares with the gallery's readout over a loop. Medians over the loops.
      */
     @Test
-    fun `the showcase's loop as the gallery runs it`() = benchmark("SettleBenchmark, showcase loop") {
+    fun `the showcase's loop as the gallery runs it`() = benchmark(this::class, "showcase loop") {
         val loop = GalleryLoop()
         val fractions = FloatArray(LOOP_FRAMES) { frame -> fractionAt(frame * FRAME_SECONDS) }
         val spikes = HashMap<String, MutableList<LongArray>>()
         val windows = HashMap<String, MutableList<LongArray>>()
         val wholeLoops = mutableListOf<LongArray>()
         repeat(WARM_UP_LOOPS + MEASURED_LOOPS) { loopIndex ->
-            val frames = List(LOOP_FRAMES) { frame -> loop.frame(GalleryLoop.morphLayers(MorpheusGraphMorph(heroPills, heroRibbons, fractions[frame]))) }
+            val frames = List(LOOP_FRAMES) { frame -> loop.frame(MorpheusGraphMorph(heroPills, heroRibbons, fractions[frame])) }
             if (loopIndex < WARM_UP_LOOPS) return@repeat
             wholeLoops += frames.meanFrame()
             for ((event, frame) in loopEvents(fractions)) {

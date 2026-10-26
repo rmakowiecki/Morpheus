@@ -4,6 +4,7 @@ package com.rossomak.morpheus
 
 import androidx.compose.ui.graphics.Color
 import kotlin.math.min
+import kotlin.reflect.KClass
 import kotlin.time.TimeSource
 
 // What every benchmark here shares: the enable flag, a header naming the platform and its timer, batch
@@ -18,15 +19,19 @@ internal expect fun benchmarksEnabled(): Boolean
 internal expect fun benchmarkPlatform(): String
 
 /**
- * Runs [body] when the benchmarks are on, after a header line naming [name], the platform and the
- * timer's measured step; otherwise returns at once, so a plain build stays quiet. A platform whose header
- * is missing from a run skipped its benchmarks. A benchmark that isn't the first in its run warns: the JIT
- * keeps what the earlier ones taught it, and on wasm that moves the timings, so compare only numbers from
- * benchmarks run alone, as `scripts/headless_benchmark.py` runs them.
+ * Runs [body] when the benchmarks are on, after a header line naming [owner], its [case] when it has more
+ * than one, the platform and the timer's measured step. Otherwise returns at once, after [owner]'s skip line
+ * the first time, so a plain build says once per class that it skipped them. A benchmark that isn't the first
+ * in its run warns: the JIT keeps what the earlier ones taught it, and on wasm that moves the timings, so
+ * compare only numbers from benchmarks run alone, as `scripts/headless_benchmark.py` runs them.
  */
-internal fun benchmark(name: String, body: () -> Unit) {
-    if (!benchmarksEnabled()) return
-    println("$name on $platformLine")
+internal fun benchmark(owner: KClass<*>, case: String? = null, body: () -> Unit) {
+    val className = owner.simpleName
+    if (!benchmarksEnabled()) {
+        if (skippedClasses.add(className)) println("$className skipped: MORPHEUS_BENCHMARK not set")
+        return
+    }
+    println("${listOfNotNull(className, case).joinToString(", ")} on $platformLine")
     if (benchmarksBefore > 0) {
         println("warning: not run alone, $benchmarksBefore benchmark(s) ran before it in this run and may have moved its timings")
     }
@@ -39,6 +44,9 @@ private val platformLine by lazy { "${benchmarkPlatform()}, timer step ${timerSt
 
 /** How many benchmarks have run in this test run so far. */
 private var benchmarksBefore = 0
+
+/** The classes that have printed their skip line in this test run. */
+private val skippedClasses = HashSet<String?>()
 
 /**
  * The timer's step: the smallest nonzero difference between two reads of the monotonic clock. Readings
@@ -86,31 +94,27 @@ internal data class BenchmarkCanvas(val width: Float, val height: Float, val ref
 }
 
 /**
- * Replays frames as the gallery's modifier runs them on [canvas] at [fps]: one [LayerField] per mesh,
- * kept while a layer of the same morph family and seed draws it and dropped once none does, each frame's
- * `advance` phases timed through the gallery's own probe. [frame] takes the layers to draw;
- * [stillLayers] and [morphLayers] give them for a still spec or a morph.
+ * Replays frames as the gallery's modifier runs them on [canvas] at [fps], through the modifier's own
+ * [MorpheusGraphHolder]: its layers and fields, kept across frames as the modifier keeps them, each frame's
+ * `advance` phases timed through the gallery's own probe. [frame] takes the morph to draw; [still] gives
+ * the one the modifier draws for a still spec.
  */
 internal class GalleryLoop(private val canvas: BenchmarkCanvas = BenchmarkCanvas.Recipe, private val fps: Int = 60) {
-    private var fields = HashMap<LayerFamily, LayerField>()
+    private val holder = MorpheusGraphHolder()
     private var frames = 0
 
-    /** Advances [layers] by one frame; returns each of [ADVANCE_PHASES]' nanoseconds, every layer summed. */
-    fun frame(layers: List<MorphLayer>): LongArray {
+    /** Advances [morph] by one frame; returns each of [ADVANCE_PHASES]' nanoseconds, every layer summed. */
+    fun frame(morph: MorpheusGraphMorph): LongArray {
         val stats = MorpheusGraphFrameStats()
-        val kept = HashMap<LayerFamily, LayerField>()
         val time = frames++ / fps.toFloat()
-        for (layer in layers) {
-            val key = LayerFamily(layer.seed, layer.spec)
-            val field = fields[key] ?: LayerField(layer.spec, layer.seed, canvas.referenceSize, canvas.pxPerDp)
-            field.spec = layer.spec
-            field.shape = layer.shape
-            kept[key] = field
-            stats.probe.startLayer(layer.slotFromFront, field)
+        val layers = holder.layersFor(morph, FILL)
+        val fields = holder.fieldsFor(layers, canvas.referenceSize, canvas.pxPerDp)
+        fields.forEachIndexed { index, field ->
+            stats.probe.startLayer(layers[index].slotFromFront, field)
             field.advance(time, canvas.width, canvas.height, stats.probe)
             stats.probe.endLayer(field)
         }
-        fields = kept
+        holder.endFrame()
         val slots = layers.map { it.slotFromFront }.distinct()
         return LongArray(ADVANCE_PHASES.size) { phase -> slots.sumOf { stats.slotRecord(it).phaseNanos[ADVANCE_PHASES[phase].ordinal] } }
     }
@@ -122,8 +126,8 @@ internal class GalleryLoop(private val canvas: BenchmarkCanvas = BenchmarkCanvas
         /** The fill the layers are drawn with; `advance` doesn't read it. */
         val FILL = MorpheusGraphFill.Solid(Color.White)
 
-        /** [spec]'s layers as the modifier draws a still spec. */
-        fun stillLayers(spec: MorpheusGraphSpec): List<MorphLayer> = morphLayers(MorpheusGraphMorph(spec, spec, 0f), FILL)
+        /** The morph the modifier draws for the still [spec]. */
+        fun still(spec: MorpheusGraphSpec): MorpheusGraphMorph = MorpheusGraphMorph(spec, spec, 0f)
 
         /** [morph]'s layers. */
         fun morphLayers(morph: MorpheusGraphMorph): List<MorphLayer> = morphLayers(morph, FILL)

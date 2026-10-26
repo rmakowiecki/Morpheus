@@ -12,11 +12,11 @@ import kotlin.test.Test
 class LivingDelaunayBenchmark {
 
     @Test
-    fun `the living-Delaunay preset's frame phases`() = benchmark("LivingDelaunayBenchmark") {
+    fun `the living-Delaunay preset's frame phases`() = benchmark(this::class) {
         val loop = GalleryLoop()
-        val layers = GalleryLoop.stillLayers(MorpheusGraphPresets.livingDelaunay)
-        repeat(WARM_UP_FRAMES) { loop.frame(layers) }
-        val frames = List(MEASURED_FRAMES) { loop.frame(layers) }
+        val morph = GalleryLoop.still(MorpheusGraphPresets.livingDelaunay)
+        repeat(WARM_UP_FRAMES) { loop.frame(morph) }
+        val frames = List(MEASURED_FRAMES) { loop.frame(morph) }
         println("living Delaunay, per frame over $MEASURED_FRAMES frames: median ${frames.medianPhases()}; mean ${frames.meanPhases()}")
     }
 

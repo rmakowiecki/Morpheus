@@ -213,7 +213,7 @@ public class MorpheusGraphLayerStats {
  * changes, so a morph, a tuning edit or a resize never rebuilds it; only a new window size, which
  * changes the grid's cell size, rebuilds them all.
  */
-private class MorpheusGraphHolder {
+internal class MorpheusGraphHolder {
     /** Tells the holder's background apart in [MorpheusGraphFrameStats], without the stats holding on to it. */
     val id = nextHolderId++
 
@@ -265,7 +265,7 @@ private class MorpheusGraphHolder {
 }
 
 /** What a [LayerField] can't change after it is built. */
-internal data class LayerFamily(val seed: Int, val density: Float, val jitter: Float, val edgeRule: EdgeRule, val strictTriangles: Boolean) {
+private data class LayerFamily(val seed: Int, val density: Float, val jitter: Float, val edgeRule: EdgeRule, val strictTriangles: Boolean) {
     constructor(seed: Int, spec: MorpheusGraphLayerSpec) : this(seed, spec.density, spec.jitter, spec.edgeRule, spec.strictTriangles)
 }
 
