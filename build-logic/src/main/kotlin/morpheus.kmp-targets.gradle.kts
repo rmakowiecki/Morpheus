@@ -30,6 +30,15 @@ extensions.configure<KotlinMultiplatformExtension> {
     }
 }
 
+// The benchmarks read MORPHEUS_BENCHMARK when they run, so a run that sets it must not be skipped as up to
+// date or taken from the cache: with it set, the test tasks always run; without it, they cache as usual.
+tasks.withType<AbstractTestTask>().configureEach {
+    // A local, so the up-to-date check doesn't hold on to the script, which the configuration cache can't store.
+    val benchmarkFlag = providers.environmentVariable("MORPHEUS_BENCHMARK").orElse("")
+    inputs.property("morpheusBenchmark", benchmarkFlag)
+    outputs.upToDateWhen { benchmarkFlag.get().isEmpty() }
+}
+
 // detekt's default sources are the Android/JVM `src/main` layout; point it at the multiplatform one.
 extensions.configure<DetektExtension> {
     source.setFrom(

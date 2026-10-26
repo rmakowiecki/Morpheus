@@ -265,7 +265,7 @@ private class MorpheusGraphHolder {
 }
 
 /** What a [LayerField] can't change after it is built. */
-private data class LayerFamily(val seed: Int, val density: Float, val jitter: Float, val edgeRule: EdgeRule, val strictTriangles: Boolean) {
+internal data class LayerFamily(val seed: Int, val density: Float, val jitter: Float, val edgeRule: EdgeRule, val strictTriangles: Boolean) {
     constructor(seed: Int, spec: MorpheusGraphLayerSpec) : this(seed, spec.density, spec.jitter, spec.edgeRule, spec.strictTriangles)
 }
 
