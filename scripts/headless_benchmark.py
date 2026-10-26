@@ -93,7 +93,7 @@ def range_text(texts):
 def main():
     """Runs the matching benchmark tests, each alone, for every round and platform, and prints what they printed."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--rounds", type=int, default=1, help="times to run every test, interleaved (default: 1)")
+    parser.add_argument("--rounds", type=positive_int, default=1, help="times to run every test, interleaved (default: 1)")
     parser.add_argument("--platform", choices=["jvm", "wasm", "both"], default="both")
     parser.add_argument("--tests", default="", help="only the tests whose class or name contains this")
     args = parser.parse_args()
@@ -121,6 +121,13 @@ def main():
             print(f"range over {len(rounds)} rounds:")
         print("\n".join(merged) + "\n")
 
+
+def positive_int(text):
+    """[text] as a whole number of at least 1, for argparse; anything else is a usage error."""
+    value = int(text)
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"must be at least 1, not {value}")
+    return value
 
 if __name__ == "__main__":
     main()

@@ -17,6 +17,7 @@ import functools
 import http.server
 import os
 import pathlib
+import queue
 import shutil
 import statistics
 import subprocess
@@ -30,6 +31,9 @@ BUNDLE = ROOT / "samples/gallery/build/dist/wasmJs/productionExecutable"
 PREFIX = "morpheus-benchmark "
 LOOP_SECONDS = 10.0
 WARM_UP_SECONDS = 6.0
+# Long enough for Chrome to start, and the bundle to load and compile; then a reading every half second.
+FIRST_READING_SECONDS = 60.0
+STALL_SECONDS = 5.0
 COLUMNS = ["frame", "graphs", "shape", "mesh", "edge-fades", "alpha-settle", "fill", "edges", "halos", "dots", "composite"]
 FLAGS = ["capped", "scaled", "switches"]
 MAC_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
@@ -83,19 +87,40 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         pass
 
 
+def read_readings(stream, arrivals):
+    """Puts each reading in [stream] on [arrivals] with the time it arrived, then None once the stream ends, as Chrome exits."""
+    for line in stream:
+        reading = parse(line)
+        if reading is not None:
+            arrivals.put((time.monotonic(), reading))
+    arrivals.put(None)
+
+
 def collect(chrome, url, loops):
-    """Each reading after the warm-up, with its arrival time from the first, over [loops] loops."""
+    """
+    Each reading after the warm-up, with its arrival time from the warm-up's end, over [loops] whole loops.
+    Exits instead when no reading arrives in time, readings stop, or Chrome quits before the last loop ends,
+    so a partial run never reports.
+    """
     profile = tempfile.mkdtemp(prefix="morpheus-benchmark-")
     process = subprocess.Popen([chrome, *chrome_flags(profile, url)], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, errors="replace")
+    # A thread reads the log, so the wait for the next reading can time out instead of blocking on a silent Chrome.
+    arrivals = queue.Queue()
+    threading.Thread(target=read_readings, args=(process.stderr, arrivals), daemon=True).start()
     readings = []
     first = None
     deadline = None
     try:
-        for line in process.stderr:
-            reading = parse(line)
-            if reading is None:
-                continue
-            now = time.monotonic()
+        while True:
+            try:
+                arrival = arrivals.get(timeout=FIRST_READING_SECONDS if first is None else STALL_SECONDS)
+            except queue.Empty:
+                if first is None:
+                    sys.exit(f"no reading within {FIRST_READING_SECONDS:.0f} s: is the window in front, and does the bundle have benchmark mode?")
+                sys.exit(f"readings stopped for {STALL_SECONDS:.0f} s after {completed_loops(readings)} of {loops} loops; is the window still in front?")
+            if arrival is None:
+                sys.exit(f"Chrome quit after {completed_loops(readings)} of {loops} loops")
+            now, reading = arrival
             if first is None:
                 first = now
                 print(f"first reading; warming up for {WARM_UP_SECONDS:.0f} s, then {loops} loops of {LOOP_SECONDS:.0f} s", file=sys.stderr)
@@ -104,7 +129,7 @@ def collect(chrome, url, loops):
             if deadline is None:
                 deadline = now + loops * LOOP_SECONDS
             if now >= deadline:
-                break
+                return readings
             readings.append((now - first - WARM_UP_SECONDS, reading))
     finally:
         process.terminate()
@@ -113,7 +138,11 @@ def collect(chrome, url, loops):
         except subprocess.TimeoutExpired:
             process.kill()
         shutil.rmtree(profile, ignore_errors=True)
-    return readings
+
+
+def completed_loops(readings):
+    """How many whole loops [readings] cover past the warm-up."""
+    return int(readings[-1][0] // LOOP_SECONDS) if readings else 0
 
 
 def report(readings, loops):
@@ -128,23 +157,23 @@ def report(readings, loops):
     per_loop = []
     for loop in range(loops):
         window = [reading for arrival, reading in readings if loop * LOOP_SECONDS <= arrival < (loop + 1) * LOOP_SECONDS]
-        if window:
-            per_loop.append((len(window), {column: statistics.fmean(reading[column] for reading in window) for column in COLUMNS}))
+        if not window:
+            sys.exit(f"loop {loop + 1} of {loops} has no readings; not reporting a partial run")
+        per_loop.append((len(window), {column: statistics.fmean(reading[column] for reading in window) for column in COLUMNS}))
     width = max(len(column) for column in COLUMNS) + 2
     print("ms per frame".ljust(14) + "".join(column.rjust(width) for column in COLUMNS))
     for index, (count, means) in enumerate(per_loop):
         print(f"loop {index + 1} ({count:2d})".ljust(14) + "".join(f"{means[column]:.2f}".rjust(width) for column in COLUMNS))
     counts = ["nodes", "visible-nodes", "drawn-edges"]
     print("counts per frame, mean: " + ", ".join(f"{count} {statistics.fmean(reading[count] for _, reading in readings):.0f}" for count in counts), file=sys.stderr)
-    if per_loop:
-        print("median".ljust(14) + "".join(f"{statistics.median(loop_means[column] for _, loop_means in per_loop):.2f}".rjust(width) for column in COLUMNS))
+    print("median".ljust(14) + "".join(f"{statistics.median(loop_means[column] for _, loop_means in per_loop):.2f}".rjust(width) for column in COLUMNS))
 
 
 def main():
     """Builds unless told not to, serves the bundle, collects the readings and reports them."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--chrome", default=os.environ.get("CHROME_BIN", MAC_CHROME), help="Chrome or Chrome for Testing binary (default: $CHROME_BIN, else Google Chrome)")
-    parser.add_argument("--loops", type=int, default=3, help="whole 10 s loops of the showcase to measure (default: 3)")
+    parser.add_argument("--loops", type=positive_int, default=3, help="whole 10 s loops of the showcase to measure (default: 3)")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--skip-build", action="store_true", help="serve the bundle as last built")
     args = parser.parse_args()
@@ -157,9 +186,15 @@ def main():
         readings = collect(args.chrome, f"http://127.0.0.1:{args.port}/?benchmark", args.loops)
     finally:
         server.shutdown()
-    if not readings:
-        sys.exit("no readings: the gallery printed none (is the window in front, and does the bundle have benchmark mode?)")
     report(readings, args.loops)
+
+
+def positive_int(text):
+    """[text] as a whole number of at least 1, for argparse; anything else is a usage error."""
+    value = int(text)
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"must be at least 1, not {value}")
+    return value
 
 
 if __name__ == "__main__":
