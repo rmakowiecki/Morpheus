@@ -131,7 +131,13 @@ private fun Modifier.drawMorpheusGraph(
         val showsViolations = showViolations || stats?.showViolations == true
         // Merged only when both ask for overlays, so a frame without any builds no new set.
         val statsComets = stats?.cometDebug ?: MorpheusGraphCometDebug.None
-        val showsComets = if (!statsComets.any) cometDebug else if (!cometDebug.any) statsComets else cometDebug or statsComets
+        val showsComets = if (!statsComets.any) {
+            cometDebug
+        } else if (!cometDebug.any) {
+            statsComets
+        } else {
+            cometDebug or statsComets
+        }
         val timeSeconds = elapsedNanos.longValue / NANOS_PER_SECOND
         // No window in previews; the surface itself is the next best fixed reference.
         val windowLongSide = max(windowSize.width, windowSize.height).toFloat()
