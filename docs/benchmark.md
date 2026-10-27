@@ -39,8 +39,8 @@ links here rather than repeating the steps.
 
 The gallery's control row has a button reading `frame 9.8 ms · graphs 6.1 ms`, refreshed twice a
 second. Clicking it opens the breakdown panel, in the side column, under the Tune sheet when that is
-open (under the preview in a narrow window). The button and the panel dim from a reset, such as a sample change, until the
-next reading arrives:
+open (under the preview in a narrow window). The button and the panel dim from a reset, such as a
+sample change, until the next reading arrives:
 
 - **frame** is the average interval between frames; **graphs** is the CPU time spent recording the
   graphs into the display list, every graph on the canvas summed.
@@ -98,9 +98,10 @@ It builds the production bundle, serves it, and opens it in a separate Chrome wi
 prints each half-second reading to the console as a `morpheus-benchmark` line. The script reads them
 from Chrome's log, skips a 6 s warm-up, and prints the frame, graphs and phase-table totals per frame,
 per loop and as the median of the loops. `--sample comet-playground` opens the playground instead,
-through `&sample=comet-playground`, and measures over its 12.75 s loops. It warns about readings flagged capped, canvas scaled or
-debug switches on. A Chrome window opens for the run: leave it in front and the machine otherwise idle,
-or Chrome slows it down. It uses `$CHROME_BIN` when set, else Google Chrome.
+through `&sample=comet-playground`, and measures over its 12.75 s loops. It warns about readings
+flagged capped, canvas scaled or debug switches on. A Chrome window opens for the run: leave it in
+front and the machine otherwise idle, or Chrome slows it down. It uses `$CHROME_BIN` when set, else
+Google Chrome.
 
 One run measures one row of the [report](#reporting). Without `--skip` it is the row with every switch
 off. `--skip halos` opens the gallery with `?benchmark&skip=halos` and measures the skip halos row, and
@@ -148,7 +149,8 @@ Report the recipe's table in the pull request, for wasm, and for the JVM only in
 | all skips on       |          |           |          |          |         |         |
 | playground         |          |           |          |          |         |         |
 
-The playground row is "Comet playground" with every switch off; its skip rows are optional. Add the machine, OS, and browser or JDK version, and the full phase table for the baseline row.
+The playground row is "Comet playground" with every switch off; its skip rows are optional. Add the
+machine, OS, and browser or JDK version, and the full phase table for the baseline row.
 
 ## Headless benchmarks
 
@@ -183,8 +185,8 @@ They print:
 
 Each run starts with a header line naming the benchmark, the platform and the timer's measured step.
 Without `MORPHEUS_BENCHMARK`, each benchmark class prints `<Class> skipped: MORPHEUS_BENCHMARK not set`
-once instead, so a skip line means the flag didn't reach that platform. In headless Chrome the Karma page is cross-origin isolated, so `performance.now()` steps at about 5 µs
-rather than 100 µs.
+once instead, so a skip line means the flag didn't reach that platform. In headless Chrome the Karma
+page is cross-origin isolated, so `performance.now()` steps at about 5 µs rather than 100 µs.
 
 Use them next to the recipe, not instead of it. They cover the `advance` phases only: they don't draw,
 so frame time and the fill, edges, halos, dots and composite phases still come from the recipe.
@@ -245,6 +247,10 @@ specs don't compare with a new run; measure the base again instead.
    git worktree add ../morpheus-base "$(git merge-base origin/develop HEAD)"
    ```
 
+   A change stacked on another pull request compares against the head of the branch it's stacked on,
+   not against `develop`. If the change edits a spec or the harness in a way the base should share,
+   copy that edit into the base worktree uncommitted, so both sides run the same thing.
+
 2. Alternate between the two checkouts, at least three rounds each, on the same machine with nothing
    else heavy running: base, change, base, change and so on. Alternating spreads the machine's drift
    over both sides. Each round, run the same command in both:
@@ -270,3 +276,43 @@ specs don't compare with a new run; measure the base again instead.
 
 Report one table per tier and platform, base and change side by side, with the machine, the OS, and
 the JDK or Chrome for Testing version.
+
+### Worked example
+
+[PR #48](https://github.com/rmakowiecki/Morpheus/pull/48) made comets travel between clusters of the
+real shapes instead of stand-in ellipses, planning their heads once at the morph's start. It changes the
+CPU phases, so it gates on the headless numbers in Chrome and reports the recipe's wasm frame once.
+
+- **Base:** it was stacked on PR #46, so the base was #46's head, `75bf5e8`, in a worktree. The change
+  also widened the showcase's ribbons to 0.25; the base worktree took that edit uncommitted, so both
+  sides timed the same specs.
+- **Rounds:** headless, four rounds on the base and three on the change in Chrome, after one run hung;
+  the recipe, five rounds on the base and four on the change. Base and change alternated throughout.
+- **Setup:** Apple M1, macOS, Chrome for Testing 154.
+
+Headless, Chrome, ranges of round medians:
+
+| Benchmark                                     | Base             | Change           | Verdict    |
+|-----------------------------------------------|------------------|------------------|------------|
+| Comet track build, forward                    | 51.84–52.17 ms   | 4.12–4.36 ms     | faster     |
+| Comet track build, way back                   | 52.48–52.91 ms   | 4.10–4.16 ms     | faster     |
+| Morph meshes, two ends and transit            | 98.14–99.17 ms   | 94.13–95.03 ms   | not worse  |
+| Loop, per frame: shape                        | 4.70 ms          | 4.78 ms          | not worse  |
+| Loop, per frame: edge fades                   | 16.93 ms         | 13.51 ms         | not worse  |
+
+The comet track build is the phase the change targets. The change's slowest round median, 4.36 ms,
+beats the base's fastest, 51.84 ms, so it is **faster**. Every other row overlaps or improves, so it is
+**not worse**. The JVM numbers came from the same runs and are reported in the pull request, not gated.
+
+The recipe on wasm, ranges of round medians, ms per frame:
+
+| Phase      | Base        | Change      | Verdict    |
+|------------|-------------|-------------|------------|
+| Frame      | 40.33–41.57 | 41.99–43.95 | regression |
+| Edge fades | 23.02–23.49 | 24.91–25.95 | regression |
+
+The ranges don't overlap and the change is slower, so by the rules above this is a regression, which the
+pull request has to explain. It ran two more rounds on each side with the change set to the base's
+comet settings: there the change was 14–17% faster than the base. So the cost came from the showcase's
+tuned comets, which light more nodes and fade more edges at once, not from the new comet code, and it
+was accepted as the chosen look.
