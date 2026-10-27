@@ -23,7 +23,6 @@ internal class GallerySession(val sample: Sample) {
     private val tunedSpecs = mutableStateMapOf<String, MorpheusGraphSpec>().apply { sample.specs.forEach { put(it.name, it.default) } }
     private val tunedEasings = mutableStateMapOf<String, MorphEasing>().apply { sample.morphs.forEach { put(it.name, it.default) } }
 
-
     /** The morphs' timing as tuned; null for a sample without morphs. */
     var timing: MorphTiming? by mutableStateOf(sample.timing)
 
