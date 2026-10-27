@@ -1,12 +1,11 @@
 package com.rossomak.morpheus
 
 import com.rossomak.morpheus.ShapePrimitive.Pill
-import io.kotest.matchers.floats.plusOrMinus
 import io.kotest.matchers.shouldBe
 import kotlin.math.sqrt
 import kotlin.test.Test
 
-/** A [Pill]'s density, closeness and comet stand-in, measured on a wide surface so the longer side is the width. */
+/** A [Pill]'s density and closeness, measured on a wide surface so the longer side is the width. */
 class PillEnvelopeTest {
 
     private val envelope = MorpheusGraphEnvelope(seed = 1)
@@ -49,17 +48,6 @@ class PillEnvelopeTest {
         (offAxis > fartherOff) shouldBe true
     }
 
-    @Test
-    fun `the comet stand-in spans the pill's length and thickness along its rotation`() {
-        val standIn = envelope.standIns(layerOf(Pill(x = 0.25f, length = 0.5f, thickness = 0.1f, rotation = 90f)), WIDTH, HEIGHT).single()
-
-        standIn.centerX shouldBe 0.25f * WIDTH
-        standIn.centerY shouldBe CENTER_Y
-        standIn.majorRadius shouldBe (0.25f * WIDTH plusOrMinus TOLERANCE)
-        standIn.minorRadius shouldBe (0.05f * WIDTH plusOrMinus TOLERANCE)
-        standIn.angle shouldBe (HALF_PI plusOrMinus TOLERANCE)
-    }
-
     private fun layerOf(pill: Pill) = MorpheusGraphLayerSpec(shapes = listOf(pill), envelopeFloor = FLOOR)
 
     private fun densityAt(layer: MorpheusGraphLayerSpec, x: Float, y: Float) = envelope.densityAt(layer, WIDTH, HEIGHT, x, y)
@@ -70,7 +58,5 @@ class PillEnvelopeTest {
         const val CENTER_X = WIDTH / 2f
         const val CENTER_Y = HEIGHT / 2f
         const val FLOOR = 0.03f
-        const val TOLERANCE = 0.001f
-        const val HALF_PI = 1.5707964f
     }
 }

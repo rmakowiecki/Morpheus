@@ -114,7 +114,7 @@ internal fun SampleDetail(
             itemVerticalAlignment = Alignment.CenterVertically,
         ) {
             ThemeControl(selected = themeMode, enabled = !darkOnly, onSelect = onThemeModeChange)
-            if (sample.specs.isNotEmpty()) {
+            if (sample.specs.isNotEmpty() || sample.morphs.isNotEmpty()) {
                 FilledTonalButton(onClick = { session.isTuning = !session.isTuning }) {
                     Icon(Icons.Filled.Tune, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
                     Text("Tune")

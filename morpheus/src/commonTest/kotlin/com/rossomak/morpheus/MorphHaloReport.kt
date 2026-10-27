@@ -23,7 +23,7 @@ class MorphHaloReport {
         val tallies = HashMap<Int, Tally>()
         for (frame in 0 until SHOWCASE_LOOP_FRAMES) {
             val time = frame * SHOWCASE_FRAME_SECONDS
-            val morph = MorpheusGraphMorph(heroPills, heroRibbons, showcaseFractionAt(time))
+            val morph = showcaseMorphAt(time)
             for (layer in GalleryLoop.morphLayers(morph)) {
                 val fullHalo = layer.spec.glowStrength * layer.spec.alpha
                 if (fullHalo <= 0f) continue

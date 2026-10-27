@@ -23,8 +23,7 @@ internal val heroFront = MorpheusGraphLayerSpec(
     hotNodeShare = 0.12f,
     glowRadiusDp = 10f,
     glowStrength = 0.4f,
-    cometStrength = 0.5f,
-    cometSpark = 0.6f,
+    comets = MorpheusGraphComets(size = 1.25f, spark = 0.6f),
 )
 
 /** [MorpheusGraphPresets.defaultBackLayer] at density 16 and alpha 0.3, spelled out. */
@@ -65,8 +64,8 @@ internal val heroRibbons = heroPills.copy(
         heroGhost,
         heroFront.copy(
             shapes = listOf(
-                Ribbon(center = 0.5f, width = 0.15f, curve = 0.18f, tilt = 25f),
-                Ribbon(center = 0.5f, width = 0.15f, curve = 0.18f, tilt = -25f),
+                Ribbon(center = 0.5f, width = 0.25f, curve = 0.18f, tilt = 25f),
+                Ribbon(center = 0.5f, width = 0.25f, curve = 0.18f, tilt = -25f),
             ),
             waveAmplitude = 0.06f,
             waveSpeed = 0.45f,
@@ -74,15 +73,19 @@ internal val heroRibbons = heroPills.copy(
     ),
 )
 
-/** The showcase sample's loop at 60 fps: hold the pills, morph, hold the ribbons, then back. */
+/** The showcase sample's loop at 60 fps: hold the pills, morph to the ribbons, hold them; then the same way back. */
 internal const val SHOWCASE_FRAME_SECONDS = 1f / 60f
 internal const val SHOWCASE_LOOP_FRAMES = 600
 private const val SHOWCASE_HOLD_SECONDS = 0.75f
 private const val SHOWCASE_MORPH_SECONDS = 3.5f
-private const val SHOWCASE_HALF_LOOP_SECONDS = SHOWCASE_HOLD_SECONDS + SHOWCASE_MORPH_SECONDS + SHOWCASE_HOLD_SECONDS
+private const val SHOWCASE_LEG_SECONDS = SHOWCASE_HOLD_SECONDS + SHOWCASE_MORPH_SECONDS + SHOWCASE_HOLD_SECONDS
 
-/** The showcase sample's own fraction at [time] into its loop: hold, morph, hold, then the same mirrored. */
-internal fun showcaseFractionAt(time: Float): Float {
-    val forward = if (time <= SHOWCASE_HALF_LOOP_SECONDS) time else SHOWCASE_HALF_LOOP_SECONDS * 2 - time
-    return FastOutSlowInEasing.transform(((forward - SHOWCASE_HOLD_SECONDS) / SHOWCASE_MORPH_SECONDS).coerceIn(0f, 1f))
+/**
+ * What the showcase sample shows at [time] into its loop, at its default easings: the morph from the pills to
+ * the ribbons, then a morph of its own from the ribbons back to the pills, each held at both ends.
+ */
+internal fun showcaseMorphAt(time: Float): MorpheusGraphMorph {
+    val isWayBack = time >= SHOWCASE_LEG_SECONDS
+    val fraction = FastOutSlowInEasing.transform(((time - (if (isWayBack) SHOWCASE_LEG_SECONDS else 0f) - SHOWCASE_HOLD_SECONDS) / SHOWCASE_MORPH_SECONDS).coerceIn(0f, 1f))
+    return if (isWayBack) MorpheusGraphMorph(heroRibbons, heroPills, fraction) else MorpheusGraphMorph(heroPills, heroRibbons, fraction)
 }

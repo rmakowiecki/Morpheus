@@ -43,6 +43,7 @@ import com.rossomak.morpheus.ShapePrimitive.Bloom
 import com.rossomak.morpheus.ShapePrimitive.Pill
 import com.rossomak.morpheus.ShapePrimitive.Ribbon
 import com.rossomak.morpheus.ShapePrimitive.Uniform
+import kotlin.math.roundToInt
 
 /**
  * Live editor for one [MorpheusGraphSpec]: a layer picker (with add-back-layer / remove), the layer's
@@ -351,7 +352,24 @@ private val layerSliders = listOf(
     LayerSlider("Glow radius (dp)", 2f..48f, { it.glowRadiusDp }, { spec, value -> spec.copy(glowRadiusDp = value) }),
     LayerSlider("Glow strength", 0f..1f, { it.glowStrength }, { spec, value -> spec.copy(glowStrength = value) }),
     LayerSlider("Depth dimming", 0f..1f, { it.depthDimming }, { spec, value -> spec.copy(depthDimming = value) }),
-    LayerSlider("Comet strength", 0f..2f, { it.cometStrength }, { spec, value -> spec.copy(cometStrength = value) }),
-    LayerSlider("Comet spark (comet nodes heat up)", 0f..1f, { it.cometSpark }, { spec, value -> spec.copy(cometSpark = value) }),
+    LayerSlider("Comet strength", 0f..2f, { it.comets.strength }, { spec, value -> spec.copy(comets = spec.comets.copy(strength = value)) }),
+    LayerSlider("Comet size (× slice spread)", 0f..3f, { it.comets.size }, { spec, value -> spec.copy(comets = spec.comets.copy(size = value)) }),
+    LayerSlider("Comet head spacing (slice spreads)", 0.25f..4f, { it.comets.headSpacing }, { spec, value -> spec.copy(comets = spec.comets.copy(headSpacing = value)) }),
+    LayerSlider(
+        "Comet heads per stream (0 = auto)",
+        0f..32f,
+        { it.comets.headsPerStream?.toFloat() ?: 0f },
+        { spec, value -> spec.copy(comets = spec.comets.copy(headsPerStream = value.roundToInt().takeIf { it >= 1 })) },
+    ),
+    LayerSlider("Comet spark (comet nodes heat up)", 0f..1f, { it.comets.spark }, { spec, value -> spec.copy(comets = spec.comets.copy(spark = value)) }),
+    LayerSlider("Comet stagger (heads travel apart in time)", 0f..1f, { it.comets.stagger }, { spec, value -> spec.copy(comets = spec.comets.copy(stagger = value)) }),
+    LayerSlider(
+        "Comet easing (each head eases within its window, on top of the morph's)",
+        0f..1f,
+        { it.comets.easing },
+        { spec, value -> spec.copy(comets = spec.comets.copy(easing = value)) },
+    ),
+    LayerSlider("Comet size deviation (× size)", 0f..1f, { it.comets.sizeDeviation }, { spec, value -> spec.copy(comets = spec.comets.copy(sizeDeviation = value)) }),
+    LayerSlider("Comet piece size (node spacings)", 4f..60f, { it.comets.pieceSize }, { spec, value -> spec.copy(comets = spec.comets.copy(pieceSize = value)) }),
     LayerSlider("Layer alpha", 0f..1f, { it.alpha }, { spec, value -> spec.copy(alpha = value) }),
 )

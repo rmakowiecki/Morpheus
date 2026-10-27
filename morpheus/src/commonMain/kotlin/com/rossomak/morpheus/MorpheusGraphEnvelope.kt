@@ -7,7 +7,6 @@ import com.rossomak.morpheus.ShapePrimitive.Pill
 import com.rossomak.morpheus.ShapePrimitive.Ribbon
 import com.rossomak.morpheus.ShapePrimitive.Uniform
 import kotlin.math.abs
-import kotlin.math.atan
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.max
@@ -32,13 +31,7 @@ private const val DEGREES_TO_RADIANS = 0.017453292f
 private const val RIBBON_PHASE_SEED_STRIDE = 104_729
 
 /**
- * How far past the surface's half width a ribbon's stand-in ellipse reaches, so its ends still cover
- * the band at the surface's edges rather than pinching to a point there.
- */
-private const val RIBBON_STAND_IN_SPAN = 1.15f
-
-/**
- * The overall shape of one layer, from its [ShapePrimitive]s, in four parts:
+ * The overall shape of one layer, from its [ShapePrimitive]s, in three parts:
  * - [densityAt] decides where nodes are *present*: a node shows in proportion to the density at its
  *   home, so a shape is just a density field over the surface, from 0 to 1. It is evaluated every
  *   frame, against the current spec and surface size, which is what lets shapes morph and follow a
@@ -46,7 +39,6 @@ private const val RIBBON_STAND_IN_SPAN = 1.15f
  * - [closenessAt] orders the nodes a morph switches: how near a point is to the shape, falling off
  *   over the whole surface instead of stopping at the shape's border, so even points far outside it
  *   still rank by distance.
- * - [standIns] stands each primitive in for an ellipse, which is what a morph's comets travel between.
  * - [waveOffsetY] *moves* every node's home over time, uniformly for neighbors, so the shape itself
  *   breathes while the mesh topology stays intact.
  *
@@ -106,59 +98,6 @@ internal class MorpheusGraphEnvelope(private val seed: Int) {
             closeness = max(closeness, weight * nearness)
         }
         return closeness
-    }
-
-    /**
-     * One ellipse per ribbon, bloom and pill of [spec] with any weight, in pixels: a bloom is its own
-     * circle, falloff included, a ribbon a long flat ellipse along its band, and a pill the ellipse
-     * spanning its length and thickness. Uniform has no place to stand
-     * in for, so it has none.
-     */
-    fun standIns(spec: MorpheusGraphLayerSpec, width: Float, height: Float): List<ShapeStandIn> {
-        var ribbonOrdinal = 0
-        return spec.shapes.mapNotNull { primitive ->
-            val weight = primitive.weight.coerceIn(0f, 1f)
-            when (primitive) {
-                is Uniform -> null
-                is Ribbon -> {
-                    val phases = ribbonPhases(ribbonOrdinal++)
-                    val slope = ribbonSlope(primitive)
-                    ShapeStandIn(
-                        centerX = width / 2f,
-                        centerY = ribbonCenterAt(primitive, phases, width, height, width / 2f),
-                        majorRadius = RIBBON_STAND_IN_SPAN * width / 2f * sqrt(1f + slope * slope),
-                        minorRadius = (primitive.width * height * 0.5f).coerceAtLeast(1f),
-                        angle = atan(slope),
-                        plateau = RIBBON_SOFT_EDGE,
-                        weight = weight,
-                    )
-                }
-                is Bloom -> {
-                    val radius = primitive.reach.coerceAtLeast(MIN_BLOOM_REACH) * max(width, height)
-                    ShapeStandIn(
-                        centerX = primitive.x * width,
-                        centerY = primitive.y * height,
-                        majorRadius = radius,
-                        minorRadius = radius,
-                        angle = 0f,
-                        plateau = primitive.plateau.coerceIn(0f, MAX_BLOOM_PLATEAU),
-                        weight = weight,
-                    )
-                }
-                is Pill -> {
-                    val halfThickness = pillHalfThickness(primitive, width, height)
-                    ShapeStandIn(
-                        centerX = primitive.x * width,
-                        centerY = primitive.y * height,
-                        majorRadius = pillHalfSpan(primitive, width, height, halfThickness) + halfThickness,
-                        minorRadius = halfThickness.coerceAtLeast(1f),
-                        angle = primitive.rotation * DEGREES_TO_RADIANS,
-                        plateau = primitive.plateau.coerceIn(0f, MAX_PILL_PLATEAU),
-                        weight = weight,
-                    )
-                }
-            }.takeIf { weight > 0f }
-        }
     }
 
     /** Vertical wave offset at [x]; [waveTravel] is the wave's accumulated travel, speed already applied. */
@@ -237,33 +176,6 @@ private const val MAX_BLOOM_PLATEAU = 0.95f
 private const val MAX_RIBBON_TILT = 80f
 private const val MIN_PILL_THICKNESS = 0.01f
 private const val MAX_PILL_PLATEAU = 0.95f
-
-/**
- * An ellipse standing in for one shape primitive, in pixels: what a morph's comet travels from and to.
- * Its density is [weight] out to [plateau] of the way to its rim, thinning out to nothing at the rim,
- * which for a bloom is exactly the bloom's own density.
- */
-internal data class ShapeStandIn(
-    val centerX: Float,
-    val centerY: Float,
-    val majorRadius: Float,
-    val minorRadius: Float,
-    /** Direction of the major axis, in radians. */
-    val angle: Float,
-    val plateau: Float,
-    val weight: Float,
-) {
-    /** The density at the point, before [weight]. */
-    fun falloffAt(x: Float, y: Float): Float {
-        val deltaX = x - centerX
-        val deltaY = y - centerY
-        val cosine = cos(angle)
-        val sine = sin(angle)
-        val along = (deltaX * cosine + deltaY * sine) / majorRadius
-        val across = (-deltaX * sine + deltaY * cosine) / minorRadius
-        return 1f - smoothStep(plateau, 1f, sqrt(along * along + across * across))
-    }
-}
 
 internal const val TWO_PI = 6.2831855f
 

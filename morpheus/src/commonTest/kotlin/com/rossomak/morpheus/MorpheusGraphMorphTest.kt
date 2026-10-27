@@ -251,6 +251,19 @@ class MorpheusGraphMorphTest {
         cometGlitches.size shouldBeLessThanOrEqual COMET_GLITCH_BUDGET
     }
 
+    /** The test above with staggered, eased heads of varied sizes, within the same budgets. */
+    @Test
+    fun `scrubbing any morph family pair with every comet knob on turns each comet node on and off once`() {
+        val nodes = morphFamilyPairs().flatMap { (from, to) ->
+            surfaces.flatMap { (width, height) -> scrubToggles(from.withCometKnobs(), to.withCometKnobs(), width, height) }
+        }
+        val flickering = nodes.filter { it.shownAtAnEnd && it.toggles > 1 }
+        val cometGlitches = nodes.filter { !it.shownAtAnEnd && it.toggles > 2 }
+
+        flickering.size shouldBeLessThanOrEqual CROSSING_FRONTS_BUDGET
+        cometGlitches.size shouldBeLessThanOrEqual COMET_GLITCH_BUDGET
+    }
+
     /** Allows [CROSSING_FRONTS_BUDGET] exceptions, for the reason the test above gives. */
     @Test
     fun `a node visible at both ends of a morph stays visible all the way through`() {
@@ -294,36 +307,32 @@ class MorpheusGraphMorphTest {
     }
 
     @Test
-    fun `a centre disc splitting into two corner blooms sends a comet to each`() {
+    fun `a centre disc splitting into two corner blooms sends a stream to each`() {
         val from = MorpheusGraphPresets.MorphFamily.centreDisc
         val to = MorpheusGraphPresets.MorphFamily.cornerPair
 
-        val comets = cometsFor(from, to)
+        val field = MorphRun(from, to, TALL_HERO_WIDTH, TALL_HERO_HEIGHT).also { it.advance(0.5f) }.singleField()
 
-        comets shouldHaveSize 2
-        comets.map { it.source }.distinct() shouldHaveSize 1
-        comets.map { it.target }.distinct() shouldHaveSize 2
+        field.cometCount shouldBe 2
+        field.cometHeads.map { head -> head.targetX < TALL_HERO_WIDTH / 2f }.distinct() shouldHaveSize 2
     }
 
     @Test
-    fun `two ribbons merging into a centre disc each send a comet that meets the other on the disc`() {
+    fun `two ribbons merging into a centre disc each send a stream to the disc`() {
         val from = MorpheusGraphPresets.MorphFamily.doubleRibbon
         val to = MorpheusGraphPresets.MorphFamily.centreDisc
 
-        val comets = cometsFor(from, to)
+        val field = MorphRun(from, to, TALL_HERO_WIDTH, TALL_HERO_HEIGHT).also { it.advance(0.5f) }.singleField()
 
-        comets shouldHaveSize 2
-        comets.map { it.source }.distinct() shouldHaveSize 2
-        comets.map { it.target }.distinct() shouldHaveSize 1
-        MorphRun(from, to, TALL_HERO_WIDTH, TALL_HERO_HEIGHT).also { it.advance(0.5f) }.singleField().cometCount shouldBe 2
+        field.cometCount shouldBe 2
+        field.cometHeads.map { head -> head.sourceY < TALL_HERO_HEIGHT / 2f }.distinct() shouldHaveSize 2
     }
 
     @Test
-    fun `a bloom nudged slightly sends no comet`() {
-        val from = cometTestSpec(Bloom())
-        val to = cometTestSpec(Bloom(x = 0.96f, y = 0.03f, reach = 0.78f))
+    fun `a morph that keeps its shape sends no comets`() {
+        val from = MorpheusGraphPresets.MorphFamily.cornerBloom
+        val to = from.copy(layers = from.layers.map { layer -> layer.copy(edgeAlpha = layer.edgeAlpha / 2f) })
 
-        cometsFor(from, to).shouldBeEmpty()
         MorphRun(from, to, TALL_HERO_WIDTH, TALL_HERO_HEIGHT).also { it.advance(0.5f) }.singleField().cometCount shouldBe 0
     }
 
@@ -435,17 +444,6 @@ class MorpheusGraphMorphTest {
     }
 
     private class NodeToggles(val shownAtAnEnd: Boolean, val toggles: Int)
-
-    /** The comets a morph between the single-layer [from] and [to] sends on the tall surface. */
-    private fun cometsFor(from: MorpheusGraphSpec, to: MorpheusGraphSpec): List<Comet> {
-        val envelope = MorpheusGraphEnvelope(morphLayers(from, from, 0f, TestFill).single().seed)
-        return cometsBetween(
-            from = envelope.standIns(from.layers.single(), TALL_HERO_WIDTH, TALL_HERO_HEIGHT),
-            to = envelope.standIns(to.layers.single(), TALL_HERO_WIDTH, TALL_HERO_HEIGHT),
-            width = TALL_HERO_WIDTH,
-            height = TALL_HERO_HEIGHT,
-        )
-    }
 
     /** A morph family member with the one primitive given, so corner to corner leaves a gap for a comet to cross. */
     private fun cometTestSpec(primitive: ShapePrimitive) =

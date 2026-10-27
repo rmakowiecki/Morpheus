@@ -3,14 +3,15 @@
 
 Builds the gallery's production bundle, serves it, and opens it in a separate Chrome with the recipe's
 flags and `?benchmark`, which opens "Pills to ribbons" on the 16:9 preview with scale to fit off and prints
-each half-second reading to the console. Chrome writes the console to stderr; this collects the readings
-over whole loops of the showcase and prints, per loop and as the median of the loops, the frame, graphs
+each half-second reading to the console; `--sample comet-playground` opens the heavier comet playground
+instead, through `&sample=`. Chrome writes the console to stderr; this collects the readings over whole
+loops of the sample and prints, per loop and as the median of the loops, the frame, graphs
 and phase-table totals in milliseconds per frame. `--skip` turns skip switches on through `&skip=`, for the
 recipe's skip rows: one row per run.
 
 A Chrome window opens for the run. Leave it in front and the machine otherwise idle.
 
-    python3 scripts/gallery_benchmark.py [--chrome PATH] [--loops 3] [--skip edges,halos,dots,fill|all] [--skip-build]
+    python3 scripts/gallery_benchmark.py [--chrome PATH] [--sample hero|comet-playground] [--loops 3] [--skip edges,halos,dots,fill|all] [--skip-build]
 """
 
 import argparse
@@ -30,7 +31,8 @@ import time
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 BUNDLE = ROOT / "samples/gallery/build/dist/wasmJs/productionExecutable"
 PREFIX = "morpheus-benchmark "
-LOOP_SECONDS = 10.0
+# Each benchmark sample's loop: the hero's pills to ribbons and back, the playground's three morphs.
+LOOP_SECONDS = {"hero": 10.0, "comet-playground": 12.75}
 WARM_UP_SECONDS = 6.0
 # Long enough for Chrome to start, and the bundle to load and compile; then a reading every half second.
 FIRST_READING_SECONDS = 60.0
@@ -98,7 +100,7 @@ def read_readings(stream, arrivals):
     arrivals.put(None)
 
 
-def collect(chrome, url, loops):
+def collect(chrome, url, loops, loop_seconds):
     """
     Each reading after the warm-up, with its arrival time from the warm-up's end, over [loops] whole loops.
     Exits instead when no reading arrives in time, readings stop, or Chrome quits before the last loop ends,
@@ -119,17 +121,17 @@ def collect(chrome, url, loops):
             except queue.Empty:
                 if first is None:
                     sys.exit(f"no reading within {FIRST_READING_SECONDS:.0f} s: is the window in front, and does the bundle have benchmark mode?")
-                sys.exit(f"readings stopped for {STALL_SECONDS:.0f} s after {completed_loops(readings)} of {loops} loops; is the window still in front?")
+                sys.exit(f"readings stopped for {STALL_SECONDS:.0f} s after {completed_loops(readings, loop_seconds)} of {loops} loops; is the window still in front?")
             if arrival is None:
-                sys.exit(f"Chrome quit after {completed_loops(readings)} of {loops} loops")
+                sys.exit(f"Chrome quit after {completed_loops(readings, loop_seconds)} of {loops} loops")
             now, reading = arrival
             if first is None:
                 first = now
-                print(f"first reading; warming up for {WARM_UP_SECONDS:.0f} s, then {loops} loops of {LOOP_SECONDS:.0f} s", file=sys.stderr)
+                print(f"first reading; warming up for {WARM_UP_SECONDS:.0f} s, then {loops} loops of {loop_seconds:g} s", file=sys.stderr)
             if now - first < WARM_UP_SECONDS:
                 continue
             if deadline is None:
-                deadline = now + loops * LOOP_SECONDS
+                deadline = now + loops * loop_seconds
             if now >= deadline:
                 return readings
             readings.append((now - first - WARM_UP_SECONDS, reading))
@@ -142,12 +144,12 @@ def collect(chrome, url, loops):
         shutil.rmtree(profile, ignore_errors=True)
 
 
-def completed_loops(readings):
-    """How many whole loops [readings] cover past the warm-up."""
-    return int(readings[-1][0] // LOOP_SECONDS) if readings else 0
+def completed_loops(readings, loop_seconds):
+    """How many whole loops of [loop_seconds] [readings] cover past the warm-up."""
+    return int(readings[-1][0] // loop_seconds) if readings else 0
 
 
-def report(readings, loops, skips):
+def report(readings, loops, loop_seconds, skips):
     """
     Warns about readings that aren't benchmark numbers, then prints each column's mean per loop and the median of the loops.
     With [skips], every reading must show its switches on; one that doesn't means the bundle ignored `&skip=`, so it exits.
@@ -164,7 +166,7 @@ def report(readings, loops, skips):
         print(f"note: backgrounds per reading {backgrounds}; the phases sum every background", file=sys.stderr)
     per_loop = []
     for loop in range(loops):
-        window = [reading for arrival, reading in readings if loop * LOOP_SECONDS <= arrival < (loop + 1) * LOOP_SECONDS]
+        window = [reading for arrival, reading in readings if loop * loop_seconds <= arrival < (loop + 1) * loop_seconds]
         if not window:
             sys.exit(f"loop {loop + 1} of {loops} has no readings; not reporting a partial run")
         per_loop.append((len(window), {column: statistics.fmean(reading[column] for reading in window) for column in COLUMNS}))
@@ -181,7 +183,8 @@ def main():
     """Builds unless told not to, serves the bundle, collects the readings and reports them."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--chrome", default=os.environ.get("CHROME_BIN", MAC_CHROME), help="Chrome or Chrome for Testing binary (default: $CHROME_BIN, else Google Chrome)")
-    parser.add_argument("--loops", type=positive_int, default=3, help="whole 10 s loops of the showcase to measure (default: 3)")
+    parser.add_argument("--sample", choices=list(LOOP_SECONDS), default="hero", help="the sample to measure (default: hero)")
+    parser.add_argument("--loops", type=positive_int, default=3, help="whole loops of the sample to measure, 10 s for the hero and 12.75 s for the playground (default: 3)")
     parser.add_argument("--skip", type=skip_list, default=[], help=f"skip switches to turn on, comma-separated from {', '.join(SKIPS)}, or all (default: none)")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--skip-build", action="store_true", help="serve the bundle as last built")
@@ -190,14 +193,15 @@ def main():
         subprocess.run([str(ROOT / "gradlew"), ":samples:gallery:wasmJsBrowserDistribution", "-q"], cwd=ROOT, check=True)
     version = subprocess.run([args.chrome, "--version"], capture_output=True, text=True).stdout.strip()
     print(f"browser: {version}", file=sys.stderr)
+    print(f"sample: {args.sample}", file=sys.stderr)
     print(f"skip switches on: {', '.join(args.skip) if args.skip else 'none'}", file=sys.stderr)
-    url = f"http://127.0.0.1:{args.port}/?benchmark" + (f"&skip={','.join(args.skip)}" if args.skip else "")
+    url = f"http://127.0.0.1:{args.port}/?benchmark&sample={args.sample}" + (f"&skip={','.join(args.skip)}" if args.skip else "")
     server = serve(BUNDLE, args.port)
     try:
-        readings = collect(args.chrome, url, args.loops)
+        readings = collect(args.chrome, url, args.loops, LOOP_SECONDS[args.sample])
     finally:
         server.shutdown()
-    report(readings, args.loops, args.skip)
+    report(readings, args.loops, LOOP_SECONDS[args.sample], args.skip)
 
 
 def positive_int(text):

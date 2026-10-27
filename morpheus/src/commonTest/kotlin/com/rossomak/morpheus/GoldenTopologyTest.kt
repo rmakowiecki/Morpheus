@@ -20,7 +20,8 @@ import kotlin.test.fail
  *
  * Each case runs with three seeds, except where one run costs most: under a rule that re-settles every
  * frame, on the showcase's dense front mesh, and in the morphs. Those run the first seed only, which
- * keeps the whole test within a few seconds on the JVM.
+ * keeps the whole test within a few seconds on the JVM. The showcase's morph and the comet playground's
+ * three morphs run at their samples' own seeds instead, on their own surfaces.
  *
  * Per case and frame, the record holds the edge, alive, repaired-edge and pruned-node counts, the nodes
  * only a comet lights that a morph's mesh joins, and a 64-bit hash of the sorted edge keys and the alive mask. Alphas aren't recorded; capture-renderer
@@ -105,7 +106,8 @@ class GoldenTopologyTest {
 
     private fun morphCases(): List<GoldenCase> = listOf(
         // Same density at both ends: one morph family.
-        MorphCase(SHOWCASE_MORPH, heroPills, heroRibbons, HERO_SURFACES),
+        // At the showcase's own seed: the first seed's layout plans so few comets that none lights a node outside both ends.
+        MorphCase(SHOWCASE_MORPH, heroPills, heroRibbons, HERO_SURFACES, seeds = listOf(heroPills.seed)),
         // A different density is a different morph family, so the front layer dissolves into another mesh.
         MorphCase(
             "hero pills dissolving",
@@ -113,7 +115,7 @@ class GoldenTopologyTest {
             heroPills.copy(layers = heroPills.layers.mapIndexed { index, layer -> if (index == heroPills.layers.lastIndex) layer.copy(density = DISSOLVE_DENSITY) else layer }),
             HERO_SURFACES,
         ),
-    )
+    ) + playgroundLegs.map { (leg, morph) -> MorphCase("playground $leg", morph.from, morph.to, PLAYGROUND_SURFACES, seeds = listOf(playgroundFrame.seed)) }
 
     private fun zeroJitterCases(): List<GoldenCase> = EdgeRule.entries.map { edgeRule ->
         StillCase("zero jitter/$edgeRule", MorpheusGraphLayerSpec(edgeRule = edgeRule, jitter = 0f), STANDARD_SURFACES)
@@ -142,14 +144,14 @@ class GoldenTopologyTest {
         }
     }
 
-    /** Both ends take the run's seed, so every seed draws the same morph on its own layout. */
+    /** Both ends take the run's seed, so every seed draws the same morph on its own layout; [seeds] defaults to the first. */
     private class MorphCase(
         override val name: String,
         private val from: MorpheusGraphSpec,
         private val to: MorpheusGraphSpec,
         override val surfaces: List<Pair<Float, Float>>,
+        override val seeds: List<Int> = SEEDS.take(1),
     ) : GoldenCase {
-        override val seeds = SEEDS.take(1)
 
         override fun record(seed: Int, width: Float, height: Float): List<Pair<String, TopologyRecord>> {
             val morph = MorpheusGraphMorph(from.copy(seed = seed), to.copy(seed = seed), fraction = 0f)
@@ -186,6 +188,9 @@ class GoldenTopologyTest {
 
         /** The showcase's own canvas besides the standard ones. */
         val HERO_SURFACES = STANDARD_SURFACES + (540f to 270f)
+
+        /** The playground's square capture canvas, 480 dp at device scale 2. */
+        val PLAYGROUND_SURFACES = listOf(960f to 960f)
         const val FRAME_SECONDS = 1f / 30f
         val STILL_FRAMES = listOf(0, 45, 150)
         const val MORPH_FRAMES = 60
@@ -206,10 +211,14 @@ internal data class TopologyRecord(val edges: Int, val alive: Int, val repaired:
 
     fun describe(): String = "edges=$edges alive=$alive repaired=$repaired pruned=$pruned cometNodes=$cometNodes hash=${hash.toHex()}"
 
-    /** One line, or with [cometNodes] wrapped onto three to fit the line length. */
-    fun toSource(): String {
+    /** One line, or wrapped onto three to fit the line length when it has [cometNodes] or [wraps]. */
+    fun toSource(wraps: Boolean = false): String {
         val counts = "edges = $edges, alive = $alive, repaired = $repaired, pruned = $pruned, hash = 0x${hash.toHex()}uL"
-        return if (cometNodes == 0) "TopologyRecord($counts)" else "TopologyRecord(\n        $counts,\n        cometNodes = $cometNodes,\n    )"
+        return when {
+            cometNodes != 0 -> "TopologyRecord(\n        $counts,\n        cometNodes = $cometNodes,\n    )"
+            wraps -> "TopologyRecord(\n        $counts,\n    )"
+            else -> "TopologyRecord($counts)"
+        }
     }
 
     companion object {
@@ -258,8 +267,14 @@ private val MIX_SECOND = 0x94D049BB133111EBuL.toLong()
 private fun ULong.toHex(): String = toString(radix = 16).padStart(16, '0')
 
 /** [records] as the Kotlin source of a table named [tableName], ready to paste into GoldenTopologyRecord.kt. */
+/** The repository's line length (`.editorconfig`), which a recorded line wraps to fit. */
+private const val MAX_LINE_LENGTH = 180
+
 private fun tableSource(tableName: String, records: Map<String, TopologyRecord>): String = buildString {
     appendLine("internal val $tableName: Map<String, TopologyRecord> = mapOf(")
-    for ((name, record) in records) appendLine("    \"$name\" to ${record.toSource()},")
+    for ((name, record) in records) {
+        val line = "    \"$name\" to ${record.toSource()},"
+        appendLine(if (line.length > MAX_LINE_LENGTH) "    \"$name\" to ${record.toSource(wraps = true)}," else line)
+    }
     append(")")
 }

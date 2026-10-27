@@ -3,6 +3,7 @@ package com.rossomak.morpheus.tuner
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import com.rossomak.morpheus.GradientStop
+import com.rossomak.morpheus.MorpheusGraphComets
 import com.rossomak.morpheus.MorpheusGraphFill
 import com.rossomak.morpheus.MorpheusGraphLayerSpec
 import com.rossomak.morpheus.MorpheusGraphPresets
@@ -14,12 +15,13 @@ private val UniformDefaults = ShapePrimitive.Uniform()
 private val RibbonDefaults = ShapePrimitive.Ribbon()
 private val BloomDefaults = ShapePrimitive.Bloom()
 private val PillDefaults = ShapePrimitive.Pill()
+private val CometDefaults = MorpheusGraphComets()
 
 /**
  * The spec as Kotlin source in the style of [MorpheusGraphPresets], ready to paste into a preset list. Lists
  * only the layer fields that differ from the defaults.
  *
- * The pasted source names `Color`, `Offset`, `GradientStop`, `EdgeRule` and `ShapePrimitive` unqualified,
+ * The pasted source names `Color`, `Offset`, `GradientStop`, `EdgeRule`, `ShapePrimitive` and `MorpheusGraphComets` unqualified,
  * so the file it lands in needs their imports. A [MorpheusGraphFill.Custom] is code of the caller's own and
  * exports as `null`, which on a layer means it inherits the spec's or the surface's fill instead.
  */
@@ -74,11 +76,27 @@ private fun MorpheusGraphLayerSpec.sourceArguments(): Map<String, String> = link
     "glowRadiusDp" to glowRadiusDp.toSource(),
     "glowStrength" to glowStrength.toSource(),
     "depthDimming" to depthDimming.toSource(),
-    "cometStrength" to cometStrength.toSource(),
-    "cometSpark" to cometSpark.toSource(),
+    "comets" to comets.toSource(),
     "alpha" to alpha.toSource(),
     "fill" to (fill?.toSource() ?: "null"),
 )
+
+/** The comets as a constructor call, listing only the arguments that differ from its defaults. */
+private fun MorpheusGraphComets.toSource(): String {
+    val arguments = listOf(
+        "strength" to (strength.toSource() to CometDefaults.strength.toSource()),
+        "size" to (size.toSource() to CometDefaults.size.toSource()),
+        "headSpacing" to (headSpacing.toSource() to CometDefaults.headSpacing.toSource()),
+        "headsPerStream" to (headsPerStream.toString() to CometDefaults.headsPerStream.toString()),
+        "spark" to (spark.toSource() to CometDefaults.spark.toSource()),
+        "stagger" to (stagger.toSource() to CometDefaults.stagger.toSource()),
+        "easing" to (easing.toSource() to CometDefaults.easing.toSource()),
+        "sizeDeviation" to (sizeDeviation.toSource() to CometDefaults.sizeDeviation.toSource()),
+        "pieceSize" to (pieceSize.toSource() to CometDefaults.pieceSize.toSource()),
+    )
+    return arguments.filter { (_, values) -> values.first != values.second }
+        .joinToString(separator = ", ", prefix = "MorpheusGraphComets(", postfix = ")") { (name, values) -> "$name = ${values.first}" }
+}
 
 /** The fill as a constructor call; a custom fill is code of the caller's own, so it exports as a comment. */
 private fun MorpheusGraphFill.toSource(): String = when (this) {

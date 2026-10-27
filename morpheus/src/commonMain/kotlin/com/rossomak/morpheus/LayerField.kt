@@ -20,6 +20,7 @@ import androidx.compose.ui.util.lerp
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.cos
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
@@ -114,28 +115,19 @@ private const val MORPH_CHANGE_EPSILON = 1e-3f
 private const val MORPH_MIN_CLOSENESS_SPREAD = 1e-3f
 
 /**
- * How many steps of a morph's fraction a comet's light on each node is sampled at, once per morph, to find
- * where it lights and leaves the node (see [COMET_LIGHT_WINDOW]).
- */
-private const val COMET_SAMPLES = 48
-
-/**
  * How much of a morph's fraction a comet-lit node takes to light up, and again to go dark, centred on where
- * its comet's light crosses half its peak. A comet's edge crosses the light band within about one of
- * [COMET_SAMPLES]' steps, a frame or two at the morph's fastest, so without this a node would pop in and out.
+ * a head's rim reaches it and leaves it. A rim crosses a node within a frame or two at the morph's fastest,
+ * so without this a node would pop in and out.
  */
 private const val COMET_LIGHT_WINDOW = 0.2f
 
 /**
- * A comet lights a node once its density at the node passes this level, give or take the layer's front
- * noise, over a band of [COMET_LIGHT_BAND]. Lighting by level rather than by each node's own roll keeps
- * the lit nodes one solid patch, so every lit node has lit neighbours to draw its edges to.
+ * How far the layer's front noise moves the radius a node sees a head at, either way, as a share of the
+ * radius: the patch a head lights has a ragged rim rather than a clean circle.
  */
-private const val COMET_LIGHT_LEVEL = 0.45f
-private const val COMET_LIGHT_JITTER = 0.12f
-private const val COMET_LIGHT_BAND = 0.1f
+private const val COMET_RADIUS_JITTER = 0.25f
 
-/** Share of a comet's nodes that heat up as it reaches them, at a [MorpheusGraphLayerSpec.cometSpark] of 1. */
+/** Share of a comet's nodes that heat up as it reaches them, at a [MorpheusGraphComets.spark] of 1. */
 private const val COMET_SPARK_SHARE = 0.4f
 
 /** How long before its comet peaks a sparking node starts cooling, and how long after it has cooled, as fractions of the morph. */
@@ -224,8 +216,8 @@ private const val DEPTH_SIZE_SHRINK = 0.45f
  * between them, over a short window around a fraction of its own: nodes leaving go furthest from the
  * shape being morphed into first, nodes arriving go nearest to the shape being morphed out of first.
  * So a node present at both ends stays untouched, the shape recedes or grows as a front, and scrubbing
- * back retraces it exactly. Where a ribbon or bloom moves or changes shape, a comet travels from its old
- * place to its new one (see [Comet]) and lights the nodes it passes that neither end shows, each once.
+ * back retraces it exactly. Comets carry the nodes only the start shows over to the nodes only the end
+ * shows (see [cometStreams]), lighting the nodes they pass that neither end shows, each once.
  * Only nodes present enough join the mesh. [spec] and [shape] may change
  * freely within the morph family ([isSameMorphFamily]); anything else needs a new field.
  *
@@ -277,8 +269,8 @@ internal class LayerField(
     /** Whether each node switching in the top-level morph is arriving (more present at its end) rather than leaving. */
     private var switchArrivals = BooleanArray(0)
 
-    /** The comets of each morph nesting level, sampled per node. */
-    private val cometTracks = CometTracks(envelopes::of)
+    /** The comets of each morph nesting level, and when each lights each node. */
+    private val cometTracks = CometTracks()
 
     /** The [EdgeRule.FixedTriangulation] mesh of each end of the current morph, and how its edges switch. */
     private var morphMesh: MorphMesh? = null
@@ -328,8 +320,14 @@ internal class LayerField(
     internal var visibleNodeCount = 0
         private set
 
-    /** How many comets the current morph sends, 0 when not morphing. */
-    internal val cometCount: Int get() = if (shape is LayerShape.Morph) cometTracks.topLevel?.cometCount ?: 0 else 0
+    /** How many comet streams the current morph sends, 0 when not morphing. */
+    internal val cometCount: Int get() = if (shape is LayerShape.Morph) cometTracks.topLevel?.streamCount ?: 0 else 0
+
+    /** The current morph's comet heads, none when not morphing. */
+    internal val cometHeads: List<CometHead> get() = if (shape is LayerShape.Morph) cometTracks.topLevel?.heads.orEmpty() else emptyList()
+
+    /** The brightest presence the current morph's comets give node [index], 0 when not morphing. */
+    internal fun nodeCometPeak(index: Int): Float = if (shape is LayerShape.Morph) cometTracks.topLevel?.peaks?.get(index) ?: 0f else 0f
 
     /** How many nodes only a comet lights that the current morph's mesh joins, 0 when not morphing. */
     internal val cometOnlyNodeCount: Int get() = if (shape is LayerShape.Morph) morphMesh?.cometOnlyNodeCount ?: 0 else 0
@@ -473,7 +471,14 @@ internal class LayerField(
      *
      * [probe] times each step and counts what was drawn, and its switches skip steps entirely.
      */
-    fun draw(scope: DrawScope, fill: LayerFill, halos: HaloBrushCache, timeSeconds: Float, showViolations: Boolean, probe: LayerProbe? = null) = with(scope) {
+    fun draw(
+        scope: DrawScope,
+        fill: LayerFill,
+        halos: HaloBrushCache,
+        timeSeconds: Float,
+        showViolations: Boolean,
+        probe: LayerProbe? = null,
+    ) = with(scope) {
         val color = fill.maskColor
         layerPaint.alpha = fill.layerAlpha
         drawIntoCanvas { canvas -> canvas.saveLayer(Rect(Offset.Zero, size), layerPaint) }
@@ -735,13 +740,59 @@ internal class LayerField(
         }
     }
 
-    private fun cometTrackFor(morph: LayerShape.Morph, level: Int, width: Float, height: Float): CometTrack =
-        cometTracks.forMorph(morph, level, width, height, nodes, homeX, homeY)
+    /**
+     * [morph]'s comets at nesting [level], built only when its ends or the surface change. They leave the nodes
+     * its start shows and its end doesn't, by the masks the morph's meshes use, and land on the nodes only its
+     * end shows. Each end is read as [evaluateShape] left it in [level]'s scratch, so a frozen morph counts as
+     * drawn, its own comets included; a [LayerShape.Vanish] end stands for the other mesh's shape, evaluated
+     * over this mesh's nodes.
+     */
+    private fun cometTrackFor(morph: LayerShape.Morph, level: Int, width: Float, height: Float): CometTrack {
+        cometTracks.at(level)?.takeIf { it.isFor(morph, width, height, count) }?.let { return it }
+        val comets = lerp(morph.from.nearestSpec.comets, morph.to.nearestSpec.comets, 0.5f)
+        val streams = if (comets.strength > 0f && sendsComets(morph)) {
+            val start = (morph.from as? LayerShape.Vanish)?.let { guidePresences(it, width, height) } ?: scratch(level, 0)
+            val end = (morph.to as? LayerShape.Vanish)?.let { guidePresences(it, width, height) } ?: scratch(level, 1)
+            val shownAtStart = BooleanArray(count) { start[it] * borderFactor(it, width, height) >= PRESENT_THRESHOLD }
+            val shownAtEnd = BooleanArray(count) { end[it] * borderFactor(it, width, height) >= PRESENT_THRESHOLD }
+            cometStreams(
+                leaving = BooleanArray(count) { shownAtStart[it] && !shownAtEnd[it] },
+                arriving = BooleanArray(count) { shownAtEnd[it] && !shownAtStart[it] },
+                kept = BooleanArray(count) { shownAtStart[it] && shownAtEnd[it] },
+                homeX = homeX,
+                homeY = homeY,
+                count = count,
+                spacing = cell,
+                comets = comets,
+                seed = seed,
+            )
+        } else {
+            CometStreams.None
+        }
+        val fillChance = (morph.from.nearestSpec.fillChance + morph.to.nearestSpec.fillChance) / 2f
+        return CometTrack(morph.from, morph.to, width, height, streams, comets.strength, fillChance, comets.spark, nodes, homeX, homeY, cell)
+            .also { cometTracks.store(level, it) }
+    }
+
+    /** Every node's presence under [vanish]'s guide, the other mesh's shape, with the other mesh's envelope. */
+    private fun guidePresences(vanish: LayerShape.Vanish, width: Float, height: Float): FloatArray {
+        val guideEnvelope = envelopes.of(vanish)
+        return FloatArray(count) { index ->
+            val target = guideEnvelope.densityAt(vanish.guide, width, height, homeX[index], homeY[index]) * vanish.guide.fillChance
+            rollWeight(nodes[index].presenceRoll, target)
+        }
+    }
 
     /** Rebuilds [morph]'s meshes, bypassing the cache. For the settle benchmark. */
     internal fun rebuildMorphMesh(morph: LayerShape.Morph, width: Float, height: Float) {
         morphMesh = null
         morphMeshFor(morph, width, height)
+    }
+
+    /** Rebuilds the comets of [morph], the drawn top-level morph, bypassing the cache. For the settle benchmark. */
+    internal fun rebuildCometTrack(morph: LayerShape.Morph, width: Float, height: Float) {
+        cometTracks.forget(level = 0)
+        cometTrackFor(morph, level = 0, width = width, height = height)
     }
 
     /**
@@ -1395,27 +1446,21 @@ private fun proximityEdges(presentIndices: IntArray, presentCount: Int, xs: Floa
  * Each morph nesting level's [CometTrack], built on first use and kept until that level's morph or the
  * surface changes. [topLevel] is the drawn morph's own.
  */
-private class CometTracks(private val envelopeFor: (LayerShape) -> MorpheusGraphEnvelope) {
+private class CometTracks {
     private val byLevel = ArrayList<CometTrack?>()
 
-    val topLevel: CometTrack? get() = byLevel.getOrNull(0)
+    val topLevel: CometTrack? get() = at(0)
 
-    @Suppress("LongParameterList") // The morph, the surface, and the node pool its comets light.
-    fun forMorph(morph: LayerShape.Morph, level: Int, width: Float, height: Float, nodes: List<NodeTraits>, homeX: FloatArray, homeY: FloatArray): CometTrack {
+    fun at(level: Int): CometTrack? = byLevel.getOrNull(level)
+
+    fun store(level: Int, track: CometTrack) {
         while (byLevel.size <= level) byLevel += null
-        byLevel[level]?.takeIf { it.isFor(morph, width, height, homeX.size) }?.let { return it }
-        val fromSpec = morph.from.nearestSpec
-        val toSpec = morph.to.nearestSpec
-        val strength = (fromSpec.cometStrength + toSpec.cometStrength) / 2f
-        val comets = if (strength > 0f && sendsComets(morph)) {
-            cometsBetween(envelopeFor(morph.from).standIns(fromSpec, width, height), envelopeFor(morph.to).standIns(toSpec, width, height), width, height)
-        } else {
-            emptyList()
-        }
-        val fillChance = (fromSpec.fillChance + toSpec.fillChance) / 2f
-        val spark = (fromSpec.cometSpark + toSpec.cometSpark) / 2f
-        return CometTrack(morph.from, morph.to, width, height, comets, strength, fillChance, spark, nodes, homeX, homeY)
-            .also { byLevel[level] = it }
+        byLevel[level] = track
+    }
+
+    /** Drops [level]'s track, so the next build at that level starts over. */
+    fun forget(level: Int) {
+        if (level < byLevel.size) byLevel[level] = null
     }
 }
 
@@ -1434,54 +1479,49 @@ private fun sendsComets(morph: LayerShape.Morph): Boolean {
 private class TransitMesh(val topology: MeshTopology, val nodes: BooleanArray)
 
 /**
- * One morph's [comets], sampled per node at [COMET_SAMPLES] steps of the fraction: [presenceAt] is a
- * node's presence under them at a fraction, rising then falling once, each over [COMET_LIGHT_WINDOW].
- * [peaks] are each node's brightest presence; a node no comet reaches has a peak of 0.
+ * One morph's comet [heads], and when they light each node, worked out once at the morph's start. A head's
+ * disc moves along a straight line and its radius changes with its progress along it, so where it reaches
+ * a fixed node and leaves it are the two roots of one quadratic in that progress, which maps back to the
+ * morph's fraction exactly through the head's window and easing (see [CometHead.fractionAt]): no sampling. [presenceAt] is a node's
+ * presence under the heads at a fraction, rising over [COMET_LIGHT_WINDOW] where the first head reaches it
+ * and falling over another where the last one leaves, so where two heads pass a node in turn it lights once
+ * for both. Both windows stay inside the morph, so a node is dark at either end. [peaks] are each node's
+ * brightest presence; a node no head reaches has a peak of 0.
  *
- * A comet lights a node once its density there, times [strength], passes [COMET_LIGHT_LEVEL], so the
- * patch it lights grows out of the shape it leaves, travels and shrinks into the shape it reaches. The
- * nodes [fillChance] leaves out of every shape stay out of every comet too, so its holes never move.
+ * A node under a head lights by its own roll against [fillChance] times [strength], so at a strength of 1
+ * the nodes the fill chance leaves out of every shape stay out of every comet too, and its holes never move.
  */
-@Suppress("LongParameterList") // One morph's ends and comets, and the node pool they light.
+@Suppress("LongParameterList") // One morph's ends and heads, and the node pool they light.
 private class CometTrack(
     private val from: LayerShape,
     private val to: LayerShape,
     private val width: Float,
     private val height: Float,
-    comets: List<Comet>,
+    val streams: CometStreams,
     strength: Float,
     fillChance: Float,
     private val spark: Float,
     nodes: List<NodeTraits>,
     homeX: FloatArray,
     homeY: FloatArray,
+    spacing: Float,
 ) {
     private val nodeCount = homeX.size
-    val cometCount = comets.size
+    val heads = streams.heads
+    val streamCount = streams.streamCount
     val peaks = FloatArray(nodeCount)
     private val peakFractions = FloatArray(nodeCount)
     private val lightsAt = FloatArray(nodeCount)
     private val darkensAt = FloatArray(nodeCount)
 
     init {
-        if (comets.isNotEmpty()) {
-            val curve = FloatArray(COMET_SAMPLES + 1)
-            for (index in 0 until nodeCount) {
-                val membership = rollWeight(nodes[index].presenceRoll, fillChance)
-                val lightLevel = COMET_LIGHT_LEVEL + nodes[index].frontNoise * COMET_LIGHT_JITTER
-                for (step in 0..COMET_SAMPLES) {
-                    val density = comets.maxOf { it.densityAt(homeX[index], homeY[index], step / COMET_SAMPLES.toFloat()) }
-                    curve[step] = membership * smoothStep(lightLevel - COMET_LIGHT_BAND / 2f, lightLevel + COMET_LIGHT_BAND / 2f, density * strength)
-                }
-                record(index, curve)
-            }
-        }
+        if (heads.isNotEmpty()) light(nodes, homeX, homeY, spacing, fillChance * strength)
     }
 
     /**
-     * How hot [node] is from the comet passing it, under [MorpheusGraphLayerSpec.cometSpark]: heating up as
-     * the comet reaches it, cooling once it has passed. Both windows stay within the morph, so a node is cold
-     * at either end, as the still spec at that end draws it, even when its comet peaks right at an end.
+     * How hot [node] is from the comet passing it, under [MorpheusGraphComets.spark]: heating up as a head
+     * reaches it, cooling once it has passed. Both windows stay within the morph, so a node is cold at either
+     * end, as the still spec at that end draws it, even when its comet peaks right at an end.
      */
     fun sparkAt(node: Int, hotRoll: Float, fraction: Float): Float {
         if (spark <= 0f || peaks[node] <= 0f) return 0f
@@ -1501,36 +1541,106 @@ private class CometTrack(
         morph.from == from && morph.to == to && width == this.width && height == this.height && nodeCount == this.nodeCount
 
     /**
-     * Keeps node [index]'s [curve], lifted to the lowest curve that only rises then falls, so where two
-     * comets pass one node in turn it lights once for both rather than flickering between them: its peak,
-     * and where it crosses half that peak on the way up and on the way down. A node already lit at an end
-     * stays lit there. A pass shorter than [COMET_LIGHT_WINDOW] overlaps its two windows and peaks dimmer
-     * rather than popping; each window is narrowed only to stay inside the morph, so a node dark at an end
-     * is dark there.
+     * Each head visits the nodes along its swept path only, and widens the span each one is lit over to the
+     * fractions it covers the node between; the head that passes a node closest sets its peak fraction.
+     * A node's radius is the head's, its middle radius moved by its front noise (see [COMET_RADIUS_JITTER]),
+     * so the ends keep within their slices. The radius changes linearly over each half of the line, so each
+     * half is one quadratic.
      */
-    private fun record(index: Int, curve: FloatArray) {
-        liftToSinglePeak(curve)
-        val peakStep = curve.indices.maxBy { curve[it] }
-        val peak = curve[peakStep]
-        peaks[index] = peak
-        peakFractions[index] = peakStep / COMET_SAMPLES.toFloat()
-        if (peak <= 0f) return
-        val half = peak / 2f
-        val litAtStart = curve[0] >= half
-        val litAtEnd = curve[COMET_SAMPLES] >= half
-        val lightsAt = if (litAtStart) 0f else halfCrossing(curve, half, (1..peakStep).first { curve[it] >= half })
-        val darkensAt = if (litAtEnd) 1f else halfCrossing(curve, half, (peakStep + 1..COMET_SAMPLES).first { curve[it] < half })
-        this.lightsAt[index] = if (litAtStart) -1f else lightsAt
-        this.darkensAt[index] = if (litAtEnd) 2f else darkensAt
+    private fun light(nodes: List<NodeTraits>, homeX: FloatArray, homeY: FloatArray, spacing: Float, share: Float) {
+        lightsAt.fill(Float.MAX_VALUE, 0, nodeCount)
+        darkensAt.fill(-Float.MAX_VALUE, 0, nodeCount)
+        val closestRatios = FloatArray(nodeCount) { Float.MAX_VALUE }
+        val buckets = NodeBuckets(homeX, homeY, nodeCount, spacing * COMET_BUCKET_CELLS)
+        val span = FloatArray(2)
+        for (head in heads) {
+            val travelX = head.targetX - head.sourceX
+            val travelY = head.targetY - head.sourceY
+            val travelSquared = travelX * travelX + travelY * travelY
+            buckets.forEachNear(head.sourceX, head.sourceY, head.targetX, head.targetY, head.maxRadius * (1f + COMET_RADIUS_JITTER)) { node ->
+                val middleRadius = head.middleRadius * (1f + COMET_RADIUS_JITTER * nodes[node].frontNoise)
+                val offsetX = head.sourceX - homeX[node]
+                val offsetY = head.sourceY - homeY[node]
+                val offsetAlong = offsetX * travelX + offsetY * travelY
+                span[0] = Float.MAX_VALUE
+                span[1] = -Float.MAX_VALUE
+                coverHalf(offsetX, offsetY, travelX, travelY, 0f, head.sourceRadius, middleRadius, span)
+                coverHalf(offsetX, offsetY, travelX, travelY, 0.5f, middleRadius, head.targetRadius, span)
+                val enters = span[0]
+                val leaves = span[1]
+                if (enters <= leaves) {
+                    lightsAt[node] = min(lightsAt[node], head.fractionAt(enters))
+                    darkensAt[node] = max(darkensAt[node], head.fractionAt(leaves))
+                    val closest = if (travelSquared > 0f) (-offsetAlong / travelSquared).coerceIn(enters, leaves) else (enters + leaves) / 2f
+                    val gapX = offsetX + travelX * closest
+                    val gapY = offsetY + travelY * closest
+                    val closestRadius =
+                        if (closest <= 0.5f) lerp(head.sourceRadius, middleRadius, 2f * closest) else lerp(middleRadius, head.targetRadius, 2f * closest - 1f)
+                    val ratio = sqrt(gapX * gapX + gapY * gapY) / max(closestRadius, Float.MIN_VALUE)
+                    if (ratio < closestRatios[node]) {
+                        closestRatios[node] = ratio
+                        peakFractions[node] = head.fractionAt(closest)
+                    }
+                }
+            }
+        }
+        val halfWindow = COMET_LIGHT_WINDOW / 2f
+        for (node in 0 until nodeCount) {
+            if (lightsAt[node] > darkensAt[node]) continue
+            peaks[node] = rollWeight(nodes[node].presenceRoll, share)
+            lightsAt[node] = max(lightsAt[node], halfWindow)
+            darkensAt[node] = min(darkensAt[node], 1f - halfWindow)
+        }
     }
 
-    /** The fraction where [curve] crosses [half] between [step] and the step before it. */
-    private fun halfCrossing(curve: FloatArray, half: Float, step: Int): Float {
-        val before = curve[step - 1]
-        val share = (half - before) / (curve[step] - before)
-        return (step - 1 + share) / COMET_SAMPLES.toFloat()
+    /**
+     * Widens [span] (the first and last progress a head covers a node at) by the half of the head's line from
+     * progress [from] to [from] + 0.5, over which its radius goes linearly from [startRadius] to [endRadius].
+     * The node sits at -([offsetX], [offsetY]) from the head's source, and ([travelX], [travelY]) is the line.
+     */
+    @Suppress("LongParameterList") // The node's offset, the line, the half and its two radii, and the span it widens.
+    private fun coverHalf(offsetX: Float, offsetY: Float, travelX: Float, travelY: Float, from: Float, startRadius: Float, endRadius: Float, span: FloatArray) {
+        val halfX = travelX / 2f
+        val halfY = travelY / 2f
+        val startX = offsetX + travelX * from
+        val startY = offsetY + travelY * from
+        val halfSquared = halfX * halfX + halfY * halfY
+        val radiusChange = endRadius - startRadius
+        // Inside while |start + half·s|² ≤ (startRadius + radiusChange·s)², s from 0 to 1 over the half; each
+        // root maps back to the head's progress, and later through its window and easing to the morph's fraction.
+        val quadratic = halfSquared - radiusChange * radiusChange
+        val linear = 2f * (startX * halfX + startY * halfY - startRadius * radiusChange)
+        val constant = startX * startX + startY * startY - startRadius * startRadius
+        if (constant <= 0f) widen(span, from)
+        if (quadratic + linear + constant <= 0f) widen(span, from + 0.5f)
+        if (abs(quadratic) > QUADRATIC_EPSILON * (halfSquared + radiusChange * radiusChange)) {
+            val discriminant = linear * linear - 4f * quadratic * constant
+            if (discriminant >= 0f) {
+                val root = sqrt(discriminant)
+                val first = (-linear - root) / (2f * quadratic)
+                val second = (-linear + root) / (2f * quadratic)
+                if (first in 0f..1f) widen(span, from + first / 2f)
+                if (second in 0f..1f) widen(span, from + second / 2f)
+            }
+        } else if (linear != 0f) {
+            val crossing = -constant / linear
+            if (crossing in 0f..1f) widen(span, from + crossing / 2f)
+        }
+    }
+
+    private fun widen(span: FloatArray, progress: Float) {
+        span[0] = min(span[0], progress)
+        span[1] = max(span[1], progress)
+    }
+
+    private companion object {
+        /** A head's quadratic counts as linear once its leading term is this small against its parts. */
+        const val QUADRATIC_EPSILON = 1e-6f
     }
 }
+
+/** [CometTrack] sorts the nodes into square buckets this many node spacings wide. */
+private const val COMET_BUCKET_CELLS = 2f
 
 /**
  * A comet-lit node's light at [fraction], from 0 to 1: rising over [COMET_LIGHT_WINDOW] centred on [lightsAt] and falling
@@ -1554,23 +1664,70 @@ private fun ramp(edgeStart: Float, edgeEnd: Float, value: Float): Float = when {
     else -> 0f
 }
 
-/**
- * Raises [curve] in place to the lowest curve over it that only rises then falls: each value becomes
- * the lower of the highest value at or before it and the highest at or after it. Reversing the curve
- * reverses the result, so a morph played backwards lights the same nodes in mirror.
- */
-private fun liftToSinglePeak(curve: FloatArray) {
-    val risingMax = FloatArray(curve.size)
-    var running = 0f
-    for (step in curve.indices) {
-        running = max(running, curve[step])
-        risingMax[step] = running
+/** Every node by a square bucket of its home, so a comet head visits only the nodes along its path. */
+private class NodeBuckets(homeX: FloatArray, homeY: FloatArray, count: Int, private val bucket: Float) {
+    private var lowX = Float.MAX_VALUE
+    private var lowY = Float.MAX_VALUE
+    private val columns: Int
+    private val rows: Int
+
+    /** Where each bucket's nodes start in [members]; one more entry than there are buckets. */
+    private val starts: IntArray
+    private val members = IntArray(count)
+
+    init {
+        var highX = -Float.MAX_VALUE
+        var highY = -Float.MAX_VALUE
+        for (node in 0 until count) {
+            lowX = min(lowX, homeX[node])
+            lowY = min(lowY, homeY[node])
+            highX = max(highX, homeX[node])
+            highY = max(highY, homeY[node])
+        }
+        columns = floor((highX - lowX) / bucket).toInt() + 1
+        rows = floor((highY - lowY) / bucket).toInt() + 1
+        starts = IntArray(columns * rows + 1)
+        val bucketOf = IntArray(count) { node -> rowOf(homeY[node]) * columns + columnOf(homeX[node]) }
+        for (node in 0 until count) starts[bucketOf[node] + 1]++
+        for (index in 1 until starts.size) starts[index] += starts[index - 1]
+        val filled = starts.copyOf()
+        for (node in 0 until count) members[filled[bucketOf[node]]++] = node
     }
-    running = 0f
-    for (step in curve.indices.reversed()) {
-        running = max(running, curve[step])
-        curve[step] = min(risingMax[step], running)
+
+    /**
+     * Runs [action] on every node of the buckets within [reach] of the segment from ([startX], [startY]) to
+     * ([endX], [endY]), and on few others: per row of buckets, only the columns the segment's stretch near
+     * that row covers.
+     */
+    inline fun forEachNear(startX: Float, startY: Float, endX: Float, endY: Float, reach: Float, action: (Int) -> Unit) {
+        val deltaX = endX - startX
+        val deltaY = endY - startY
+        for (row in rowOf(min(startY, endY) - reach)..rowOf(max(startY, endY) + reach)) {
+            val bandTop = lowY + row * bucket - reach
+            val bandBottom = lowY + (row + 1) * bucket + reach
+            var from = 0f
+            var until = 1f
+            if (deltaY != 0f) {
+                val first = (bandTop - startY) / deltaY
+                val second = (bandBottom - startY) / deltaY
+                from = max(0f, min(first, second))
+                until = min(1f, max(first, second))
+                if (from > until) continue
+            } else if (startY < bandTop || startY > bandBottom) {
+                continue
+            }
+            val fromX = startX + deltaX * from
+            val untilX = startX + deltaX * until
+            for (column in columnOf(min(fromX, untilX) - reach)..columnOf(max(fromX, untilX) + reach)) {
+                val bucketIndex = row * columns + column
+                for (slot in starts[bucketIndex] until starts[bucketIndex + 1]) action(members[slot])
+            }
+        }
     }
+
+    fun columnOf(x: Float): Int = floor((x - lowX) / bucket).toInt().coerceIn(0, columns - 1)
+
+    fun rowOf(y: Float): Int = floor((y - lowY) / bucket).toInt().coerceIn(0, rows - 1)
 }
 
 /** Everything about a node that never changes: its rest position, its motion, and the rolls its looks are decided against. */
