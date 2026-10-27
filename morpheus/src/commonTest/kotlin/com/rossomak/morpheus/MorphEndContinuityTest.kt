@@ -87,8 +87,8 @@ class MorphEndContinuityTest {
     }
 
     private companion object {
-        /** The standard surfaces and the showcase's own canvas. */
-        val SURFACES = listOf(640f to 360f, 360f to 640f, 540f to 270f)
+        /** The standard surfaces, in px, and the recipe canvas the showcase is measured on. */
+        val SURFACES = listOf(640f to 360f, 360f to 640f, 540f to 270f, BenchmarkCanvas.Recipe.width to BenchmarkCanvas.Recipe.height)
         const val FRAME_SECONDS = 1f / 60f
         const val PX_PER_DP = 2f
 

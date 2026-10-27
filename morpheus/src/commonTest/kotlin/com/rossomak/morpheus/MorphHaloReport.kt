@@ -7,7 +7,7 @@ import kotlin.test.Test
 /**
  * Reports how abruptly halos go out over the "Pills to ribbons" showcase's loop, as the gallery seeks it: per
  * layer with halos, how many halos drop by more than [HALO_DROP] of a full halo in one frame, the most in any
- * one frame, and what took each one down. A comet's patch once lost its halos together, mostly on the reverse
+ * one frame, what took each one down, and the most of the layer's whole halo lost in one frame. A comet's patch once lost its halos together, mostly on the reverse
  * morph, when its sparks' heat or its nodes' presence fell in a frame or two (#43); normal switching, and the
  * odd glow factor the alpha settle drops, stay. Printed, not asserted; only runs with `MORPHEUS_BENCHMARK` set:
  *
@@ -54,6 +54,9 @@ class MorphHaloReport {
     private class Tally {
         private var previous: NodeHalos? = null
         private var largestDrop = 0f
+
+        /** The most of the layer's summed halo lost in one frame, as a share of that sum the frame before. */
+        private var largestTotalFall = 0f
         private val dropsByFrame = HashMap<Int, Int>()
         private val dropsByCause = LinkedHashMap<String, Int>()
 
@@ -61,6 +64,8 @@ class MorphHaloReport {
             val before = previous
             previous = halos
             if (before == null || before.halo.size != halos.halo.size) return
+            val totalBefore = before.halo.sum()
+            if (totalBefore > 0f) largestTotalFall = max(largestTotalFall, (totalBefore - halos.halo.sum()) / totalBefore)
             for (node in halos.halo.indices) {
                 val drop = before.halo[node] - halos.halo[node]
                 largestDrop = max(largestDrop, drop)
@@ -81,7 +86,7 @@ class MorphHaloReport {
             val drops = dropsByFrame.values.sum()
             val causes = dropsByCause.entries.joinToString { (cause, count) -> "$cause $count" }.ifEmpty { "none" }
             return "$drops halo drops over $HALO_DROP in ${dropsByFrame.size} frames, at most ${dropsByFrame.values.maxOrNull() ?: 0} in a frame; " +
-                "largest ${(largestDrop * 100).roundToInt() / 100f}; by cause: $causes"
+                "largest ${(largestDrop * 100).roundToInt() / 100f}; by cause: $causes; all halos at once ${(largestTotalFall * 1000).roundToInt() / 10f}%"
         }
     }
 

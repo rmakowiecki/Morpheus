@@ -380,8 +380,14 @@ internal class LayerField(
     internal fun nodeHaloAlpha(index: Int): Float =
         spec.glowStrength * spec.alpha * depthAlpha(index) * glowFactors[index] * hotWeights[index] * presences[index]
 
-    /** True while a running morph switches node [index] in or out, as of the last [advance]; false for a node the same at both ends. */
-    internal fun nodeSwitchesInMorph(index: Int): Boolean = shape is LayerShape.Morph && !switchFractions[index].isNaN()
+    /**
+     * True while a running morph switches node [index] in or out, as of the last [advance]; false for a node the same at both
+     * ends, and at either end, where the end's still spec is drawn and the switches aren't refreshed.
+     */
+    internal fun nodeSwitchesInMorph(index: Int): Boolean {
+        val morph = shape as? LayerShape.Morph ?: return false
+        return morph.fraction > 0f && morph.fraction < 1f && !switchFractions[index].isNaN()
+    }
 
     /** Node [index]'s presence under [shape], border fade included, as of the last [advance]. */
     internal fun nodePresence(index: Int): Float = presences[index]
@@ -1456,7 +1462,6 @@ private class CometTrack(
     private val peakFractions = FloatArray(nodeCount)
     private val lightsAt = FloatArray(nodeCount)
     private val darkensAt = FloatArray(nodeCount)
-    private val halfWindows = FloatArray(nodeCount)
 
     init {
         if (comets.isNotEmpty()) {
@@ -1489,10 +1494,7 @@ private class CometTrack(
 
     fun presenceAt(node: Int, fraction: Float): Float {
         if (peaks[node] <= 0f) return 0f
-        val halfWindow = halfWindows[node]
-        val lit = ramp(lightsAt[node] - halfWindow, lightsAt[node] + halfWindow, fraction)
-        val dark = ramp(darkensAt[node] - halfWindow, darkensAt[node] + halfWindow, fraction)
-        return peaks[node] * lit * (1f - dark)
+        return peaks[node] * cometLight(lightsAt[node], darkensAt[node], fraction)
     }
 
     fun isFor(morph: LayerShape.Morph, width: Float, height: Float, nodeCount: Int): Boolean =
@@ -1518,12 +1520,8 @@ private class CometTrack(
         val litAtEnd = curve[COMET_SAMPLES] >= half
         val lightsAt = if (litAtStart) 0f else halfCrossing(curve, half, (1..peakStep).first { curve[it] >= half })
         val darkensAt = if (litAtEnd) 1f else halfCrossing(curve, half, (peakStep + 1..COMET_SAMPLES).first { curve[it] < half })
-        var halfWindow = COMET_LIGHT_WINDOW / 2f
-        if (!litAtStart) halfWindow = min(halfWindow, lightsAt)
-        if (!litAtEnd) halfWindow = min(halfWindow, 1f - darkensAt)
         this.lightsAt[index] = if (litAtStart) -1f else lightsAt
         this.darkensAt[index] = if (litAtEnd) 2f else darkensAt
-        halfWindows[index] = halfWindow
     }
 
     /** The fraction where [curve] crosses [half] between [step] and the step before it. */
@@ -1532,6 +1530,21 @@ private class CometTrack(
         val share = (half - before) / (curve[step] - before)
         return (step - 1 + share) / COMET_SAMPLES.toFloat()
     }
+}
+
+/**
+ * A comet-lit node's light at [fraction], from 0 to 1: rising over [COMET_LIGHT_WINDOW] centred on [lightsAt] and falling
+ * over another centred on [darkensAt]. Each window is narrowed only to stay inside the morph, the light-on one by the
+ * morph's start and the light-off one by its end, so a node dark at an end is dark there and one end never shortens the
+ * other end's window. [lightsAt] below 0 or [darkensAt] above 1 marks a node already lit at that end.
+ */
+internal fun cometLight(lightsAt: Float, darkensAt: Float, fraction: Float): Float {
+    val halfWindow = COMET_LIGHT_WINDOW / 2f
+    val lightHalfWindow = if (lightsAt < 0f) halfWindow else min(halfWindow, lightsAt)
+    val darkHalfWindow = if (darkensAt > 1f) halfWindow else min(halfWindow, 1f - darkensAt)
+    val lit = ramp(lightsAt - lightHalfWindow, lightsAt + lightHalfWindow, fraction)
+    val dark = ramp(darkensAt - darkHalfWindow, darkensAt + darkHalfWindow, fraction)
+    return lit * (1f - dark)
 }
 
 /** [smoothStep] from [edgeStart] to [edgeEnd], or a step at [edgeEnd] when the two meet. */
