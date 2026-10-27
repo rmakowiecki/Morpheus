@@ -8,8 +8,11 @@ import androidx.compose.runtime.snapshotFlow
 import com.rossomak.morpheus.ExperimentalMorpheusGraphApi
 import com.rossomak.morpheus.MorpheusGraphFrameStats
 
-/** The sample the gallery opens in benchmark mode: the benchmark recipe's "Pills to ribbons". */
+/** The sample the gallery opens in benchmark mode unless asked for another: the benchmark recipe's "Pills to ribbons". */
 internal const val BENCHMARK_SAMPLE_ID = "hero"
+
+/** The samples the benchmark measures: "Pills to ribbons", and the heavier "Comet playground". */
+internal val BENCHMARK_SAMPLE_IDS = listOf(BENCHMARK_SAMPLE_ID, "comet-playground")
 
 /** Starts every line [LogBenchmarkReadings] prints, so a script can pick them out of a browser's log. */
 internal const val BENCHMARK_LINE_PREFIX = "morpheus-benchmark"
@@ -39,15 +42,24 @@ internal fun benchmarkLine(stats: MorpheusGraphFrameStats, canvasScaled: Boolean
 }
 
 /**
- * How the gallery opens for `docs/benchmark.md`'s recipe (see [Gallery]): with [skips]' switches on, for the
- * recipe's skip rows, or with every switch off.
+ * How the gallery opens for `docs/benchmark.md`'s recipe (see [Gallery]): on the sample [sampleId] names, with
+ * [skips]' switches on, for the recipe's skip rows, or with every switch off.
  */
-data class GalleryBenchmark(val skips: Set<BenchmarkSkip> = emptySet()) {
+data class GalleryBenchmark(val skips: Set<BenchmarkSkip> = emptySet(), val sampleId: String = BENCHMARK_SAMPLE_ID) {
+    init {
+        require(sampleId in BENCHMARK_SAMPLE_IDS) { "The benchmark measures $BENCHMARK_SAMPLE_IDS, not \"$sampleId\"" }
+    }
+
     companion object {
-        /** The setup a `skip` query value asks for: switch names separated by commas, or `all`. Unknown names are ignored. */
-        fun withSkips(parameter: String?): GalleryBenchmark {
-            val names = parameter.orEmpty().split(",").map { it.trim() }
-            return GalleryBenchmark(BenchmarkSkip.entries.filter { "all" in names || it.parameterName in names }.toSet())
+        /**
+         * The setup the `skip` and `sample` query values ask for: switch names separated by commas, or `all`,
+         * and one of [BENCHMARK_SAMPLE_IDS]. Unknown switch names are ignored, and an unknown or missing sample
+         * opens "Pills to ribbons".
+         */
+        fun fromQuery(skip: String?, sample: String?): GalleryBenchmark {
+            val names = skip.orEmpty().split(",").map { it.trim() }
+            val skips = BenchmarkSkip.entries.filter { "all" in names || it.parameterName in names }.toSet()
+            return GalleryBenchmark(skips, sample?.takeIf { it in BENCHMARK_SAMPLE_IDS } ?: BENCHMARK_SAMPLE_ID)
         }
     }
 }

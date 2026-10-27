@@ -23,6 +23,8 @@ class MorphEndContinuityTest {
             "pills to ribbons" to (heroPills to heroRibbons),
             "ribbons to pills" to (heroRibbons to heroPills),
             "corner to corner" to cornerToCorner,
+            "pills to ribbons, every comet knob on" to (heroPills.withCometKnobs() to heroRibbons.withCometKnobs()),
+            "corner to corner, every comet knob on" to (cornerToCorner.first.withCometKnobs() to cornerToCorner.second.withCometKnobs()),
         )
         val steps = listOf(NEAR_START to 0f, 0f to NEAR_START, NEAR_END to 1f, 1f to NEAR_END)
         val jumps = morphs.flatMap { (name, ends) ->
@@ -34,7 +36,7 @@ class MorphEndContinuityTest {
         jumps.shouldBeEmpty()
     }
 
-    private fun MorpheusGraphSpec.withFrontSpark() = copy(layers = layers.dropLast(1) + layers.last().copy(cometSpark = 1f))
+    private fun MorpheusGraphSpec.withFrontSpark() = copy(layers = layers.dropLast(1) + layers.last().let { front -> front.copy(comets = front.comets.copy(spark = 1f)) })
 
     /**
      * Holds the morph at [held] until its edges settle, then steps one frame to [next], and lists every

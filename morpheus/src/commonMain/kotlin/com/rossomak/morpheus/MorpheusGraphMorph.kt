@@ -266,8 +266,7 @@ private fun lerp(from: MorpheusGraphLayerSpec, to: MorpheusGraphLayerSpec, fract
     glowRadiusDp = lerp(from.glowRadiusDp, to.glowRadiusDp, fraction),
     glowStrength = lerp(from.glowStrength, to.glowStrength, fraction),
     depthDimming = lerp(from.depthDimming, to.depthDimming, fraction),
-    cometStrength = lerp(from.cometStrength, to.cometStrength, fraction),
-    cometSpark = lerp(from.cometSpark, to.cometSpark, fraction),
+    comets = lerp(from.comets, to.comets, fraction),
     alpha = lerp(from.alpha, to.alpha, fraction),
     fill = if (fraction < SNAP_FRACTION) from.fill else to.fill,
 )

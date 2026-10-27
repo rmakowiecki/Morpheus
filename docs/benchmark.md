@@ -23,14 +23,17 @@ links here rather than repeating the steps.
 ## What is measured
 
 - **Sample:** "Pills to ribbons" (the hero) at its default specs. Don't tune it, or press Reset to
-  defaults first.
+  defaults first. "Comet playground" is the second benchmark sample: its front mesh is denser (density
+  100) and it sends far more comets, so changes to comet and morph code show there that the hero is too
+  light to show. Measure it the same way, on the same 16:9 canvas, and report its rows next to the hero's.
 - **Canvas:** the gallery's **16:9** preview, 640×360 dp, with **Scale to fit off**, at **device
   scale 2**: 1280×720 physical pixels. Browser zoom is at 100%.
 - **No frame-rate cap:** with vsync on, the frame interval stops at the display's refresh interval
   once a frame costs less than that, and hides the cost. The flags below turn it off, so the frame
   interval is the real cost per frame.
-- **Over a full loop:** the hero's loop is 10 s, pills to ribbons and back. Read the numbers as they
-  settle over a loop, not from a single half-second window.
+- **Over a full loop:** the hero's loop is 10 s, pills to ribbons and back; the playground's is 12.75 s,
+  frame to blooms to cross and back to frame. Read the numbers as they settle over a loop, not from a
+  single half-second window.
 
 ## The readout
 
@@ -87,14 +90,15 @@ Phases under the timer's resolution read 0.00 until enough frames add up: in the
 ### Browser, scripted
 
 ```sh
-python3 scripts/gallery_benchmark.py [--loops 3] [--skip edges,halos,dots,fill|all] [--skip-build] [--chrome PATH]
+python3 scripts/gallery_benchmark.py [--sample hero|comet-playground] [--loops 3] [--skip edges,halos,dots,fill|all] [--skip-build] [--chrome PATH]
 ```
 
 It builds the production bundle, serves it, and opens it in a separate Chrome with the flags above and
 `?benchmark`. That opens "Pills to ribbons" on the 16:9 preview with Scale to fit off, and the gallery
 prints each half-second reading to the console as a `morpheus-benchmark` line. The script reads them
 from Chrome's log, skips a 6 s warm-up, and prints the frame, graphs and phase-table totals per frame,
-per 10 s loop and as the median of the loops. It warns about readings flagged capped, canvas scaled or
+per loop and as the median of the loops. `--sample comet-playground` opens the playground instead,
+through `&sample=comet-playground`, and measures over its 12.75 s loops. It warns about readings flagged capped, canvas scaled or
 debug switches on. A Chrome window opens for the run: leave it in front and the machine otherwise idle,
 or Chrome slows it down. It uses `$CHROME_BIN` when set, else Google Chrome.
 
@@ -110,11 +114,12 @@ python3 scripts/gallery_benchmark.py --skip-build --skip halos
 python3 scripts/gallery_benchmark.py --skip-build --skip dots
 python3 scripts/gallery_benchmark.py --skip-build --skip fill
 python3 scripts/gallery_benchmark.py --skip-build --skip all
+python3 scripts/gallery_benchmark.py --skip-build --sample comet-playground
 ```
 
 ### Then, on either platform
 
-1. Open "Pills to ribbons". Press Reset to defaults if it was tuned.
+1. Open "Pills to ribbons", or "Comet playground" for its rows. Press Reset to defaults if it was tuned.
 2. Pick the **16:9** preview and turn **Scale to fit** off.
 3. Open the breakdown panel by clicking the frame time button in the control row. It opens in the side
    column; open the Tune sheet as well if the numbers should cover tuning, and the two share the column.
@@ -141,8 +146,9 @@ Report the recipe's table in the pull request, for wasm, and for the JVM only in
 | skip dots          |          |           |          |          |         |         |
 | skip fill recolor  |          |           |          |          |         |         |
 | all skips on       |          |           |          |          |         |         |
+| playground         |          |           |          |          |         |         |
 
-Add the machine, OS, and browser or JDK version, and the full phase table for the baseline row.
+The playground row is "Comet playground" with every switch off; its skip rows are optional. Add the machine, OS, and browser or JDK version, and the full phase table for the baseline row.
 
 ## Headless benchmarks
 
@@ -167,6 +173,12 @@ They print:
   the whole loop, which compares with the gallery's readout over a loop.
 - **`SettleBenchmark`, morph meshes:** rebuilding the showcase's morph meshes, front and back layer, and
   the front layer without comets, on the recipe's canvas. The transit mesh's settle is the difference.
+- **`SettleBenchmark`, comet track build:** working out the showcase front layer's comets, forward and
+  reverse, on the recipe's canvas: the rest of a morph's start, which the morph meshes reuse from a cache.
+  The morph meshes plus this make up the cost of a morph's first frame.
+- **`SettleBenchmark`, playground loop, playground morph meshes and playground comet track build:** the
+  same three for "Comet playground", per morph: frame to blooms, blooms to cross and cross to frame. The
+  loop prints a start and an end row for each morph.
 - **`LivingDelaunayBenchmark`:** that preset's phases per frame, still. It settles its mesh every frame.
 
 Each run starts with a header line naming the benchmark, the platform and the timer's measured step.

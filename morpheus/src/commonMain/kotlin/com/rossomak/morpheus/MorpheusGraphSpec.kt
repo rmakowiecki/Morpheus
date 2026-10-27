@@ -51,7 +51,7 @@ private const val PILL_DEFAULT_PLATEAU = 0.8f
  * One part of a layer's shape: a density field over the surface, from 0 to 1, scaled by [weight]. A
  * layer combines its primitives by taking the strongest at each point, so any mix of them is a union.
  * Two layers' primitives never need to match up for a morph: each node takes its presence from the two
- * ends, and comets travel between primitives that moved (see [LayerField]).
+ * ends, and comets carry the nodes only one end shows over to the nodes only the other shows (see [LayerField]).
  */
 public sealed interface ShapePrimitive {
     public val weight: Float
@@ -169,16 +169,10 @@ public data class MorpheusGraphLayerSpec(
     /** Per-node depth inside this one mesh: far nodes and their edges dim and shrink. 0 = off. */
     val depthDimming: Float = 0f,
     /**
-     * Scales the comets a morph sends between this layer's moving shapes, averaged over the morph's two
-     * ends: 1 lights a patch about the size of the shapes it travels between, under about 0.5 almost
-     * nothing, 0 none at all. See [Comet].
+     * The comets a morph sends from the nodes only its start shows to the nodes only its end shows, averaged
+     * over the morph's two ends. See [MorpheusGraphComets].
      */
-    val cometStrength: Float = 1f,
-    /**
-     * How many of a comet's nodes heat up as it reaches them and cool down once it has passed, averaged
-     * over the morph's two ends: 0 none, 1 a good share of them.
-     */
-    val cometSpark: Float = 0f,
+    val comets: MorpheusGraphComets = MorpheusGraphComets(),
     /** Multiplies every alpha in the layer. */
     val alpha: Float = 1f,
     /** What this layer alone is painted with; null = its spec's fill, else the inherited one (see [MorpheusGraphFill]). */
