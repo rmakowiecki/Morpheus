@@ -55,7 +55,7 @@ public fun Modifier.morpheusGraphBackground(spec: MorpheusGraphSpec, fill: Morph
  */
 @Composable
 public fun Modifier.morpheusGraphBackground(morph: MorpheusGraphMorph, fill: MorpheusGraphFill = LocalMorpheusGraphFill.current): Modifier =
-    drawMorpheusGraph({ morph }, fill, stats = LocalMorpheusGraphFrameStats.current, layerStats = null, showViolations = false)
+    drawMorpheusGraph({ morph }, fill, stats = LocalMorpheusGraphFrameStats.current, layerStats = null, showViolations = false, cometDebug = MorpheusGraphCometDebug.None)
 
 /**
  * Whatever [state] shows; see [MorpheusGraphMorphState]. The state is read while drawing, so seeks,
@@ -63,13 +63,15 @@ public fun Modifier.morpheusGraphBackground(morph: MorpheusGraphMorph, fill: Mor
  */
 @Composable
 public fun Modifier.morpheusGraphBackground(state: MorpheusGraphMorphState, fill: MorpheusGraphFill = LocalMorpheusGraphFill.current): Modifier =
-    drawMorpheusGraph({ state.morph }, fill, stats = LocalMorpheusGraphFrameStats.current, layerStats = null, showViolations = false)
+    drawMorpheusGraph({ state.morph }, fill, stats = LocalMorpheusGraphFrameStats.current, layerStats = null, showViolations = false, cometDebug = MorpheusGraphCometDebug.None)
 
 /**
  * [morpheusGraphBackground] with diagnostics: [stats] gets each frame's draw time and breakdown, [layerStats]
  * each layer's visible, pruned and repaired counts, and [showViolations] rings in red any node that breaks
- * the connectivity or alpha rules anyway, as an on-device check. A null [stats] falls back to
- * [LocalMorpheusGraphFrameStats], and the violations show if either [showViolations] or the stats ask.
+ * the connectivity or alpha rules anyway, as an on-device check. [cometDebug] picks the overlays each
+ * running morph's comets draw (see [MorpheusGraphCometDebug]); a still frame draws none. A null [stats] falls
+ * back to [LocalMorpheusGraphFrameStats]; the violations show if either the argument or the stats ask, and
+ * each comet overlay if either turns it on.
  */
 @ExperimentalMorpheusGraphApi
 @Composable
@@ -79,7 +81,8 @@ public fun Modifier.morpheusGraphBackground(
     stats: MorpheusGraphFrameStats?,
     layerStats: MorpheusGraphLayerStats? = null,
     showViolations: Boolean = false,
-): Modifier = drawMorpheusGraph({ morph }, fill, stats ?: LocalMorpheusGraphFrameStats.current, layerStats, showViolations)
+    cometDebug: MorpheusGraphCometDebug = MorpheusGraphCometDebug.None,
+): Modifier = drawMorpheusGraph({ morph }, fill, stats ?: LocalMorpheusGraphFrameStats.current, layerStats, showViolations, cometDebug)
 
 /** The [state] overload of [morpheusGraphBackground] with diagnostics. */
 @ExperimentalMorpheusGraphApi
@@ -90,7 +93,8 @@ public fun Modifier.morpheusGraphBackground(
     stats: MorpheusGraphFrameStats?,
     layerStats: MorpheusGraphLayerStats? = null,
     showViolations: Boolean = false,
-): Modifier = drawMorpheusGraph({ state.morph }, fill, stats ?: LocalMorpheusGraphFrameStats.current, layerStats, showViolations)
+    cometDebug: MorpheusGraphCometDebug = MorpheusGraphCometDebug.None,
+): Modifier = drawMorpheusGraph({ state.morph }, fill, stats ?: LocalMorpheusGraphFrameStats.current, layerStats, showViolations, cometDebug)
 
 @Composable
 private fun Modifier.drawMorpheusGraph(
@@ -99,6 +103,7 @@ private fun Modifier.drawMorpheusGraph(
     stats: MorpheusGraphFrameStats?,
     layerStats: MorpheusGraphLayerStats?,
     showViolations: Boolean,
+    cometDebug: MorpheusGraphCometDebug,
 ): Modifier {
     val windowSize = LocalWindowInfo.current.containerSize
     val holder = remember { MorpheusGraphHolder() }
@@ -124,6 +129,15 @@ private fun Modifier.drawMorpheusGraph(
         val probe = stats?.probe
         stats?.recordBackground(holder.id)
         val showsViolations = showViolations || stats?.showViolations == true
+        // Merged only when both ask for overlays, so a frame without any builds no new set.
+        val statsComets = stats?.cometDebug ?: MorpheusGraphCometDebug.None
+        val showsComets = if (!statsComets.any) {
+            cometDebug
+        } else if (!cometDebug.any) {
+            statsComets
+        } else {
+            cometDebug or statsComets
+        }
         val timeSeconds = elapsedNanos.longValue / NANOS_PER_SECOND
         // No window in previews; the surface itself is the next best fixed reference.
         val windowLongSide = max(windowSize.width, windowSize.height).toFloat()
@@ -142,7 +156,7 @@ private fun Modifier.drawMorpheusGraph(
                 field.advance(timeSeconds, size.width, size.height, probe)
                 val halos = holder.halosFor(layerFill.maskColor)
                 probe?.lapUnlessSkipped(FramePhase.Halos, skip = probe.stats.skipHalos)
-                field.draw(this, layerFill, halos, timeSeconds, showsViolations, probe)
+                field.draw(this, layerFill, halos, timeSeconds, showsViolations, probe, showsComets)
                 probe?.endLayer(field)
             }
         }

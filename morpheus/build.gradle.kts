@@ -19,5 +19,9 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotlinx.coroutines.test)
         }
+        // Skia's native runtime, for the tests that draw a layer onto an image.
+        jvmTest.dependencies {
+            implementation(compose.desktop.currentOs)
+        }
     }
 }

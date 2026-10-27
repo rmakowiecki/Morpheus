@@ -12,6 +12,8 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.PointMode
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -191,6 +193,35 @@ private val SmallGraphColor = Color(0xFFFFAB00)
 private const val VIOLATION_RING_RADIUS_DP = 7f
 private const val VIOLATION_RING_STROKE_DP = 1.5f
 
+/** Draws the comet heads in the comet debug overlays: one color that stands out over any fill. */
+private val CometDebugColor = Color(0xFF00E5FF)
+private const val COMET_DEBUG_STROKE_DP = 1.5f
+private const val COMET_DEBUG_DOT_DP = 3f
+private const val COMET_DEBUG_PATH_ALPHA = 0.35f
+
+/** One color per comet piece, in turn, in the comet debug overlays; grey for a piece that sends or takes nothing. */
+private val CometPieceColors = listOf(
+    Color(0xFFFF4081),
+    Color(0xFF76FF03),
+    Color(0xFFFFEA00),
+    Color(0xFF00B0FF),
+    Color(0xFFFF9100),
+    Color(0xFFD500F9),
+    Color(0xFF1DE9B6),
+    Color(0xFFFFFFFF),
+)
+private val CometIdlePieceColor = Color(0xFF808080)
+private const val COMET_PIECE_MARKER_DP = 3f
+private const val COMET_CENTROID_ARM_DP = 7f
+private const val COMET_MATCH_ALPHA = 0.6f
+
+/** The start shape's cells in this tint and the end shape's in the other, stronger the deeper inside. */
+private val CometStartClearanceColor = Color(0xFF00E676)
+private val CometEndClearanceColor = Color(0xFFFF1744)
+private const val COMET_CLEARANCE_ALPHA_PER_STEP = 0.06f
+private const val COMET_CLEARANCE_MAX_ALPHA = 0.45f
+private const val COMET_CLEARANCE_LEVELS = 8
+
 /** A plain node's dot alpha before layer alpha and depth; raised to the layer's edge alpha when that is higher. */
 private const val NODE_ALPHA = 0.85f
 private const val HOT_NODE_SCALE = 1.4f
@@ -325,6 +356,9 @@ internal class LayerField(
 
     /** The current morph's comet heads, none when not morphing. */
     internal val cometHeads: List<CometHead> get() = if (shape is LayerShape.Morph) cometTracks.topLevel?.heads.orEmpty() else emptyList()
+
+    /** True once a comet overlay has made the running morph's comets build the data only overlays read. */
+    internal val isCometDebugPlanBuilt: Boolean get() = cometTracks.topLevel?.streams?.isDebugPlanBuilt == true
 
     /** The brightest presence the current morph's comets give node [index], 0 when not morphing. */
     internal fun nodeCometPeak(index: Int): Float = if (shape is LayerShape.Morph) cometTracks.topLevel?.peaks?.get(index) ?: 0f else 0f
@@ -469,7 +503,8 @@ internal class LayerField(
      * [BlendMode.SrcAtop] blends each overlay over it the same way. The offscreen layer is composited
      * at the fill's [LayerFill.layerAlpha].
      *
-     * [probe] times each step and counts what was drawn, and its switches skip steps entirely.
+     * [probe] times each step and counts what was drawn, and its switches skip steps entirely. [cometDebug]
+     * picks the overlays the running morph's comets draw over the layer.
      */
     fun draw(
         scope: DrawScope,
@@ -478,6 +513,7 @@ internal class LayerField(
         timeSeconds: Float,
         showViolations: Boolean,
         probe: LayerProbe? = null,
+        cometDebug: MorpheusGraphCometDebug = MorpheusGraphCometDebug.None,
     ) = with(scope) {
         val color = fill.maskColor
         layerPaint.alpha = fill.layerAlpha
@@ -499,7 +535,108 @@ internal class LayerField(
         drawIntoCanvas { canvas -> canvas.restore() }
         probe?.lap(FramePhase.Composite)
         if (showViolations) drawCalls += drawViolations(timeSeconds)
+        if (cometDebug.any) drawCalls += drawCometDebug(cometDebug)
         probe?.recordDrawn(edges = drawnEdges, halos = drawnHalos, dots = drawnDots, drawCalls = drawCalls)
+    }
+
+    /** One color per piece of [streams], grey for a piece that sends or takes no stream. */
+    private fun pieceColors(streams: CometStreams): List<Color> =
+        streams.pieces.mapIndexed { index, piece -> if (piece.sends) CometPieceColors[index % CometPieceColors.size] else CometIdlePieceColor }
+
+    /**
+     * The running morph's comet overlays that [debug] turns on (see [MorpheusGraphCometDebug]), all riding the
+     * layer's wave like the nodes, the piece markers on the nodes' own positions. Nothing on a still frame.
+     * Returns how many draw calls it made.
+     */
+    private fun DrawScope.drawCometDebug(debug: MorpheusGraphCometDebug): Int {
+        val morph = (shape as? LayerShape.Morph)?.takeIf { it.fraction > 0f && it.fraction < 1f } ?: return 0
+        val streams = cometTracks.topLevel?.streams ?: return 0
+        val stroke = Stroke(width = COMET_DEBUG_STROKE_DP * pxPerDp)
+        var drawCalls = 0
+        fun waved(x: Float, y: Float) = Offset(x, y + envelope.waveOffsetY(spec, size.width, size.height, x, waveTravel))
+        if (debug.clearance) {
+            drawCalls += drawClearance(streams.startClearance, CometStartClearanceColor)
+            drawCalls += drawClearance(streams.endClearance, CometEndClearanceColor)
+        }
+        // Only these two overlays need the pieces, which the streams build the first time they're asked for.
+        val colors = if (debug.pieces || debug.centroids) pieceColors(streams) else emptyList()
+        if (debug.pieces) {
+            streams.pieces.forEachIndexed { index, piece ->
+                val points = piece.nodes.map { node -> Offset(positionsX[node], positionsY[node]) }
+                val cap = if (piece.isSource) StrokeCap.Square else StrokeCap.Round
+                drawPoints(points, PointMode.Points, colors[index], strokeWidth = COMET_PIECE_MARKER_DP * pxPerDp, cap = cap)
+                drawCalls++
+            }
+        }
+        if (debug.centroids) {
+            val arm = COMET_CENTROID_ARM_DP * pxPerDp
+            streams.matches.forEach { (source, target) ->
+                val from = streams.pieces[source]
+                val to = streams.pieces[target]
+                drawLine(colors[source].copy(alpha = COMET_MATCH_ALPHA), waved(from.centerX, from.centerY), waved(to.centerX, to.centerY), strokeWidth = stroke.width)
+                drawCalls++
+            }
+            streams.pieces.forEachIndexed { index, piece ->
+                val center = waved(piece.centerX, piece.centerY)
+                drawLine(colors[index], center - Offset(arm, 0f), center + Offset(arm, 0f), strokeWidth = stroke.width * 2f)
+                drawLine(colors[index], center - Offset(0f, arm), center + Offset(0f, arm), strokeWidth = stroke.width * 2f)
+                drawCalls += 2
+            }
+        }
+        drawCalls += drawHeadOverlays(debug, streams.heads, morph.fraction, stroke, ::waved)
+        return drawCalls
+    }
+
+    /** The overlays [debug] turns on for each of the [heads], at the morph's [fraction]. Returns how many draw calls it made. */
+    private fun DrawScope.drawHeadOverlays(
+        debug: MorpheusGraphCometDebug,
+        heads: List<CometHead>,
+        fraction: Float,
+        stroke: Stroke,
+        waved: (x: Float, y: Float) -> Offset,
+    ): Int {
+        var drawCalls = 0
+        for (head in heads) {
+            val source = waved(head.sourceX, head.sourceY)
+            val target = waved(head.targetX, head.targetY)
+            if (debug.paths) {
+                drawLine(CometDebugColor.copy(alpha = COMET_DEBUG_PATH_ALPHA), source, target, strokeWidth = stroke.width)
+                drawCalls++
+            }
+            if (debug.targets) {
+                drawCircle(CometDebugColor, radius = COMET_DEBUG_DOT_DP * pxPerDp, center = target)
+                drawCalls++
+            }
+            if (debug.endDiscs) {
+                drawCircle(CometStartClearanceColor, radius = head.sourceRadius, center = source, style = stroke)
+                drawCircle(CometEndClearanceColor, radius = head.targetRadius, center = target, style = stroke)
+                drawCalls += 2
+            }
+            if (debug.heads) {
+                val progress = head.progressAt(fraction) ?: continue
+                val center = waved(lerp(head.sourceX, head.targetX, progress), lerp(head.sourceY, head.targetY, progress))
+                drawCircle(CometDebugColor, radius = head.radiusAt(progress), center = center, style = stroke)
+                drawCalls++
+            }
+        }
+        return drawCalls
+    }
+
+    /** [clearance]'s inside cells as squares in [color], one batch per depth level, stronger the deeper. */
+    private fun DrawScope.drawClearance(clearance: Clearance?, color: Color): Int {
+        clearance ?: return 0
+        val levels = List(COMET_CLEARANCE_LEVELS) { ArrayList<Offset>() }
+        clearance.forEachInsideCell { centerX, centerY, steps ->
+            levels[min(steps, COMET_CLEARANCE_LEVELS) - 1] += Offset(centerX, centerY + envelope.waveOffsetY(spec, size.width, size.height, centerX, waveTravel))
+        }
+        var drawCalls = 0
+        levels.forEachIndexed { level, points ->
+            if (points.isEmpty()) return@forEachIndexed
+            val alpha = min(COMET_CLEARANCE_ALPHA_PER_STEP * (level + 1), COMET_CLEARANCE_MAX_ALPHA)
+            drawPoints(points, PointMode.Points, color.copy(alpha = alpha), strokeWidth = cell, cap = StrokeCap.Square)
+            drawCalls++
+        }
+        return drawCalls
     }
 
     /** Adds the cells a grown surface needs, plus the border rings; never removes any. */
