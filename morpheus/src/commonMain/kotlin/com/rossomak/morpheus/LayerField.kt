@@ -114,10 +114,17 @@ private const val MORPH_CHANGE_EPSILON = 1e-3f
 private const val MORPH_MIN_CLOSENESS_SPREAD = 1e-3f
 
 /**
- * How many steps of a morph's fraction a comet's light on each node is sampled at, once per morph. In
- * between, the presence is interpolated, so a node's comet light rises and falls in straight segments.
+ * How many steps of a morph's fraction a comet's light on each node is sampled at, once per morph, to find
+ * where it lights and leaves the node (see [COMET_LIGHT_WINDOW]).
  */
 private const val COMET_SAMPLES = 48
+
+/**
+ * How much of a morph's fraction a comet-lit node takes to light up, and again to go dark, centred on where
+ * its comet's light crosses half its peak. A comet's edge crosses the light band within about one of
+ * [COMET_SAMPLES]' steps, a frame or two at the morph's fastest, so without this a node would pop in and out.
+ */
+private const val COMET_LIGHT_WINDOW = 0.2f
 
 /**
  * A comet lights a node once its density at the node passes this level, give or take the layer's front
@@ -134,6 +141,12 @@ private const val COMET_SPARK_SHARE = 0.4f
 /** How long before its comet peaks a sparking node starts cooling, and how long after it has cooled, as fractions of the morph. */
 private const val COMET_SPARK_LEAD = 0.08f
 private const val COMET_SPARK_TRAIL = 0.06f
+
+/**
+ * How long a sparking node takes to heat up before it starts cooling, as a fraction of the morph: as long as
+ * it takes to cool, so a morph played backwards cools its sparks as gently as one played forwards.
+ */
+private const val COMET_SPARK_RISE = COMET_SPARK_LEAD + COMET_SPARK_TRAIL
 
 /** Per morph nesting level: presences at both ends, then closeness to each end's shape. */
 private const val SCRATCH_SLOTS_PER_LEVEL = 4
@@ -356,6 +369,25 @@ internal class LayerField(
 
     /** Node [index]'s dot alpha, as of the last [advance]. */
     internal fun nodeAlpha(index: Int): Float = nodeAlphas[index]
+
+    /** How hot node [index] is, from 0 to 1, as of the last [advance]: its dot's size and halo follow it. */
+    internal fun nodeHotWeight(index: Int): Float = hotWeights[index]
+
+    /** How much of its halo node [index]'s edges allow, from 0 to 1, as of the last [advance]. */
+    internal fun nodeGlowFactor(index: Int): Float = glowFactors[index]
+
+    /** Node [index]'s halo alpha as [draw] draws it, as of the last [advance]. */
+    internal fun nodeHaloAlpha(index: Int): Float =
+        spec.glowStrength * spec.alpha * depthAlpha(index) * glowFactors[index] * hotWeights[index] * presences[index]
+
+    /**
+     * True while a running morph switches node [index] in or out, as of the last [advance]; false for a node the same at both
+     * ends, and at either end, where the end's still spec is drawn and the switches aren't refreshed.
+     */
+    internal fun nodeSwitchesInMorph(index: Int): Boolean {
+        val morph = shape as? LayerShape.Morph ?: return false
+        return morph.fraction > 0f && morph.fraction < 1f && !switchFractions[index].isNaN()
+    }
 
     /** Node [index]'s presence under [shape], border fade included, as of the last [advance]. */
     internal fun nodePresence(index: Int): Float = presences[index]
@@ -1024,8 +1056,7 @@ internal class LayerField(
         for (index in 0 until count) {
             if (hotWeights[index] <= 0f) continue
             val radius = spec.glowRadiusDp * pxPerDp * sizeFactor(index)
-            val alpha = spec.glowStrength * spec.alpha * depthAlpha(index) * glowFactors[index] * hotWeights[index] * presences[index]
-            if (drawHalo(halos, positionsX[index], positionsY[index], radius, alpha)) drawn++
+            if (drawHalo(halos, positionsX[index], positionsY[index], radius, nodeHaloAlpha(index))) drawn++
         }
         return drawn
     }
@@ -1404,8 +1435,8 @@ private class TransitMesh(val topology: MeshTopology, val nodes: BooleanArray)
 
 /**
  * One morph's [comets], sampled per node at [COMET_SAMPLES] steps of the fraction: [presenceAt] is a
- * node's presence under them at a fraction, rising then falling once. [peaks] are each node's brightest
- * presence; a node no comet reaches has a peak of 0.
+ * node's presence under them at a fraction, rising then falling once, each over [COMET_LIGHT_WINDOW].
+ * [peaks] are each node's brightest presence; a node no comet reaches has a peak of 0.
  *
  * A comet lights a node once its density there, times [strength], passes [COMET_LIGHT_LEVEL], so the
  * patch it lights grows out of the shape it leaves, travels and shrinks into the shape it reaches. The
@@ -1427,9 +1458,10 @@ private class CometTrack(
 ) {
     private val nodeCount = homeX.size
     val cometCount = comets.size
-    private val samples = FloatArray(nodeCount * (COMET_SAMPLES + 1))
     val peaks = FloatArray(nodeCount)
     private val peakFractions = FloatArray(nodeCount)
+    private val lightsAt = FloatArray(nodeCount)
+    private val darkensAt = FloatArray(nodeCount)
 
     init {
         if (comets.isNotEmpty()) {
@@ -1446,19 +1478,23 @@ private class CometTrack(
         }
     }
 
-    /** How hot [node] is from the comet passing it, under [MorpheusGraphLayerSpec.cometSpark]: hot as the comet reaches it, cooling once it has passed. */
+    /**
+     * How hot [node] is from the comet passing it, under [MorpheusGraphLayerSpec.cometSpark]: heating up as
+     * the comet reaches it, cooling once it has passed. Both windows stay within the morph, so a node is cold
+     * at either end, as the still spec at that end draws it, even when its comet peaks right at an end.
+     */
     fun sparkAt(node: Int, hotRoll: Float, fraction: Float): Float {
         if (spark <= 0f || peaks[node] <= 0f) return 0f
-        val peakAt = peakFractions[node]
-        return rollWeight(hotRoll, COMET_SPARK_SHARE * spark.coerceIn(0f, 1f)) * (1f - smoothStep(peakAt - COMET_SPARK_LEAD, peakAt + COMET_SPARK_TRAIL, fraction))
+        val coolsBy = (peakFractions[node] + COMET_SPARK_TRAIL).coerceAtMost(1f)
+        val coolsFrom = coolsBy - COMET_SPARK_LEAD - COMET_SPARK_TRAIL
+        val heatsFrom = (coolsFrom - COMET_SPARK_RISE).coerceAtLeast(0f)
+        val heat = smoothStep(heatsFrom, heatsFrom + COMET_SPARK_RISE, fraction) * (1f - smoothStep(coolsFrom, coolsBy, fraction))
+        return rollWeight(hotRoll, COMET_SPARK_SHARE * spark.coerceIn(0f, 1f)) * heat
     }
 
     fun presenceAt(node: Int, fraction: Float): Float {
         if (peaks[node] <= 0f) return 0f
-        val position = fraction.coerceIn(0f, 1f) * COMET_SAMPLES
-        val step = position.toInt().coerceAtMost(COMET_SAMPLES - 1)
-        val offset = node * (COMET_SAMPLES + 1) + step
-        return lerp(samples[offset], samples[offset + 1], position - step)
+        return peaks[node] * cometLight(lightsAt[node], darkensAt[node], fraction)
     }
 
     fun isFor(morph: LayerShape.Morph, width: Float, height: Float, nodeCount: Int): Boolean =
@@ -1466,15 +1502,56 @@ private class CometTrack(
 
     /**
      * Keeps node [index]'s [curve], lifted to the lowest curve that only rises then falls, so where two
-     * comets pass one node in turn it lights once for both rather than flickering between them.
+     * comets pass one node in turn it lights once for both rather than flickering between them: its peak,
+     * and where it crosses half that peak on the way up and on the way down. A node already lit at an end
+     * stays lit there. A pass shorter than [COMET_LIGHT_WINDOW] overlaps its two windows and peaks dimmer
+     * rather than popping; each window is narrowed only to stay inside the morph, so a node dark at an end
+     * is dark there.
      */
     private fun record(index: Int, curve: FloatArray) {
         liftToSinglePeak(curve)
-        curve.copyInto(samples, index * (COMET_SAMPLES + 1))
         val peakStep = curve.indices.maxBy { curve[it] }
-        peaks[index] = curve[peakStep]
+        val peak = curve[peakStep]
+        peaks[index] = peak
         peakFractions[index] = peakStep / COMET_SAMPLES.toFloat()
+        if (peak <= 0f) return
+        val half = peak / 2f
+        val litAtStart = curve[0] >= half
+        val litAtEnd = curve[COMET_SAMPLES] >= half
+        val lightsAt = if (litAtStart) 0f else halfCrossing(curve, half, (1..peakStep).first { curve[it] >= half })
+        val darkensAt = if (litAtEnd) 1f else halfCrossing(curve, half, (peakStep + 1..COMET_SAMPLES).first { curve[it] < half })
+        this.lightsAt[index] = if (litAtStart) -1f else lightsAt
+        this.darkensAt[index] = if (litAtEnd) 2f else darkensAt
     }
+
+    /** The fraction where [curve] crosses [half] between [step] and the step before it. */
+    private fun halfCrossing(curve: FloatArray, half: Float, step: Int): Float {
+        val before = curve[step - 1]
+        val share = (half - before) / (curve[step] - before)
+        return (step - 1 + share) / COMET_SAMPLES.toFloat()
+    }
+}
+
+/**
+ * A comet-lit node's light at [fraction], from 0 to 1: rising over [COMET_LIGHT_WINDOW] centred on [lightsAt] and falling
+ * over another centred on [darkensAt]. Each window is narrowed only to stay inside the morph, the light-on one by the
+ * morph's start and the light-off one by its end, so a node dark at an end is dark there and one end never shortens the
+ * other end's window. [lightsAt] below 0 or [darkensAt] above 1 marks a node already lit at that end.
+ */
+internal fun cometLight(lightsAt: Float, darkensAt: Float, fraction: Float): Float {
+    val halfWindow = COMET_LIGHT_WINDOW / 2f
+    val lightHalfWindow = if (lightsAt < 0f) halfWindow else min(halfWindow, lightsAt)
+    val darkHalfWindow = if (darkensAt > 1f) halfWindow else min(halfWindow, 1f - darkensAt)
+    val lit = ramp(lightsAt - lightHalfWindow, lightsAt + lightHalfWindow, fraction)
+    val dark = ramp(darkensAt - darkHalfWindow, darkensAt + darkHalfWindow, fraction)
+    return lit * (1f - dark)
+}
+
+/** [smoothStep] from [edgeStart] to [edgeEnd], or a step at [edgeEnd] when the two meet. */
+private fun ramp(edgeStart: Float, edgeEnd: Float, value: Float): Float = when {
+    edgeEnd > edgeStart -> smoothStep(edgeStart, edgeEnd, value)
+    value >= edgeEnd -> 1f
+    else -> 0f
 }
 
 /**

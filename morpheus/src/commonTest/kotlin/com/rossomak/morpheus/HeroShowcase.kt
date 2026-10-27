@@ -1,5 +1,6 @@
 package com.rossomak.morpheus
 
+import androidx.compose.animation.core.FastOutSlowInEasing
 import com.rossomak.morpheus.ShapePrimitive.Pill
 import com.rossomak.morpheus.ShapePrimitive.Ribbon
 import com.rossomak.morpheus.ShapePrimitive.Uniform
@@ -72,3 +73,16 @@ internal val heroRibbons = heroPills.copy(
         ),
     ),
 )
+
+/** The showcase sample's loop at 60 fps: hold the pills, morph, hold the ribbons, then back. */
+internal const val SHOWCASE_FRAME_SECONDS = 1f / 60f
+internal const val SHOWCASE_LOOP_FRAMES = 600
+private const val SHOWCASE_HOLD_SECONDS = 0.75f
+private const val SHOWCASE_MORPH_SECONDS = 3.5f
+private const val SHOWCASE_HALF_LOOP_SECONDS = SHOWCASE_HOLD_SECONDS + SHOWCASE_MORPH_SECONDS + SHOWCASE_HOLD_SECONDS
+
+/** The showcase sample's own fraction at [time] into its loop: hold, morph, hold, then the same mirrored. */
+internal fun showcaseFractionAt(time: Float): Float {
+    val forward = if (time <= SHOWCASE_HALF_LOOP_SECONDS) time else SHOWCASE_HALF_LOOP_SECONDS * 2 - time
+    return FastOutSlowInEasing.transform(((forward - SHOWCASE_HOLD_SECONDS) / SHOWCASE_MORPH_SECONDS).coerceIn(0f, 1f))
+}
