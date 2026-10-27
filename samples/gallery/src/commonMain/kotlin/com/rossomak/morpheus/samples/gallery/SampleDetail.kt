@@ -126,6 +126,7 @@ internal fun SampleDetail(
             }
             session.cycle.period?.let { period -> CycleControls(control = session.cycle, period = period) }
             FrameStatsButton(frameStats = frameStats, canvasScaled = canvasScaled)
+            CometDebugButton(frameStats = frameStats)
         }
         PreviewFrameControl(frame = previewFrame, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 8.dp))
         SampleTheme(dark = dark, modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -148,6 +149,9 @@ internal fun SampleDetail(
         }
         if (showsInlineBreakdown && frameStats.isBreakdownExpanded) {
             FrameBreakdownPanel(frameStats = frameStats, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 8.dp))
+        }
+        if (showsInlineBreakdown && frameStats.isCometDebugExpanded) {
+            CometDebugPanel(stats = frameStats.stats, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 8.dp))
         }
     }
 }

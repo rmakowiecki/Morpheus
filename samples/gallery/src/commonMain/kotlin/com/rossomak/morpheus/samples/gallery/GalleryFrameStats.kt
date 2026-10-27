@@ -45,13 +45,14 @@ import kotlin.math.floor
 import kotlin.math.roundToInt
 
 /**
- * The gallery-wide frame stats every sample reports into, and whether the breakdown panel is open. Kept across
- * samples, like the preview frame, so the debug switches stay as set.
+ * The gallery-wide frame stats every sample reports into, and whether the breakdown and comet debug panels are
+ * open. Kept across samples, like the preview frame, so the debug switches stay as set.
  */
 @Stable
 internal class GalleryFrameStats {
     val stats = MorpheusGraphFrameStats()
     var isBreakdownExpanded by mutableStateOf(false)
+    var isCometDebugExpanded by mutableStateOf(false)
 }
 
 /** Feeds [stats] the interval between frames of the gallery's frame clock, as the tuner playground does. */

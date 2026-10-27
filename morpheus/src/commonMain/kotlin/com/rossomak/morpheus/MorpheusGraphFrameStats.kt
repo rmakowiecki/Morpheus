@@ -28,7 +28,7 @@ private const val PUBLISH_INTERVAL_NANOS = 500_000_000L
  * average per frame over the half second it was published for; the host feeds the frames through
  * [recordFrame], the renderer feeds everything else.
  *
- * The debug switches ([skipEdges], [skipHalos], [skipDots], [skipFillRecolor], [showViolations]) are read
+ * The debug switches ([skipEdges], [skipHalos], [skipDots], [skipFillRecolor], [showViolations], [cometDebug]) are read
  * by every graph that reports here, every frame. A skipped step records no time and no draw calls, so
  * its raster and GPU cost shows as the change it makes to [frameMillis]. Flipping any of them, like
  * [reset], starts a fresh window.
@@ -46,23 +46,26 @@ public class MorpheusGraphFrameStats {
         private set
 
     /** Draws no edges. */
-    public var skipEdges: Boolean by ResettingSwitch()
+    public var skipEdges: Boolean by ResettingSwitch(false)
 
     /** Draws no halos. */
-    public var skipHalos: Boolean by ResettingSwitch()
+    public var skipHalos: Boolean by ResettingSwitch(false)
 
     /** Draws no dots. */
-    public var skipDots: Boolean by ResettingSwitch()
+    public var skipDots: Boolean by ResettingSwitch(false)
 
     /** Skips a gradient or custom fill's recolor, so each such layer shows in its mask color, white. */
-    public var skipFillRecolor: Boolean by ResettingSwitch()
+    public var skipFillRecolor: Boolean by ResettingSwitch(false)
 
     /** Rings nodes that break the connectivity or alpha rules, as the diagnostics overloads' own argument does. */
-    public var showViolations: Boolean by ResettingSwitch()
+    public var showViolations: Boolean by ResettingSwitch(false)
 
-    /** True while any debug switch is on, the violations overlay included. */
+    /** The comet overlays each running morph draws, as the diagnostics overloads' own argument does. */
+    public var cometDebug: MorpheusGraphCometDebug by ResettingSwitch(MorpheusGraphCometDebug.None)
+
+    /** True while any debug switch is on, the violations and comet overlays included. */
     public val anySwitchOn: Boolean
-        get() = skipEdges || skipHalos || skipDots || skipFillRecolor || showViolations
+        get() = skipEdges || skipHalos || skipDots || skipFillRecolor || showViolations || cometDebug.any
 
     /**
      * True from a [reset] until the next window is published: [frameMillis], [drawMillis] and [breakdown]
@@ -132,12 +135,12 @@ public class MorpheusGraphFrameStats {
     }
 
     /** A switch kept as Compose state, which starts a fresh window whenever it flips. */
-    private inner class ResettingSwitch : ReadWriteProperty<Any?, Boolean> {
-        private val state: MutableState<Boolean> = mutableStateOf(false)
+    private inner class ResettingSwitch<T>(initial: T) : ReadWriteProperty<Any?, T> {
+        private val state: MutableState<T> = mutableStateOf(initial)
 
-        override fun getValue(thisRef: Any?, property: KProperty<*>): Boolean = state.value
+        override fun getValue(thisRef: Any?, property: KProperty<*>): T = state.value
 
-        override fun setValue(thisRef: Any?, property: KProperty<*>, value: Boolean) {
+        override fun setValue(thisRef: Any?, property: KProperty<*>, value: T) {
             if (state.value == value) return
             state.value = value
             reset()

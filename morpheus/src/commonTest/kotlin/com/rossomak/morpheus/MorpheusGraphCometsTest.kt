@@ -1,6 +1,15 @@
+@file:OptIn(ExperimentalMorpheusGraphApi::class)
+
 package com.rossomak.morpheus
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Canvas
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import com.rossomak.morpheus.ShapePrimitive.Bloom
 import com.rossomak.morpheus.ShapePrimitive.Pill
 import io.kotest.matchers.collections.shouldHaveSize
@@ -196,6 +205,29 @@ class MorpheusGraphCometsTest {
         streams.streamCount shouldBeGreaterThan 0
         streams.heads.size shouldBeLessThanOrEqual MAX_HEADS
         streams.heads.size shouldBeGreaterThanOrEqual streams.streamCount
+    }
+
+    @Test
+    fun `a morph drawn without comet overlays never builds the data only the overlays read`() {
+        val field = frontField(heroPills, heroRibbons, 0.5f)
+        val stats = MorpheusGraphFrameStats()
+
+        field.drawOnce(stats, MorpheusGraphCometDebug.None)
+        field.isCometDebugPlanBuilt shouldBe false
+        field.drawOnce(stats, MorpheusGraphCometDebug(heads = true, paths = true, targets = true, endDiscs = true, clearance = true))
+        field.isCometDebugPlanBuilt shouldBe false
+        field.drawOnce(stats, MorpheusGraphCometDebug(pieces = true))
+        field.isCometDebugPlanBuilt shouldBe true
+    }
+
+    /** Draws this field once on the recipe's canvas, timed through [stats]' probe as the gallery draws it. */
+    private fun LayerField.drawOnce(stats: MorpheusGraphFrameStats, cometDebug: MorpheusGraphCometDebug) {
+        val bitmap = ImageBitmap(canvas.width.toInt(), canvas.height.toInt())
+        CanvasDrawScope().draw(Density(canvas.pxPerDp), LayoutDirection.Ltr, Canvas(bitmap), Size(canvas.width, canvas.height)) {
+            stats.probe.startLayer(0, this@drawOnce)
+            draw(this, LayerFill.Solid(Color.White), HaloBrushCache(Color.White), 0f, showViolations = false, probe = stats.probe, cometDebug = cometDebug)
+            stats.probe.endLayer(this@drawOnce)
+        }
     }
 
     private fun frontSpec(vararg shapes: ShapePrimitive) = heroPills.copy(layers = listOf(heroGhost, heroFront.copy(shapes = shapes.toList())))

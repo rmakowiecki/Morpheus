@@ -182,12 +182,46 @@ internal fun travelUneased(progress: Float, easing: Float): Float {
     return 2f * progress / (linear + sqrt(linear * linear + 8f * easing * progress))
 }
 
-/** A morph's comet heads and how many streams they make up. */
-internal class CometStreams(val heads: List<CometHead>, val streamCount: Int) {
+/**
+ * A morph's comet heads, how many streams they make up, how deep every cell lies inside the start and end
+ * shapes, and, for [MorpheusGraphCometDebug], the pieces they came from and which pieces each stream joins.
+ * The pieces and matches are built by [debugPlan] only the first time an overlay asks for them, so a morph
+ * drawn without overlays never pays for them.
+ */
+internal class CometStreams(
+    val heads: List<CometHead>,
+    val streamCount: Int,
+    val startClearance: Clearance? = null,
+    val endClearance: Clearance? = null,
+    debugPlan: () -> CometDebugPlan = { CometDebugPlan.None },
+) {
+    private val lazyDebugPlan = lazy(LazyThreadSafetyMode.NONE, debugPlan)
+
+    val pieces: List<CometPiece> get() = lazyDebugPlan.value.pieces
+
+    /** Each stream's source and target, as indices into [pieces]. */
+    val matches: List<Pair<Int, Int>> get() = lazyDebugPlan.value.matches
+
+    /** True once an overlay has asked for the [pieces] or [matches]. */
+    val isDebugPlanBuilt: Boolean get() = lazyDebugPlan.isInitialized()
+
     companion object {
         val None = CometStreams(emptyList(), 0)
     }
 }
+
+/** The pieces a morph's comets came from and which pieces each stream joins, for [MorpheusGraphCometDebug]. */
+internal class CometDebugPlan(val pieces: List<CometPiece>, val matches: List<Pair<Int, Int>>) {
+    companion object {
+        val None = CometDebugPlan(emptyList(), emptyList())
+    }
+}
+
+/**
+ * One piece of the leaving ([isSource]) or arriving nodes, for [MorpheusGraphCometDebug]: its nodes, its
+ * centroid, and whether it [sends] or takes a stream: false when it is too small, or the kept shape absorbs it.
+ */
+internal class CometPiece(val nodes: IntArray, val centerX: Float, val centerY: Float, val isSource: Boolean, val sends: Boolean)
 
 /**
  * The comet streams from the [leaving] nodes to the [arriving] ones, under [comets], for nodes [spacing]
@@ -215,8 +249,8 @@ internal fun cometStreams(
 ): CometStreams {
     val grid = CellGrid(homeX, homeY, count, spacing * COMET_CLUSTER_CELLS)
     val pieceCells = max(1, (comets.pieceSize / COMET_CLUSTER_CELLS).let { side -> ceil(side * side).toInt() })
-    val sourceClusters = clustersOf(leaving, grid, homeX, homeY, count).filter { it.size >= COMET_MIN_CLUSTER }
-    val targetClusters = clustersOf(arriving, grid, homeX, homeY, count).filter { it.size >= COMET_MIN_CLUSTER }
+    val (sourceClusters, smallSources) = clustersOf(leaving, grid, homeX, homeY, count).partition { it.size >= COMET_MIN_CLUSTER }
+    val (targetClusters, smallTargets) = clustersOf(arriving, grid, homeX, homeY, count).partition { it.size >= COMET_MIN_CLUSTER }
     val sources = sourceClusters.flatMap { it.pieces(grid, pieceCells, homeX, homeY) }
     val targets = targetClusters.flatMap { it.pieces(grid, pieceCells, homeX, homeY) }
     if (sources.isEmpty() || targets.isEmpty()) return CometStreams.None
@@ -241,7 +275,13 @@ internal fun cometStreams(
         val headCount = if (wanted <= COMET_MAX_HEADS) stream.headCount else max(1, stream.headCount * COMET_MAX_HEADS / wanted)
         stream.heads(headCount, spacing, comets, seed, startClearance, endClearance)
     }
-    return CometStreams(heads, streams.size)
+    return CometStreams(heads, streams.size, startClearance, endClearance) {
+        val pieces = sources.mapIndexed { index, piece -> piece.toCometPiece(isSource = true, sends = pairs.any { it.first == index }) } +
+            targets.mapIndexed { index, piece -> piece.toCometPiece(isSource = false, sends = pairs.any { it.second == index }) } +
+            smallSources.map { it.toCometPiece(isSource = true, sends = false) } +
+            smallTargets.map { it.toCometPiece(isSource = false, sends = false) }
+        CometDebugPlan(pieces, matches = pairs.map { (source, target) -> source to sources.size + target })
+    }
 }
 
 /** One stream's two pieces, the axis it slices them along and how many heads it wants. */
@@ -403,6 +443,8 @@ private class Cluster(val nodes: IntArray, val cells: IntArray, private val home
     val firstNode: Int get() = nodes[0]
     val centerX: Float = mean { homeX[it] }
     val centerY: Float = mean { homeY[it] }
+
+    fun toCometPiece(isSource: Boolean, sends: Boolean): CometPiece = CometPiece(nodes, centerX, centerY, isSource, sends)
 
     /** The fewest steps from any of the cluster's cells to a cell [stepsFrom] measured from. */
     fun stepsTo(stepsFrom: IntArray): Int = cells.minOf { stepsFrom[it] }
@@ -636,6 +678,14 @@ internal class Clearance(members: BooleanArray, homeX: FloatArray, homeY: FloatA
      * wide around anywhere in the cell stays in. Never under one spacing.
      */
     fun depthOf(node: Int): Float = max(steps[grid.cellOf[node]] - 0.5f, 1f) * spacing
+
+    /** Runs [action] on every inside cell's center and steps, for [MorpheusGraphCometDebug.clearance]. */
+    fun forEachInsideCell(action: (centerX: Float, centerY: Float, steps: Int) -> Unit) {
+        for (cell in 0 until grid.size) {
+            if (steps[cell] <= 0) continue
+            action(grid.lowX + (cell % grid.columns + 0.5f) * grid.cell, grid.lowY + (cell / grid.columns + 0.5f) * grid.cell, steps[cell])
+        }
+    }
 }
 
 /** A stable random in 0 until 1 for one head's draw, by its two pieces' first nodes, its slice, a [salt] and the layer's [seed]. */
