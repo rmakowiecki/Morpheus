@@ -50,7 +50,7 @@ internal fun LongArray.containsSorted(key: Long): Boolean {
     return false
 }
 
-/** The keys of two ascending arrays, ascending, each once. */
+/** The keys of two ascending arrays, ascending; a key in both is kept once, so inputs without repeats give each key once. */
 internal fun mergeSorted(first: LongArray, second: LongArray): LongArray {
     val merged = LongArray(first.size + second.size)
     var firstIndex = 0

@@ -338,10 +338,10 @@ internal class LayerField(
     private var edgeFades = FloatArray(0)
 
     /** Each drawn edge's own fade, kept while it fades out after leaving the set. */
-    private var fadeAlphas = FloatArray(0)
+    private var ownFadeAlphas = FloatArray(0)
 
     /** Each drawn edge's weight in the running morph, which a morph that stops leaves it at; 1 outside a morph. */
-    private var fadeWeights = FloatArray(0)
+    private var morphEdgeWeights = FloatArray(0)
 
     /** Each drawn edge's index in [topology]'s edges, -1 for one fading out after leaving it. */
     private var edgeTopologyIndices = IntArray(0)
@@ -353,7 +353,7 @@ internal class LayerField(
     private var mergedTopologyIndices = IntArray(0)
 
     /** The edges of the [topology] [updateFadingEdges] last merged. */
-    private var fadedTopologyEdges = LongArray(0)
+    private var mergedTopologyEdges = LongArray(0)
 
     /** Each edge's alpha from length, depth, fade and layer alpha alone, before its dots limit it. */
     private var rawEdgeAlphas = FloatArray(0)
@@ -817,11 +817,7 @@ internal class LayerField(
         val startHot = morph.from.nearestSpec.hotNodeShare
         val endHot = morph.to.nearestSpec.hotNodeShare
         return MorphCache(
-            from = morph.from,
-            to = morph.to,
-            width = width,
-            height = height,
-            nodeCount = count,
+            key = MorphKey(morph.from, morph.to, width, height, count),
             startPresences = scratch(0, 0).copyOf(count),
             endPresences = scratch(0, 1).copyOf(count),
             switches = switchFractions.copyOf(count),
@@ -837,14 +833,20 @@ internal class LayerField(
         val start = cache.startPresences
         val end = cache.endPresences
         for (index in 0 until count) {
-            val switchAt = cache.switches[index]
-            out[index] = if (switchAt.isNaN()) {
-                max(lerp(start[index], end[index], fraction), cache.comets.presenceAt(index, fraction))
-            } else {
-                start[index] + (end[index] - start[index]) * switchProgress(switchAt, fraction)
-            }
+            out[index] = blendedPresence(index, start[index], end[index], cache.switches[index], cache.comets, fraction)
         }
     }
+
+    /**
+     * Node [index]'s presence at [fraction] of a morph that shows it at [start] and [end]: eased through its own switch
+     * at [switchAt], or for a node the same at both ends (NaN), interpolated with [comets]' light on top.
+     */
+    private fun blendedPresence(index: Int, start: Float, end: Float, switchAt: Float, comets: CometTrack, fraction: Float): Float =
+        if (switchAt.isNaN()) {
+            max(lerp(start, end, fraction), comets.presenceAt(index, fraction))
+        } else {
+            start + (end - start) * switchProgress(switchAt, fraction)
+        }
 
     /** 1 for a node whose home is on the surface or near it, fading to 0 as it lies further outside. */
     private fun borderFactor(index: Int, width: Float, height: Float): Float {
@@ -931,7 +933,7 @@ internal class LayerField(
         for (index in 0 until count) {
             val change = end[index] - start[index]
             if (abs(change) <= MORPH_CHANGE_EPSILON) {
-                out[index] = max(lerp(start[index], end[index], morph.fraction), comets.presenceAt(index, morph.fraction))
+                out[index] = blendedPresence(index, start[index], end[index], switchAt = Float.NaN, comets = comets, fraction = morph.fraction)
                 switches?.set(index, Float.NaN)
                 continue
             }
@@ -948,7 +950,7 @@ internal class LayerField(
                 switches[index] = switchAt.coerceIn(0f, 1f)
                 switchArrivals[index] = change > 0f
             }
-            out[index] = start[index] + change * switchProgress(switchAt, morph.fraction)
+            out[index] = blendedPresence(index, start[index], end[index], switchAt, comets, morph.fraction)
         }
     }
 
@@ -982,7 +984,7 @@ internal class LayerField(
             CometStreams.None
         }
         val fillChance = (morph.from.nearestSpec.fillChance + morph.to.nearestSpec.fillChance) / 2f
-        return CometTrack(morph.from, morph.to, width, height, streams, comets.strength, fillChance, comets.spark, nodes, homeX, homeY, cell)
+        return CometTrack(MorphKey(morph.from, morph.to, width, height, count), streams, comets.strength, fillChance, comets.spark, nodes, homeX, homeY, cell)
             .also { cometTracks.store(level, it) }
     }
 
@@ -1057,7 +1059,7 @@ internal class LayerField(
                 mesh.edgeArrivals[unionEdge] -> switchProgress(switchAt, fraction)
                 else -> 1f - switchProgress(switchAt, fraction)
             }
-            fadeWeights[edge] = weight
+            morphEdgeWeights[edge] = weight
             edgeFades[edge] *= weight
         }
     }
@@ -1093,17 +1095,7 @@ internal class LayerField(
 
     /** True if any value the edge filters or [restEdgeAlpha] use changed since the last settle. */
     private fun updateSettledFilters(): Boolean {
-        val filters = floatArrayOf(
-            spec.maxEdgeFactor,
-            spec.minAngleDegrees,
-            spec.edgeKeepChance,
-            spec.repairReach,
-            // Which edges count as visible at rest, and so which ones the settle may lean on.
-            spec.edgeAlpha,
-            spec.alpha,
-            spec.lengthFalloff,
-            spec.depthDimming,
-        )
+        val filters = spec.settledFilterValues()
         if (filters.contentEquals(settledFilters)) return false
         filters.copyInto(settledFilters)
         return true
@@ -1139,8 +1131,8 @@ internal class LayerField(
         val size = max(capacity, edgeKeys.size * 2)
         edgeKeys = edgeKeys.copyOf(size)
         edgeFades = edgeFades.copyOf(size)
-        fadeAlphas = fadeAlphas.copyOf(size)
-        fadeWeights = fadeWeights.copyOf(size)
+        ownFadeAlphas = ownFadeAlphas.copyOf(size)
+        morphEdgeWeights = morphEdgeWeights.copyOf(size)
         edgeTopologyIndices = edgeTopologyIndices.copyOf(size)
         mergedKeys = LongArray(size)
         mergedAlphas = FloatArray(size)
@@ -1157,25 +1149,25 @@ internal class LayerField(
      */
     private fun updateFadingEdges(stepSeconds: Float, isFirstFrame: Boolean, morphing: Boolean) {
         val edges = topology.edges
-        if (morphing && edges === fadedTopologyEdges && edgeCount == edges.size) {
+        if (morphing && edges === mergedTopologyEdges && edgeCount == edges.size) {
             // Mid-morph on the mesh the last frame merged, with nothing left fading out: the drawn edges are the
             // mesh's own, in its order, each at full fade.
-            fadeAlphas.fill(1f, 0, edgeCount)
+            ownFadeAlphas.fill(1f, 0, edgeCount)
             edgeFades.fill(1f, 0, edgeCount)
             return
         }
         if (!morphing) {
             // A morph that stopped leaves each edge where it was, rather than handing it back its full fade.
             for (edge in 0 until edgeCount) {
-                fadeAlphas[edge] *= fadeWeights[edge]
-                fadeWeights[edge] = 1f
+                ownFadeAlphas[edge] *= morphEdgeWeights[edge]
+                morphEdgeWeights[edge] = 1f
             }
         }
         ensureEdgeCapacity(edgeCount + edges.size)
         edgeCount = mergeFadingEdges(edges, fadeStep = stepSeconds / EDGE_FLIP_FADE_SECONDS, isFirstFrame = isFirstFrame, morphing = morphing)
         swapMergedEdges()
-        fadedTopologyEdges = edges
-        fadeAlphas.copyInto(edgeFades, endIndex = edgeCount)
+        mergedTopologyEdges = edges
+        ownFadeAlphas.copyInto(edgeFades, endIndex = edgeCount)
     }
 
     /**
@@ -1190,21 +1182,10 @@ internal class LayerField(
         while (drawn < edgeCount || topologyEdge < edges.size) {
             val takesDrawn = drawn < edgeCount && (topologyEdge == edges.size || edgeKeys[drawn] <= edges[topologyEdge])
             val takesTopology = topologyEdge < edges.size && (drawn == edgeCount || edges[topologyEdge] <= edgeKeys[drawn])
-            val alpha = when {
-                !takesTopology -> fadeAlphas[drawn] - fadeStep
-                // Mid-morph, the morph's own switch fades each edge (see [applyMorphEdgeWeights]); a second,
-                // timed fade on top would hold back every edge the morph brings in for its first moments.
-                morphing -> 1f
-                else -> min(1f, (if (takesDrawn) {
-                    fadeAlphas[drawn]
-                } else if (isFirstFrame) {
-                    1f
-                } else {
-                    0f
-                }) + fadeStep)
-            }
+            val drawnSlot = if (takesDrawn) drawn else -1
+            val alpha = if (takesTopology) fadedInAlpha(drawnSlot, fadeStep, isFirstFrame, morphing) else ownFadeAlphas[drawn] - fadeStep
             if (alpha > 0f) {
-                storeMerged(merged++, alpha, drawn.takeIf { takesDrawn } ?: -1, topologyEdge.takeIf { takesTopology } ?: -1, edges)
+                storeMerged(merged++, alpha, drawnSlot, if (takesTopology) topologyEdge else -1, edges)
             }
             if (takesDrawn) drawn++
             if (takesTopology) topologyEdge++
@@ -1212,18 +1193,31 @@ internal class LayerField(
         return merged
     }
 
+    /**
+     * The fade of an edge in the topology after [fadeStep]: drawn edge [drawn]'s own fade moved on, or for an edge just
+     * arriving (-1), a fade starting from nothing, or full on the first frame.
+     */
+    private fun fadedInAlpha(drawn: Int, fadeStep: Float, isFirstFrame: Boolean, morphing: Boolean): Float = when {
+        // Mid-morph, the morph's own switch fades each edge (see [applyMorphEdgeWeights]); a second,
+        // timed fade on top would hold back every edge the morph brings in for its first moments.
+        morphing -> 1f
+        drawn >= 0 -> min(1f, ownFadeAlphas[drawn] + fadeStep)
+        isFirstFrame -> 1f
+        else -> min(1f, fadeStep)
+    }
+
     /** Writes merged edge [slot] at [alpha]: drawn edge [drawn] and [edges]' [topologyEdge], either -1 where the edge isn't one. */
     private fun storeMerged(slot: Int, alpha: Float, drawn: Int, topologyEdge: Int, edges: LongArray) {
         mergedKeys[slot] = if (topologyEdge >= 0) edges[topologyEdge] else edgeKeys[drawn]
         mergedAlphas[slot] = alpha
-        mergedWeights[slot] = if (drawn >= 0) fadeWeights[drawn] else 1f
+        mergedWeights[slot] = if (drawn >= 0) morphEdgeWeights[drawn] else 1f
         mergedTopologyIndices[slot] = topologyEdge
     }
 
     private fun swapMergedEdges() {
         mergedKeys = edgeKeys.also { edgeKeys = mergedKeys }
-        mergedAlphas = fadeAlphas.also { fadeAlphas = mergedAlphas }
-        mergedWeights = fadeWeights.also { fadeWeights = mergedWeights }
+        mergedAlphas = ownFadeAlphas.also { ownFadeAlphas = mergedAlphas }
+        mergedWeights = morphEdgeWeights.also { morphEdgeWeights = mergedWeights }
         mergedTopologyIndices = edgeTopologyIndices.also { edgeTopologyIndices = mergedTopologyIndices }
     }
 
@@ -1488,15 +1482,20 @@ private fun rollWeight(roll: Float, share: Float): Float {
 
 /** Whether a [EdgeRule.FixedTriangulation] settle under this spec and under [other] keeps the same edges: every value it reads matches. */
 private fun MorpheusGraphLayerSpec.settlesLike(other: MorpheusGraphLayerSpec): Boolean =
-    maxEdgeFactor == other.maxEdgeFactor &&
-        minAngleDegrees == other.minAngleDegrees &&
-        edgeKeepChance == other.edgeKeepChance &&
-        repairReach == other.repairReach &&
-        edgeAlpha == other.edgeAlpha &&
-        alpha == other.alpha &&
-        lengthFalloff == other.lengthFalloff &&
-        depthDimming == other.depthDimming &&
-        strictTriangles == other.strictTriangles
+    strictTriangles == other.strictTriangles && settledFilterValues().contentEquals(other.settledFilterValues())
+
+/** Every value the edge filters and [restEdgeAlpha] read, [MorpheusGraphLayerSpec.strictTriangles] aside, in a fixed order. */
+private fun MorpheusGraphLayerSpec.settledFilterValues(): FloatArray = floatArrayOf(
+    maxEdgeFactor,
+    minAngleDegrees,
+    edgeKeepChance,
+    repairReach,
+    // Which edges count as visible at rest, and so which ones the settle may lean on.
+    edgeAlpha,
+    alpha,
+    lengthFalloff,
+    depthDimming,
+)
 
 /** A stable seed for one grid cell, so a cell's node is the same whenever and in whatever order it is created. */
 private fun cellSeed(column: Int, row: Int, seed: Int): Int {
@@ -1602,19 +1601,14 @@ private class ClosenessRange {
 }
 
 /**
- * Everything about one morph that doesn't move with its fraction, for the morph from [from] to [to] on a
- * [width] × [height] surface over [nodeCount] nodes: each node's presence at both ends, before the border
- * fade, its switch fraction (NaN for a node the same at both ends) and direction, its hot weight at both ends,
+ * Everything about one morph that doesn't move with its fraction, for the morph, surface and nodes its [key]
+ * names: each node's presence at both ends, before the border fade, its switch fraction (NaN for a node the same at both ends) and direction, its hot weight at both ends,
  * the top level's comets, and the meshes once built. Every level of a nested morph below the top is frozen
  * for the whole outer morph, so the two ends cover them all. A frame part way through only blends these.
  */
 @Suppress("LongParameterList") // The morph's key, then each per-node array it keeps.
 private class MorphCache(
-    private val from: LayerShape,
-    private val to: LayerShape,
-    private val width: Float,
-    private val height: Float,
-    private val nodeCount: Int,
+    private val key: MorphKey,
     val startPresences: FloatArray,
     val endPresences: FloatArray,
     val switches: FloatArray,
@@ -1626,8 +1620,7 @@ private class MorphCache(
     /** The morph's meshes, built on its first frame under [EdgeRule.FixedTriangulation]; null under any other rule. */
     var mesh: MorphMesh? = null
 
-    fun isFor(morph: LayerShape.Morph, width: Float, height: Float, nodeCount: Int): Boolean =
-        morph.from == from && morph.to == to && width == this.width && height == this.height && nodeCount == this.nodeCount
+    fun isFor(morph: LayerShape.Morph, width: Float, height: Float, nodeCount: Int): Boolean = key.isFor(morph, width, height, nodeCount)
 
     /**
      * The mesh settled for the end [shape] is, start or end, on the same surface and nodes; null for any other shape,
@@ -1635,13 +1628,22 @@ private class MorphCache(
      */
     fun endMeshFor(shape: LayerShape, width: Float, height: Float, nodeCount: Int): MeshTopology? {
         val mesh = mesh ?: return null
-        if (width != this.width || height != this.height || nodeCount != this.nodeCount) return null
+        if (!key.isOn(width, height, nodeCount)) return null
         return when (shape) {
-            to -> mesh.end
-            from -> mesh.start
+            key.to -> mesh.end
+            key.from -> mesh.start
             else -> null
         }
     }
+}
+
+/** The morph from [from] to [to] on a [width] × [height] surface over [nodeCount] nodes: what [MorphCache] and [CometTrack] are kept for. */
+private class MorphKey(val from: LayerShape, val to: LayerShape, private val width: Float, private val height: Float, private val nodeCount: Int) {
+    fun isFor(morph: LayerShape.Morph, width: Float, height: Float, nodeCount: Int): Boolean =
+        morph.from == from && morph.to == to && isOn(width, height, nodeCount)
+
+    /** Whether the surface and node pool are this key's, whatever the morph. */
+    fun isOn(width: Float, height: Float, nodeCount: Int): Boolean = width == this.width && height == this.height && nodeCount == this.nodeCount
 }
 
 /**
@@ -1832,10 +1834,7 @@ private class TransitMesh(val topology: MeshTopology, val nodes: BooleanArray)
  */
 @Suppress("LongParameterList") // One morph's ends and heads, and the node pool they light.
 private class CometTrack(
-    private val from: LayerShape,
-    private val to: LayerShape,
-    private val width: Float,
-    private val height: Float,
+    private val key: MorphKey,
     val streams: CometStreams,
     strength: Float,
     fillChance: Float,
@@ -1876,8 +1875,7 @@ private class CometTrack(
         return peaks[node] * cometLight(lightsAt[node], darkensAt[node], fraction)
     }
 
-    fun isFor(morph: LayerShape.Morph, width: Float, height: Float, nodeCount: Int): Boolean =
-        morph.from == from && morph.to == to && width == this.width && height == this.height && nodeCount == this.nodeCount
+    fun isFor(morph: LayerShape.Morph, width: Float, height: Float, nodeCount: Int): Boolean = key.isFor(morph, width, height, nodeCount)
 
     /**
      * Each head visits the nodes along its swept path only, and widens the span each one is lit over to the
