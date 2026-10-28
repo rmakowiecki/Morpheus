@@ -56,7 +56,9 @@ private const val DRIFT_OCTAVE_RATIO_FINE = 2.61f
 
 private const val EDGE_PULSE_SPEED = 1.6f
 private const val EDGE_PULSE_FLOOR = 0.4f
-private const val EDGE_MIN_VISIBLE_ALPHA = 0.004f
+
+/** Edges and dots fainter than this aren't drawn. */
+internal const val MIN_VISIBLE_ALPHA = 0.004f
 
 /** How long an edge takes to fade fully in or out when it enters or leaves the edge set, so nothing pops. */
 private const val EDGE_FLIP_FADE_SECONDS = 0.6f
@@ -424,6 +426,9 @@ internal class LayerField(
      */
     private val layerPaint by lazy(LazyThreadSafetyMode.NONE) { Paint() }
 
+    /** Reused each frame for [MorpheusGraphDrawingApproach.PointBatches]. */
+    private val pointBatches = PointBatches()
+
     /** Edge alpha of node [index]'s second-brightest edge, as of the last [advance]. */
     internal fun secondEdgeAlpha(index: Int): Float = secondEdgeAlphas[index]
 
@@ -457,6 +462,46 @@ internal class LayerField(
 
     /** Node [index]'s rest position, which never changes once the node exists. */
     internal fun nodeHome(index: Int): Offset = Offset(homeX[index], homeY[index])
+
+    /** Node [index]'s position this frame, drift and wave included, as of the last [advance]. */
+    internal fun nodePosition(index: Int): Offset = Offset(positionsX[index], positionsY[index])
+
+    /** Node [index]'s dot radius as [MorpheusGraphDrawingApproach.PerElement] draws it, as of the last [advance]. */
+    internal fun dotRadius(index: Int): Float {
+        val depthShrink = 1f - DEPTH_SIZE_SHRINK * spec.depthDimming * (1f - nodes[index].depth)
+        val hotScale = lerp(1f, HOT_NODE_SCALE, hotWeights[index])
+        return spec.nodeSizeDp * pxPerDp * sizeFactor(index) * hotScale * depthShrink
+    }
+
+    /** The smallest dot radius [spec] allows: the smallest size roll, cold, at the far end of the depth range. */
+    internal val smallestDotRadius: Float
+        get() = spec.nodeSizeDp * pxPerDp * max(NODE_SIZE_FLOOR, 1f - spec.nodeSizeVariance) * (1f - DEPTH_SIZE_SHRINK * spec.depthDimming)
+
+    /** The largest dot radius [spec] allows: the largest size roll, fully hot, at the near end of the depth range. */
+    internal val largestDotRadius: Float
+        get() = spec.nodeSizeDp * pxPerDp * (1f + spec.nodeSizeVariance) * HOT_NODE_SCALE
+
+    /** The width every edge is drawn at. */
+    internal val edgeStrokeWidth: Float
+        get() = max(1f, spec.strokeWidthDp * pxPerDp)
+
+    /** Calls [action] with each edge [draw] paints at [timeSeconds]: its alpha and its two nodes. */
+    internal inline fun forEachVisibleEdge(timeSeconds: Float, action: (alpha: Float, start: Int, end: Int) -> Unit) {
+        for (edge in 0 until drawnEdgeCount) {
+            val alpha = drawnEdgeAlpha(edge, timeSeconds)
+            if (alpha < MIN_VISIBLE_ALPHA) continue
+            val key = drawnEdgeKey(edge)
+            action(alpha, edgeStart(key), edgeEnd(key))
+        }
+    }
+
+    /** Calls [action] with each node whose dot [draw] paints, and its alpha. */
+    internal inline fun forEachVisibleDot(action: (node: Int, alpha: Float) -> Unit) {
+        for (node in 0 until nodeCount) {
+            val alpha = nodeAlpha(node)
+            if (alpha >= MIN_VISIBLE_ALPHA) action(node, alpha)
+        }
+    }
 
     /** How many edges [draw] paints, fading-out ones included, as of the last [advance]. */
     internal val drawnEdgeCount: Int get() = edgeCount
@@ -532,8 +577,9 @@ internal class LayerField(
      * [BlendMode.SrcAtop] blends each overlay over it the same way. The offscreen layer is composited
      * at the fill's [LayerFill.layerAlpha].
      *
-     * [probe] times each step and counts what was drawn, and its switches skip steps entirely. [cometDebug]
-     * picks the overlays the running morph's comets draw over the layer.
+     * [probe] times each step and counts what was drawn, and its switches skip steps entirely; its stats'
+     * [MorpheusGraphFrameStats.drawingApproach] picks how edges and dots are drawn. [cometDebug] picks the
+     * overlays the running morph's comets draw over the layer.
      */
     fun draw(
         scope: DrawScope,
@@ -550,10 +596,17 @@ internal class LayerField(
         // The save and its restore count as one draw call.
         var drawCalls = 1
         probe?.lap(FramePhase.Composite)
-        val drawnEdges = probe.timed(FramePhase.Edges, skip = probe?.stats?.skipEdges == true) { drawEdges(color, timeSeconds) }
+        val batches = pointBatches.takeIf { probe?.stats?.drawingApproach == MorpheusGraphDrawingApproach.PointBatches }
+        batches?.resetDrawCalls()
+        val drawnEdges = probe.timed(FramePhase.Edges, skip = probe?.stats?.skipEdges == true) {
+            if (batches != null) drawEdgeBatches(batches, color, timeSeconds) else drawEdges(color, timeSeconds)
+        }
         val drawnHalos = probe.timed(FramePhase.Halos, skip = probe?.stats?.skipHalos == true) { drawGlows(halos) }
-        val drawnDots = probe.timed(FramePhase.Dots, skip = probe?.stats?.skipDots == true) { drawCores(color) }
-        drawCalls += drawnEdges + drawnHalos + drawnDots * DRAW_CALLS_PER_DOT
+        val drawnDots = probe.timed(FramePhase.Dots, skip = probe?.stats?.skipDots == true) {
+            if (batches != null) drawDotBatches(batches, color) else drawCores(color)
+        }
+        // A skipped pass made no calls, batched or not.
+        drawCalls += drawnHalos + (batches?.drawCalls ?: (drawnEdges + drawnDots * DRAW_CALLS_PER_DOT))
         if (fill is LayerFill.Masked) {
             drawCalls += probe.timed(FramePhase.Fill, skip = probe?.stats?.skipFillRecolor == true) {
                 drawRect(brush = fill.base, blendMode = BlendMode.SrcIn)
@@ -1358,20 +1411,10 @@ internal class LayerField(
 
     /** Returns how many edges it drew. */
     private fun DrawScope.drawEdges(color: Color, timeSeconds: Float): Int {
-        val strokeWidth = max(1f, spec.strokeWidthDp * pxPerDp)
+        val strokeWidth = edgeStrokeWidth
         var drawn = 0
-        for (edge in 0 until edgeCount) {
-            val key = edgeKeys[edge]
-            val start = edgeStart(key)
-            val end = edgeEnd(key)
-            val alpha = drawnEdgeAlpha(edge, timeSeconds)
-            if (alpha < EDGE_MIN_VISIBLE_ALPHA) continue
-            drawLine(
-                color = color.copy(alpha = alpha),
-                start = Offset(positionsX[start], positionsY[start]),
-                end = Offset(positionsX[end], positionsY[end]),
-                strokeWidth = strokeWidth,
-            )
+        forEachVisibleEdge(timeSeconds) { alpha, start, end ->
+            drawLine(color = color.copy(alpha = alpha), start = nodePosition(start), end = nodePosition(end), strokeWidth = strokeWidth)
             drawn++
         }
         return drawn
@@ -1400,16 +1443,49 @@ internal class LayerField(
      */
     private fun DrawScope.drawCores(color: Color): Int {
         var drawn = 0
-        for (index in 0 until count) {
-            if (nodeAlphas[index] < EDGE_MIN_VISIBLE_ALPHA) continue
-            val depthShrink = 1f - DEPTH_SIZE_SHRINK * spec.depthDimming * (1f - nodes[index].depth)
-            val hotScale = lerp(1f, HOT_NODE_SCALE, hotWeights[index])
-            val radius = spec.nodeSizeDp * pxPerDp * sizeFactor(index) * hotScale * depthShrink
-            val center = Offset(positionsX[index], positionsY[index])
+        forEachVisibleDot { node, alpha ->
+            val radius = dotRadius(node)
+            val center = nodePosition(node)
             drawCircle(color = color, radius = radius, center = center, blendMode = BlendMode.DstOut)
-            drawCircle(color = color.copy(alpha = nodeAlphas[index]), radius = radius, center = center, blendMode = BlendMode.Plus)
+            drawCircle(color = color.copy(alpha = alpha), radius = radius, center = center, blendMode = BlendMode.Plus)
             drawn++
         }
+        return drawn
+    }
+
+    /** Sorts the edges [draw] paints at [timeSeconds] into [batches] by alpha level; returns how many. */
+    internal fun fillEdgeBatches(batches: PointBatches, timeSeconds: Float): Int {
+        batches.clearEdges()
+        var sorted = 0
+        forEachVisibleEdge(timeSeconds) { alpha, start, end ->
+            batches.addEdge(positionsX[start], positionsY[start], positionsX[end], positionsY[end], alpha)
+            sorted++
+        }
+        return sorted
+    }
+
+    /** Sorts the dots [draw] paints into [batches] by size bin and alpha bucket; returns how many. */
+    internal fun fillDotBatches(batches: PointBatches): Int {
+        batches.clearDots(smallestDotRadius, largestDotRadius)
+        var sorted = 0
+        forEachVisibleDot { node, alpha ->
+            batches.addDot(positionsX[node], positionsY[node], dotRadius(node), alpha)
+            sorted++
+        }
+        return sorted
+    }
+
+    /** [drawEdges] in one call per alpha level, in level order. Returns how many edges it drew. */
+    private fun DrawScope.drawEdgeBatches(batches: PointBatches, color: Color, timeSeconds: Float): Int {
+        val drawn = fillEdgeBatches(batches, timeSeconds)
+        drawIntoCanvas { canvas -> batches.drawEdges(canvas, color, edgeStrokeWidth) }
+        return drawn
+    }
+
+    /** [drawCores] in batches; see [PointBatches]. Returns how many dots it drew. */
+    private fun DrawScope.drawDotBatches(batches: PointBatches, color: Color): Int {
+        val drawn = fillDotBatches(batches)
+        drawIntoCanvas { canvas -> batches.drawDots(canvas, color) }
         return drawn
     }
 

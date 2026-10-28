@@ -134,6 +134,29 @@ internal class GalleryLoop(private val canvas: BenchmarkCanvas = BenchmarkCanvas
     }
 }
 
+/**
+ * Replays every [stride]th of a loop's [frames], 60 a second, on the recipe canvas through one [MorpheusGraphHolder],
+ * the morph at each frame's time from [morphAt]; calls [action] with each replayed frame's fields once advanced.
+ */
+internal inline fun replayLoopFields(
+    frames: Int,
+    stride: Int = 1,
+    morphAt: (time: Float) -> MorpheusGraphMorph,
+    action: (time: Float, morph: MorpheusGraphMorph, layers: List<MorphLayer>, fields: List<LayerField>) -> Unit,
+) {
+    val canvas = BenchmarkCanvas.Recipe
+    val holder = MorpheusGraphHolder()
+    for (frame in 0 until frames step stride) {
+        val time = frame * SHOWCASE_FRAME_SECONDS
+        val morph = morphAt(time)
+        val layers = holder.layersFor(morph, GalleryLoop.FILL)
+        val fields = holder.fieldsFor(layers, canvas.referenceSize, canvas.pxPerDp)
+        fields.forEach { it.advance(time, canvas.width, canvas.height) }
+        action(time, morph, layers, fields)
+        holder.endFrame()
+    }
+}
+
 /** These frames' mean, phase by phase: one frame of [GalleryLoop.ADVANCE_PHASES]' nanoseconds. */
 internal fun List<LongArray>.meanFrame(): LongArray = LongArray(GalleryLoop.ADVANCE_PHASES.size) { phase -> sumOf { it[phase] } / size }
 

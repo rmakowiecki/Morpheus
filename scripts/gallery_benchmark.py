@@ -7,11 +7,13 @@ each half-second reading to the console; `--sample comet-playground` opens the h
 instead, through `&sample=`. Chrome writes the console to stderr; this collects the readings over whole
 loops of the sample and prints, per loop and as the median of the loops, the frame, graphs
 and phase-table totals in milliseconds per frame. `--skip` turns skip switches on through `&skip=`, for the
-recipe's skip rows: one row per run.
+recipe's skip rows: one row per run. `--drawing point-batches` draws in point batches through `&drawing=`, to
+compare against the default per-element drawing in the same build.
 
 A Chrome window opens for the run. Leave it in front and the machine otherwise idle.
 
-    python3 scripts/gallery_benchmark.py [--chrome PATH] [--sample hero|comet-playground] [--loops 3] [--skip edges,halos,dots,fill|all] [--skip-build]
+    python3 scripts/gallery_benchmark.py [--chrome PATH] [--sample hero|comet-playground] [--loops 3] [--skip edges,halos,dots,fill|all]
+        [--drawing per-element|point-batches] [--skip-build]
 """
 
 import argparse
@@ -40,6 +42,7 @@ STALL_SECONDS = 5.0
 COLUMNS = ["frame", "graphs", "shape", "mesh", "edge-fades", "alpha-settle", "fill", "edges", "halos", "dots", "composite"]
 FLAGS = ["capped", "scaled", "switches"]
 SKIPS = ["edges", "halos", "dots", "fill"]
+DRAWINGS = ["per-element", "point-batches"]
 MAC_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
 
@@ -70,7 +73,7 @@ def parse(line):
     reading = {}
     for field in line[start + len(PREFIX):].split('"')[0].split():
         key, _, value = field.partition("=")
-        reading[key] = value == "true" if key in FLAGS else float(value)
+        reading[key] = value if key == "drawing" else (value == "true" if key in FLAGS else float(value))
     return reading
 
 
@@ -149,13 +152,17 @@ def completed_loops(readings, loop_seconds):
     return int(readings[-1][0] // loop_seconds) if readings else 0
 
 
-def report(readings, loops, loop_seconds, skips):
+def report(readings, loops, loop_seconds, skips, drawing):
     """
     Warns about readings that aren't benchmark numbers, then prints each column's mean per loop and the median of the loops.
     With [skips], every reading must show its switches on; one that doesn't means the bundle ignored `&skip=`, so it exits.
+    Every reading must show the [drawing] approach; one that doesn't means the bundle ignored `&drawing=`, so it exits.
     """
     if skips and not all(reading["switches"] for _, reading in readings):
         sys.exit(f"asked for skip {','.join(skips)}, but readings show every switch off: does the bundle read &skip=?")
+    drawings_seen = sorted({reading.get("drawing", "missing") for _, reading in readings})
+    if drawings_seen != [drawing]:
+        sys.exit(f"asked for drawing {drawing}, but readings show {', '.join(drawings_seen)}: does the bundle read &drawing=?")
     flags = [flag for flag in FLAGS if not (skips and flag == "switches")]
     flagged = [reading for _, reading in readings if any(reading[flag] for flag in flags)]
     if flagged:
@@ -174,7 +181,7 @@ def report(readings, loops, loop_seconds, skips):
     print("ms per frame".ljust(14) + "".join(column.rjust(width) for column in COLUMNS))
     for index, (count, means) in enumerate(per_loop):
         print(f"loop {index + 1} ({count:2d})".ljust(14) + "".join(f"{means[column]:.2f}".rjust(width) for column in COLUMNS))
-    counts = ["nodes", "visible-nodes", "drawn-edges"]
+    counts = ["nodes", "visible-nodes", "drawn-edges", "draw-calls"]
     print("counts per frame, mean: " + ", ".join(f"{count} {statistics.fmean(reading[count] for _, reading in readings):.0f}" for count in counts), file=sys.stderr)
     print("median".ljust(14) + "".join(f"{statistics.median(loop_means[column] for _, loop_means in per_loop):.2f}".rjust(width) for column in COLUMNS))
 
@@ -186,6 +193,7 @@ def main():
     parser.add_argument("--sample", choices=list(LOOP_SECONDS), default="hero", help="the sample to measure (default: hero)")
     parser.add_argument("--loops", type=positive_int, default=3, help="whole loops of the sample to measure, 10 s for the hero and 12.75 s for the playground (default: 3)")
     parser.add_argument("--skip", type=skip_list, default=[], help=f"skip switches to turn on, comma-separated from {', '.join(SKIPS)}, or all (default: none)")
+    parser.add_argument("--drawing", choices=DRAWINGS, default=DRAWINGS[0], help="how layers draw their edges and dots (default: per-element)")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--skip-build", action="store_true", help="serve the bundle as last built")
     args = parser.parse_args()
@@ -195,13 +203,14 @@ def main():
     print(f"browser: {version}", file=sys.stderr)
     print(f"sample: {args.sample}", file=sys.stderr)
     print(f"skip switches on: {', '.join(args.skip) if args.skip else 'none'}", file=sys.stderr)
-    url = f"http://127.0.0.1:{args.port}/?benchmark&sample={args.sample}" + (f"&skip={','.join(args.skip)}" if args.skip else "")
+    print(f"drawing: {args.drawing}", file=sys.stderr)
+    url = f"http://127.0.0.1:{args.port}/?benchmark&sample={args.sample}&drawing={args.drawing}" + (f"&skip={','.join(args.skip)}" if args.skip else "")
     server = serve(BUNDLE, args.port)
     try:
         readings = collect(args.chrome, url, args.loops, LOOP_SECONDS[args.sample])
     finally:
         server.shutdown()
-    report(readings, args.loops, LOOP_SECONDS[args.sample], args.skip)
+    report(readings, args.loops, LOOP_SECONDS[args.sample], args.skip, args.drawing)
 
 
 def positive_int(text):

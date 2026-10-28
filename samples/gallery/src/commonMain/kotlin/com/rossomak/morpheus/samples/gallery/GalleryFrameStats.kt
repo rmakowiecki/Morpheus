@@ -37,6 +37,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.rossomak.morpheus.ExperimentalMorpheusGraphApi
+import com.rossomak.morpheus.MorpheusGraphDrawingApproach
 import com.rossomak.morpheus.MorpheusGraphFrameBreakdown
 import com.rossomak.morpheus.MorpheusGraphFrameStats
 import com.rossomak.morpheus.MorpheusGraphLayerBreakdown
@@ -70,10 +71,10 @@ internal fun RecordFrameIntervals(stats: MorpheusGraphFrameStats) {
 }
 
 /**
- * `frame 9.8 ms · graphs 6.1 ms`, marked when a debug switch is on, when the frame interval sits at a display
- * refresh interval ("capped": the frame-rate cap hides the cost) and when the preview [canvasScaled]. It is
- * the open or closed state of the frame stats pane, as Tune is of the tuner's, and dims while the reading
- * is from before the last reset.
+ * `frame 9.8 ms · graphs 6.1 ms`, with the drawing approach when it isn't the default, marked when a debug
+ * switch is on, when the frame interval sits at a display refresh interval ("capped": the frame-rate cap hides
+ * the cost) and when the preview [canvasScaled]. It is the open or closed state of the frame stats pane, as
+ * Tune is of the tuner's, and dims while the reading is from before the last reset.
  */
 @Composable
 internal fun FrameStatsButton(frameStats: GalleryFrameStats, canvasScaled: Boolean, modifier: Modifier = Modifier) {
@@ -83,7 +84,8 @@ internal fun FrameStatsButton(frameStats: GalleryFrameStats, canvasScaled: Boole
         if (isCapped(frameMillis = stats.frameMillis, drawMillis = stats.drawMillis)) add("capped")
         if (canvasScaled) add("canvas scaled")
     }
-    val readout = if (stats.frameMillis <= 0f) "frame – ms · graphs – ms" else "frame ${stats.frameMillis.toFixed(1)} ms · graphs ${stats.drawMillis.toFixed(1)} ms"
+    val millis = if (stats.frameMillis <= 0f) "frame – ms · graphs – ms" else "frame ${stats.frameMillis.toFixed(1)} ms · graphs ${stats.drawMillis.toFixed(1)} ms"
+    val readout = if (stats.drawingApproach == MorpheusGraphDrawingApproach.PerElement) millis else "$millis · ${stats.drawingApproach.label.lowercase()}"
     val colors = if (frameStats.isBreakdownExpanded) ButtonDefaults.filledTonalButtonColors() else ButtonDefaults.outlinedButtonColors()
     OutlinedButton(
         onClick = { frameStats.isBreakdownExpanded = !frameStats.isBreakdownExpanded },
@@ -100,7 +102,7 @@ internal fun FrameStatsButton(frameStats: GalleryFrameStats, canvasScaled: Boole
 
 /**
  * The breakdown of the last published window: per phase and count, the total and then one column per spec layer,
- * back to front; then the debug switches. At most [maxHeight] tall, scrolling inside itself both ways, so it
+ * back to front; then the drawing approach and the debug switches. At most [maxHeight] tall, scrolling inside itself both ways, so it
  * never scrolls the page. Dims while the reading is from before the last reset.
  */
 @Composable
@@ -130,6 +132,7 @@ internal fun FrameBreakdownPanel(
             Column(modifier = Modifier.horizontalScroll(rememberScrollState())) {
                 BreakdownTable(breakdown)
             }
+            DrawingApproaches(stats)
             DebugSwitches(stats)
         }
     }
@@ -173,6 +176,20 @@ private fun TableRow(label: String, cells: List<String>, isHeader: Boolean = fal
         }
     }
 }
+
+/** One chip per drawing approach, the one in use selected. */
+@Composable
+private fun DrawingApproaches(stats: MorpheusGraphFrameStats) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        MorpheusGraphDrawingApproach.entries.forEach { approach ->
+            FilterChip(selected = stats.drawingApproach == approach, onClick = { stats.drawingApproach = approach }, label = { Text(approach.label) })
+        }
+    }
+}
+
+/** "Per element", from the approach's [parameterName]. */
+private val MorpheusGraphDrawingApproach.label: String
+    get() = parameterName.replace('-', ' ').replaceFirstChar(Char::uppercase)
 
 @Composable
 private fun DebugSwitches(stats: MorpheusGraphFrameStats) {
