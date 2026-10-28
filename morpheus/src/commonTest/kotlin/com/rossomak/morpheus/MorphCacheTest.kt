@@ -27,21 +27,33 @@ class MorphCacheTest {
     }
 
     @Test
-    fun `an interrupted morph draws the same with the cache on and off`() {
-        val first = MorpheusGraphPresets.MorphFamily.uniformField
-        val second = MorpheusGraphPresets.MorphFamily.cornerBloom
-        val interrupted = MorpheusGraphMorph(first, second, INTERRUPT_FRACTION)
-        val retargeted = MorpheusGraphMorph(lerp(first, second, INTERRUPT_FRACTION), MorpheusGraphPresets.MorphFamily.ribbon, 0f, origin = interrupted)
+    fun `an interrupted morph draws the same with the cache on and off, across the moment it is interrupted`() {
+        val family = MorpheusGraphPresets.MorphFamily
+        val mismatches = listOf(
+            "uniform field to corner bloom, then ribbon" to Triple(family.uniformField, family.cornerBloom, family.ribbon),
+            "pills to ribbons, then a bar" to Triple(heroPills, heroRibbons, heroBar),
+        ).flatMap { (name, shapes) ->
+            val (interrupted, retargeted) = interruptedMorph(shapes.first, shapes.second, shapes.third)
+            val frames = (0..4).map { interrupted.copy(fraction = it / 10f) } + forwardAndBack.map { retargeted.copy(fraction = it) }
+            compare(name, frames)
+        }
 
-        compare("interrupted", forwardAndBack.map { retargeted.copy(fraction = it) }).shouldBeEmpty()
+        mismatches.shouldBeEmpty()
     }
 
     @Test
-    fun `a morph left part way draws the same with the cache on and off`() {
-        val morph = MorpheusGraphMorph(heroPills, heroRibbons, 0f)
-        val leftPartWay = (0..6).map { morph.copy(fraction = it / 10f) } + List(LEFT_FRAMES) { MorpheusGraphMorph(heroPills, heroPills, 0f) }
+    fun `a morph left part way, forward or back, draws the same with the cache on and off`() {
+        val forward = MorpheusGraphMorph(heroPills, heroRibbons, 0f)
+        val back = MorpheusGraphMorph(heroRibbons, heroPills, 0f)
+        val leftForward = (0..6).map { forward.copy(fraction = it / 10f) }
+        val leftBack = (10 downTo 4).map { forward.copy(fraction = it / 10f) }
+        val reversedLeft = (0..6).map { back.copy(fraction = it / 10f) }
+        val heldOnBar = List(LEFT_FRAMES) { MorpheusGraphMorph(heroBar, heroBar, 0f) }
 
-        compare("left at 0.6", leftPartWay).shouldBeEmpty()
+        val mismatches = listOf("left at 0.6" to leftForward, "scrubbed back to 0.4" to leftBack, "the way back left at 0.6" to reversedLeft)
+            .flatMap { (name, frames) -> compare(name, frames + heldOnBar) }
+
+        mismatches.shouldBeEmpty()
     }
 
     @Test
@@ -58,20 +70,48 @@ class MorphCacheTest {
     fun `either end of a morph reuses the mesh it settled for that end, the mesh a still frame there settles`() {
         val morph = MorpheusGraphMorph(heroPills, heroRibbons, 0f)
 
-        val mismatches = listOf(1f to heroRibbons, 0f to heroPills).flatMap { (fraction, endSpec) ->
+        val mismatches = listOf(1f, 0f).flatMap { fraction ->
             val run = Run(cachesMorphs = true).also { it.advance(morph.copy(fraction = 0.5f)) }
             val settlesBefore = run.fields.mapValues { it.value.settleCount }
             run.advance(morph.copy(fraction = fraction))
-            val still = Run(cachesMorphs = true).also { it.advance(MorpheusGraphMorph(endSpec, endSpec, 0f)) }
+            val still = Run(cachesMorphs = true).also { it.advance(morph.copy(fraction = fraction)) }
             run.fields.flatMap { (key, field) ->
-                listOfNotNull(
-                    "$key at $fraction settled again".takeIf { field.settleCount != settlesBefore.getValue(key) },
-                    "$key at $fraction differs from a still frame".takeIf { !field.topology.edges.contentEquals(still.fields.getValue(key).topology.edges) },
-                )
+                listOfNotNull("$key at $fraction settled again".takeIf { field.settleCount != settlesBefore.getValue(key) }) +
+                    meshDifferences("$key at $fraction", field, still.fields.getValue(key))
             }
         }
 
         mismatches.shouldBeEmpty()
+    }
+
+    @Test
+    fun `a retargeted morph resting at its start, a frozen morph with its comets, draws the mesh a still frame there settles`() {
+        val (_, retargeted) = interruptedMorph(heroPills, heroRibbons, heroBar)
+        val run = Run(cachesMorphs = true).also { it.advance(retargeted.copy(fraction = 0.5f)) }
+
+        run.advance(retargeted.copy(fraction = 0f))
+        val still = Run(cachesMorphs = true).also { it.advance(retargeted.copy(fraction = 0f)) }
+
+        run.fields.flatMap { (key, field) -> meshDifferences("$key at 0", field, still.fields.getValue(key)) }.shouldBeEmpty()
+    }
+
+    /** The morph from [first] towards [second] interrupted at [INTERRUPT_FRACTION], and the morph from there to [third] that takes over. */
+    private fun interruptedMorph(first: MorpheusGraphSpec, second: MorpheusGraphSpec, third: MorpheusGraphSpec): Pair<MorpheusGraphMorph, MorpheusGraphMorph> {
+        val interrupted = MorpheusGraphMorph(first, second, INTERRUPT_FRACTION)
+        return interrupted to MorpheusGraphMorph(lerp(first, second, INTERRUPT_FRACTION), third, 0f, origin = interrupted)
+    }
+
+    /** Every way [field]'s settled mesh differs from [still]'s: its edges, its nodes and what the settle repaired or pruned. */
+    private fun meshDifferences(label: String, field: LayerField, still: LayerField): List<String> {
+        val mesh = field.topology
+        val stillMesh = still.topology
+        return listOfNotNull(
+            "$label: edges differ from a still frame".takeIf { !mesh.edges.contentEquals(stillMesh.edges) },
+            "$label: live nodes differ from a still frame".takeIf { !mesh.alive.contentEquals(stillMesh.alive) },
+            "$label: repairs differ from a still frame".takeIf { mesh.repairedEdgeCount != stillMesh.repairedEdgeCount },
+            "$label: pruned nodes differ from a still frame".takeIf { field.prunedNodeCount != still.prunedNodeCount },
+            "$label: convergence differs from a still frame".takeIf { mesh.converged != stillMesh.converged },
+        )
     }
 
     /** Every difference between [frames] drawn with the cache on and with it off: presences, hot weights and edges. */
@@ -121,6 +161,11 @@ class MorphCacheTest {
 
     private companion object {
         val TestFill = MorpheusGraphFill.Solid(Color.White)
+
+        /** A third shape over the showcase's meshes, so a morph can leave both its ends for one neither settled. */
+        val heroBar = heroPills.copy(
+            layers = listOf(heroGhost, heroFront.copy(shapes = listOf(ShapePrimitive.Pill(x = 0.5f, y = 0.5f, length = 0.6f, thickness = 0.16f, rotation = 0f)))),
+        )
         val forwardAndBack = (0..10).map { it / 10f }.let { forward -> forward + forward.reversed() }
         const val PX_PER_DP = 2f
         const val WIDTH = 1280f

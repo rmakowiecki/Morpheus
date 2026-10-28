@@ -312,7 +312,11 @@ internal class LayerField(
     /** Whether the last [advance] was part way through a morph. */
     private var wasMidMorph = false
 
-    /** False only in tests: then every frame part way through a morph evaluates both ends' shapes again, as without [morphCache]. */
+    /**
+     * False only in tests: then every frame part way through a morph evaluates both ends' shapes and each node's hot
+     * weight again, and a still frame at a morph's end settles its mesh again, as without [morphCache]. The morph's
+     * meshes are built once either way.
+     */
     internal var cachesMorphs = true
 
     /** The memory every settle of this layer reuses. */
@@ -762,8 +766,8 @@ internal class LayerField(
      * or left the mesh.
      */
     private fun updatePresences(morph: LayerShape.Morph?, width: Float, height: Float): Boolean {
-        val cache = morph?.let { morphCacheFor(it, width, height) }
-        if (morph != null && cache != null && cachesMorphs) {
+        val cache = morph?.takeIf { cachesMorphs }?.let { morphCacheFor(it, width, height) }
+        if (morph != null && cache != null) {
             blendCachedEnds(cache, morph.fraction, presences)
         } else {
             evaluateShape(shape, level = 0, width = width, height = height, out = presences)
@@ -773,7 +777,7 @@ internal class LayerField(
         for (index in 0 until count) {
             val presence = presences[index] * borderFactor(index, width, height)
             presences[index] = presence
-            hotWeights[index] = hotWeight(index, cache, morph?.fraction ?: 0f)
+            hotWeights[index] = hotWeight(index, morph, cache)
             val present = presence >= if (presentMask[index]) PRESENT_THRESHOLD else joinThreshold
             if (present != presentMask[index]) {
                 presentMask[index] = present
@@ -785,18 +789,21 @@ internal class LayerField(
     }
 
     /**
-     * How hot node [index] is, part way through the morph [cache] holds at [fraction], or standing still without one.
-     * Mid-morph a node that leaves or arrives changes heat along with its own presence, so a node never flares up on
-     * its way out; every other node follows the interpolated share.
+     * How hot node [index] is, part way through [morph], or standing still without one. Mid-morph a node that leaves
+     * or arrives changes heat along with its own presence, so a node never flares up on its way out; every other node
+     * follows the interpolated share. Reads the switches, comets and end weights from [cache] when there is one.
      */
-    private fun hotWeight(index: Int, cache: MorphCache?, fraction: Float): Float {
-        if (cache == null) return rollWeight(nodes[index].hotRoll, spec.hotNodeShare)
-        val switchAt = cache.switches[index]
+    private fun hotWeight(index: Int, morph: LayerShape.Morph?, cache: MorphCache?): Float {
+        val hotRoll = nodes[index].hotRoll
+        if (morph == null) return rollWeight(hotRoll, spec.hotNodeShare)
+        val switchAt = if (cache != null) cache.switches[index] else switchFractions[index]
         if (switchAt.isNaN()) {
-            val spark = cache.comets.sparkAt(index, nodes[index].hotRoll, fraction)
-            return max(rollWeight(nodes[index].hotRoll, spec.hotNodeShare), spark)
+            val spark = (cache?.comets ?: cometTracks.topLevel)?.sparkAt(index, hotRoll, morph.fraction) ?: 0f
+            return max(rollWeight(hotRoll, spec.hotNodeShare), spark)
         }
-        return lerp(cache.startHotWeights[index], cache.endHotWeights[index], switchProgress(switchAt, fraction))
+        val startHot = if (cache != null) cache.startHotWeights[index] else rollWeight(hotRoll, morph.from.nearestSpec.hotNodeShare)
+        val endHot = if (cache != null) cache.endHotWeights[index] else rollWeight(hotRoll, morph.to.nearestSpec.hotNodeShare)
+        return lerp(startHot, endHot, switchProgress(switchAt, morph.fraction))
     }
 
     /**
@@ -805,7 +812,8 @@ internal class LayerField(
      */
     private fun morphCacheFor(morph: LayerShape.Morph, width: Float, height: Float): MorphCache {
         morphCache?.takeIf { it.isFor(morph, width, height, count) }?.let { return it }
-        evaluateShape(morph, level = 0, width = width, height = height, out = presences)
+        // Into an array of its own: built after this frame's presences, as the mesh is without the cache, it mustn't touch them.
+        evaluateShape(morph, level = 0, width = width, height = height, out = FloatArray(count))
         val startHot = morph.from.nearestSpec.hotNodeShare
         val endHot = morph.to.nearestSpec.hotNodeShare
         return MorphCache(
@@ -1074,6 +1082,7 @@ internal class LayerField(
      * built, or when [spec]'s filters differ from that end's own.
      */
     private fun restingMorphEnd(width: Float, height: Float): MeshTopology? {
+        if (!cachesMorphs) return null
         val restingShape = when (val current = shape) {
             is LayerShape.Morph -> if (current.fraction <= 0f) current.from else current.to
             else -> current
