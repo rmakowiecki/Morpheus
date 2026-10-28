@@ -303,8 +303,17 @@ internal class LayerField(
     /** The comets of each morph nesting level, and when each lights each node. */
     private val cometTracks = CometTracks()
 
+    /** What the current morph, or the last one, keeps for its whole run; see [MorphCache]. */
+    private var morphCache: MorphCache? = null
+
     /** The [EdgeRule.FixedTriangulation] mesh of each end of the current morph, and how its edges switch. */
-    private var morphMesh: MorphMesh? = null
+    private val morphMesh: MorphMesh? get() = morphCache?.mesh
+
+    /** Whether the last [advance] was part way through a morph. */
+    private var wasMidMorph = false
+
+    /** False only in tests: then every frame part way through a morph evaluates both ends' shapes again, as without [morphCache]. */
+    internal var cachesMorphs = true
 
     /** The memory every settle of this layer reuses. */
     private val meshWorkspace = MeshWorkspace()
@@ -382,7 +391,7 @@ internal class LayerField(
     internal fun nodeCometPeak(index: Int): Float = if (shape is LayerShape.Morph) cometTracks.topLevel?.peaks?.get(index) ?: 0f else 0f
 
     /** How many nodes only a comet lights that the current morph's mesh joins, 0 when not morphing. */
-    internal val cometOnlyNodeCount: Int get() = if (shape is LayerShape.Morph) morphMesh?.cometOnlyNodeCount ?: 0 else 0
+    internal val cometOnlyNodeCount: Int get() = if (shape is LayerShape.Morph && wasMidMorph) morphMesh?.cometOnlyNodeCount ?: 0 else 0
 
     /** How many times any node joined or left the mesh since the field was built. */
     internal var meshMembershipChanges = 0
@@ -485,21 +494,19 @@ internal class LayerField(
 
         ensureCoverage(width, height)
         updatePositions(width, height)
-        val presenceChanged = updatePresences(width, height)
+        val morph = (shape as? LayerShape.Morph)?.takeIf { it.fraction > 0f && it.fraction < 1f }
+        val presenceChanged = updatePresences(morph, width, height)
         val filtersChanged = updateSettledFilters()
         probe?.lap(FramePhase.Shape)
-        val morph = (shape as? LayerShape.Morph)?.takeIf { it.fraction > 0f && it.fraction < 1f }
-        val wasMorphing = morphMesh != null
         if (spec.edgeRule != EdgeRule.FixedTriangulation) {
-            morphMesh = null
             topology = settleTopology(positionsX, positionsY, presentMask, presences, spec)
         } else if (morph != null) {
             topology = morphMeshFor(morph, width, height).union
-        } else if (isFirstFrame || presenceChanged || filtersChanged || wasMorphing) {
-            morphMesh = null
+        } else if (isFirstFrame || presenceChanged || filtersChanged || wasMidMorph) {
             // Triangulated over rest positions: drift stays under a cell, so the mesh never tangles.
             topology = settleTopology(homeX, homeY, presentMask, presences, spec)
         }
+        wasMidMorph = morph != null
         prunedNodeCount = (0 until count).count { presentMask[it] && !topology.alive[it] }
         probe?.lap(FramePhase.Mesh)
         updateFadingEdges(stepSeconds, isFirstFrame, morphing = morph != null)
@@ -754,14 +761,19 @@ internal class LayerField(
      * Each node's presence and hot weight under the current spec and surface. True if any node joined
      * or left the mesh.
      */
-    private fun updatePresences(width: Float, height: Float): Boolean {
-        evaluateShape(shape, level = 0, width = width, height = height, out = presences)
+    private fun updatePresences(morph: LayerShape.Morph?, width: Float, height: Float): Boolean {
+        val cache = morph?.let { morphCacheFor(it, width, height) }
+        if (morph != null && cache != null && cachesMorphs) {
+            blendCachedEnds(cache, morph.fraction, presences)
+        } else {
+            evaluateShape(shape, level = 0, width = width, height = height, out = presences)
+        }
+        val joinThreshold = if (spec.edgeRule == EdgeRule.FixedTriangulation) PRESENT_THRESHOLD else PRESENT_JOIN_THRESHOLD
         var changed = false
         for (index in 0 until count) {
             val presence = presences[index] * borderFactor(index, width, height)
             presences[index] = presence
-            hotWeights[index] = hotWeight(index)
-            val joinThreshold = if (spec.edgeRule == EdgeRule.FixedTriangulation) PRESENT_THRESHOLD else PRESENT_JOIN_THRESHOLD
+            hotWeights[index] = hotWeight(index, cache, morph?.fraction ?: 0f)
             val present = presence >= if (presentMask[index]) PRESENT_THRESHOLD else joinThreshold
             if (present != presentMask[index]) {
                 presentMask[index] = present
@@ -773,20 +785,57 @@ internal class LayerField(
     }
 
     /**
-     * How hot node [index] is. Mid-morph a node that leaves or arrives changes heat along with its own
-     * presence, so a node never flares up on its way out; every other node follows the interpolated share.
+     * How hot node [index] is, part way through the morph [cache] holds at [fraction], or standing still without one.
+     * Mid-morph a node that leaves or arrives changes heat along with its own presence, so a node never flares up on
+     * its way out; every other node follows the interpolated share.
      */
-    private fun hotWeight(index: Int): Float {
-        val morph = (shape as? LayerShape.Morph)?.takeIf { it.fraction > 0f && it.fraction < 1f }
-        val switchAt = switchFractions[index]
-        if (morph == null) return rollWeight(nodes[index].hotRoll, spec.hotNodeShare)
+    private fun hotWeight(index: Int, cache: MorphCache?, fraction: Float): Float {
+        if (cache == null) return rollWeight(nodes[index].hotRoll, spec.hotNodeShare)
+        val switchAt = cache.switches[index]
         if (switchAt.isNaN()) {
-            val spark = cometTracks.topLevel?.sparkAt(index, nodes[index].hotRoll, morph.fraction) ?: 0f
+            val spark = cache.comets.sparkAt(index, nodes[index].hotRoll, fraction)
             return max(rollWeight(nodes[index].hotRoll, spec.hotNodeShare), spark)
         }
-        val startHot = rollWeight(nodes[index].hotRoll, morph.from.nearestSpec.hotNodeShare)
-        val endHot = rollWeight(nodes[index].hotRoll, morph.to.nearestSpec.hotNodeShare)
-        return lerp(startHot, endHot, switchProgress(switchAt, morph.fraction))
+        return lerp(cache.startHotWeights[index], cache.endHotWeights[index], switchProgress(switchAt, fraction))
+    }
+
+    /**
+     * [morph]'s [MorphCache], built on its first frame by evaluating both its ends in full, nested morphs and all, and
+     * kept until the ends, the surface or the node count change.
+     */
+    private fun morphCacheFor(morph: LayerShape.Morph, width: Float, height: Float): MorphCache {
+        morphCache?.takeIf { it.isFor(morph, width, height, count) }?.let { return it }
+        evaluateShape(morph, level = 0, width = width, height = height, out = presences)
+        val startHot = morph.from.nearestSpec.hotNodeShare
+        val endHot = morph.to.nearestSpec.hotNodeShare
+        return MorphCache(
+            from = morph.from,
+            to = morph.to,
+            width = width,
+            height = height,
+            nodeCount = count,
+            startPresences = scratch(0, 0).copyOf(count),
+            endPresences = scratch(0, 1).copyOf(count),
+            switches = switchFractions.copyOf(count),
+            arrivals = switchArrivals.copyOf(count),
+            startHotWeights = FloatArray(count) { rollWeight(nodes[it].hotRoll, startHot) },
+            endHotWeights = FloatArray(count) { rollWeight(nodes[it].hotRoll, endHot) },
+            comets = cometTrackFor(morph, level = 0, width = width, height = height),
+        ).also { morphCache = it }
+    }
+
+    /** [blendEnds]' presences at [fraction], from the ends and switches [cache] keeps, without evaluating either shape. */
+    private fun blendCachedEnds(cache: MorphCache, fraction: Float, out: FloatArray) {
+        val start = cache.startPresences
+        val end = cache.endPresences
+        for (index in 0 until count) {
+            val switchAt = cache.switches[index]
+            out[index] = if (switchAt.isNaN()) {
+                max(lerp(start[index], end[index], fraction), cache.comets.presenceAt(index, fraction))
+            } else {
+                start[index] + (end[index] - start[index]) * switchProgress(switchAt, fraction)
+            }
+        }
     }
 
     /** 1 for a node whose home is on the surface or near it, fading to 0 as it lies further outside. */
@@ -940,7 +989,7 @@ internal class LayerField(
 
     /** Rebuilds [morph]'s meshes, bypassing the cache. For the settle benchmark. */
     internal fun rebuildMorphMesh(morph: LayerShape.Morph, width: Float, height: Float) {
-        morphMesh = null
+        morphCacheFor(morph, width, height).mesh = null
         morphMeshFor(morph, width, height)
     }
 
@@ -951,21 +1000,22 @@ internal class LayerField(
     }
 
     /**
-     * The mesh at each end of [morph] and the union [LayerField.topology] holds while it runs, rebuilt
-     * only when the ends or the surface change, never as the fraction moves. Each end is settled exactly
-     * as a still frame of it would be, so the mesh meets the still mesh at both ends. Nodes only a comet
-     * lights get their edges from a third mesh over every node either end or a comet shows.
+     * The mesh at each end of [morph] and the union [LayerField.topology] holds while it runs, built once
+     * with [morph]'s [MorphCache], never as the fraction moves. Each end is settled exactly as a still frame
+     * of it would be, so the mesh meets the still mesh at both ends. Nodes only a comet lights get their
+     * edges from a third mesh over every node either end or a comet shows.
      */
     private fun morphMeshFor(morph: LayerShape.Morph, width: Float, height: Float): MorphMesh {
-        morphMesh?.takeIf { it.isFor(morph, width, height, count) }?.let { return it }
+        val cache = morphCacheFor(morph, width, height)
+        cache.mesh?.let { return it }
         morphMeshBuildCount++
-        val startPresences = FloatArray(count) { scratch(0, 0)[it] * borderFactor(it, width, height) }
-        val endPresences = FloatArray(count) { scratch(0, 1)[it] * borderFactor(it, width, height) }
+        val startPresences = FloatArray(count) { cache.startPresences[it] * borderFactor(it, width, height) }
+        val endPresences = FloatArray(count) { cache.endPresences[it] * borderFactor(it, width, height) }
         val startMask = BooleanArray(count) { startPresences[it] >= PRESENT_THRESHOLD }
         val endMask = BooleanArray(count) { endPresences[it] >= PRESENT_THRESHOLD }
         val start = settleTopology(homeX, homeY, startMask, startPresences, morph.from.nearestSpec)
         val end = settleTopology(homeX, homeY, endMask, endPresences, morph.to.nearestSpec)
-        val comets = cometTrackFor(morph, level = 0, width = width, height = height)
+        val comets = cache.comets
         val transitMask = BooleanArray(count) { index ->
             !startMask[index] && !endMask[index] && comets.peaks[index] * borderFactor(index, width, height) >= PRESENT_THRESHOLD
         }
@@ -981,8 +1031,8 @@ internal class LayerField(
         } else {
             null
         }
-        val switches = NodeSwitches(switchFractions.copyOf(count), switchArrivals.copyOf(count))
-        return MorphMesh(morph.from, morph.to, width, height, count, start, end, transit, switches).also { morphMesh = it }
+        val switches = NodeSwitches(cache.switches, cache.arrivals)
+        return MorphMesh(count, start, end, transit, switches).also { cache.mesh = it }
     }
 
     /**
@@ -1516,6 +1566,35 @@ private class ClosenessRange {
 }
 
 /**
+ * Everything about one morph that doesn't move with its fraction, for the morph from [from] to [to] on a
+ * [width] × [height] surface over [nodeCount] nodes: each node's presence at both ends, before the border
+ * fade, its switch fraction (NaN for a node the same at both ends) and direction, its hot weight at both ends,
+ * the top level's comets, and the meshes once built. Every level of a nested morph below the top is frozen
+ * for the whole outer morph, so the two ends cover them all. A frame part way through only blends these.
+ */
+@Suppress("LongParameterList") // The morph's key, then each per-node array it keeps.
+private class MorphCache(
+    private val from: LayerShape,
+    private val to: LayerShape,
+    private val width: Float,
+    private val height: Float,
+    private val nodeCount: Int,
+    val startPresences: FloatArray,
+    val endPresences: FloatArray,
+    val switches: FloatArray,
+    val arrivals: BooleanArray,
+    val startHotWeights: FloatArray,
+    val endHotWeights: FloatArray,
+    val comets: CometTrack,
+) {
+    /** The morph's meshes, built on its first frame under [EdgeRule.FixedTriangulation]; null under any other rule. */
+    var mesh: MorphMesh? = null
+
+    fun isFor(morph: LayerShape.Morph, width: Float, height: Float, nodeCount: Int): Boolean =
+        morph.from == from && morph.to == to && width == this.width && height == this.height && nodeCount == this.nodeCount
+}
+
+/**
  * The [EdgeRule.FixedTriangulation] mesh of each end of one morph, and when each edge only one end has
  * switches. An edge leaves with the first of its nodes to leave and arrives with the last of its nodes
  * to arrive. An edge with no node moving its way (a min-degree repair between nodes that stay or
@@ -1528,10 +1607,6 @@ private class ClosenessRange {
  * such an edge shows only while both its dots do, and a comet node's dot only while the comet lights it.
  */
 private class MorphMesh(
-    private val from: LayerShape,
-    private val to: LayerShape,
-    private val width: Float,
-    private val height: Float,
     private val nodeCount: Int,
     start: MeshTopology,
     end: MeshTopology,
@@ -1590,9 +1665,6 @@ private class MorphMesh(
             converged = start.converged && end.converged,
         )
     }
-
-    fun isFor(morph: LayerShape.Morph, width: Float, height: Float, nodeCount: Int): Boolean =
-        morph.from == from && morph.to == to && width == this.width && height == this.height && nodeCount == this.nodeCount
 
     /**
      * [transit]'s edges that touch a comet node and join it to another or to a node both ends keep, marking each comet
