@@ -53,6 +53,27 @@ class PointBatchesCaptureTest {
         withClue(failures.joinToString("\n")) { failures.size shouldBe 0 }
     }
 
+    @Test
+    fun `layers draw the same point batches with or without frame stats`() {
+        val canvas = BenchmarkCanvas.Recipe
+        val failures = ArrayList<String>()
+        for ((name, morph) in cases()) {
+            val holder = MorpheusGraphHolder()
+            val layers = holder.layersFor(morph, GalleryLoop.FILL)
+            val fields = holder.fieldsFor(layers, canvas.referenceSize, canvas.pxPerDp)
+            for (step in 0..SETTLE_STEPS) fields.forEach { it.advance(step * STEP_SECONDS, canvas.width, canvas.height) }
+            fields.forEachIndexed { index, field ->
+                val withoutStats = draw(canvas.width.toInt(), canvas.height.toInt()) {
+                    field.draw(this, LayerFill.Solid(Color.White), HaloBrushCache(Color.White), SETTLE_STEPS * STEP_SECONDS, showViolations = false)
+                }
+                if (!withoutStats.contentEquals(renderBatched(field, canvas.width.toInt(), canvas.height.toInt()))) {
+                    failures += "$name slot ${layers[index].slotFromFront}"
+                }
+            }
+        }
+        withClue("differ without frame stats: ${failures.joinToString()}") { failures.size shouldBe 0 }
+    }
+
     private fun cases(): List<Pair<String, MorpheusGraphMorph>> =
         MorpheusGraphPresets.all.mapIndexed { index, spec -> "preset $index" to GalleryLoop.still(spec) } +
             listOf(

@@ -564,9 +564,9 @@ internal class LayerField(
 
     /**
      * Paints the layer into its own offscreen layer, composited onto the canvas once. Edges and halos
-     * blend with each other there, but each dot is punched out with [BlendMode.DstOut] and then added with
-     * [BlendMode.Plus], so it replaces whatever lies under it: a dot's pixels are exactly its own alpha
-     * instead of summing with the edges it anchors. Everything drawn into the offscreen must be in the
+     * blend with each other there, but every dot is punched out with [BlendMode.DstOut] before any is added
+     * with [BlendMode.Plus], so dots replace the edges and halos under them instead of summing with the edges
+     * they anchor. Where dots overlap, their alphas add up. Everything drawn into the offscreen must be in the
      * fill's mask color, because [BlendMode.Plus] adds color too.
      *
      * A [LayerFill.Masked] layer is drawn in white first, then recolored as a whole while still
