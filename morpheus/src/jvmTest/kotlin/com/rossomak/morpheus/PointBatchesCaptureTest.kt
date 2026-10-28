@@ -2,16 +2,12 @@
 
 package com.rossomak.morpheus
 
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import io.kotest.assertions.withClue
@@ -25,8 +21,9 @@ import kotlin.math.sqrt
 import kotlin.test.Test
 
 /**
- * Draws real layers both ways on the recipe canvas and compares the pixels; see the tolerances below. Layers are
- * drawn in solid white: a fill recolors the layer after both approaches have drawn it, the same way for each.
+ * Draws real layers in point batches and per element ([drawPerElement]) on the recipe canvas and compares the
+ * pixels; see the tolerances below. Layers are drawn in solid white: a fill recolors the layer after either has
+ * drawn it, the same way for each.
  */
 class PointBatchesCaptureTest {
 
@@ -43,14 +40,12 @@ class PointBatchesCaptureTest {
             for (step in 0..SETTLE_STEPS) fields.forEach { it.advance(step * STEP_SECONDS, canvas.width, canvas.height) }
             fields.forEachIndexed { index, field ->
                 val case = "$name slot ${layers[index].slotFromFront}"
-                val edgesBatched = render(field, width, height, MorpheusGraphDrawingApproach.PointBatches, edgesOnly = true)
-                if (!edgesBatched.contentEquals(renderEdgesInLevelOrder(field, width, height))) failures += "$case: edges differ from drawLine in level order"
-                val edgeOrder = Difference.of(render(field, width, height, MorpheusGraphDrawingApproach.PerElement, edgesOnly = true), edgesBatched)
+                val edgesBatched = renderBatched(field, width, height, edgesOnly = true)
+                val edgesInLevelOrder = renderPerElement(field, width, height, edgesOnly = true, edgesInLevelOrder = true)
+                if (!edgesBatched.contentEquals(edgesInLevelOrder)) failures += "$case: edges differ from drawLine in level order"
+                val edgeOrder = Difference.of(renderPerElement(field, width, height, edgesOnly = true), edgesBatched)
                 if (edgeOrder.largest > EDGE_ORDER_TOLERANCE) failures += "$case: edges in level order differ by ${edgeOrder.largest}"
-                val comparison = DotAreas.of(field, width, height).compare(
-                    render(field, width, height, MorpheusGraphDrawingApproach.PerElement),
-                    render(field, width, height, MorpheusGraphDrawingApproach.PointBatches),
-                )
+                val comparison = DotAreas.of(field, width, height).compare(renderPerElement(field, width, height), renderBatched(field, width, height))
                 println("$case: edges in level order $edgeOrder; $comparison")
                 if (comparison.elsewhere > DOT_LEVEL_TOLERANCE) failures += "$case: $comparison"
             }
@@ -70,22 +65,14 @@ class PointBatchesCaptureTest {
             ) +
             playgroundLegs.flatMap { (leg, morph) -> COMET_FRACTIONS.map { fraction -> "playground $leg at $fraction" to morph.copy(fraction = fraction) } }
 
-    /** [field]'s edges alone, each through `drawLine` as per-element drawing does, but in alpha-level order, as point batches draw them. */
-    private fun renderEdgesInLevelOrder(field: LayerField, width: Int, height: Int): IntArray {
-        val edges = ArrayList<Triple<Float, Int, Int>>()
-        field.forEachVisibleEdge(SETTLE_STEPS * STEP_SECONDS) { alpha, start, end -> edges += Triple(alpha, start, end) }
-        edges.sortBy { (alpha) -> PointBatches.edgeLevel(alpha) }
-        return draw(width, height) {
-            drawIntoCanvas { it.saveLayer(Rect(Offset.Zero, size), Paint()) }
-            for ((alpha, start, end) in edges) drawLine(Color.White.copy(alpha = alpha), field.nodePosition(start), field.nodePosition(end), field.edgeStrokeWidth)
-            drawIntoCanvas { it.restore() }
-        }
+    /** [field] drawn per element in white over black, as ARGB pixels; [edgesOnly] and [edgesInLevelOrder] as in [drawPerElement]. */
+    private fun renderPerElement(field: LayerField, width: Int, height: Int, edgesOnly: Boolean = false, edgesInLevelOrder: Boolean = false): IntArray = draw(width, height) {
+        drawPerElement(field, Color.White, HaloBrushCache(Color.White), SETTLE_STEPS * STEP_SECONDS, edgesOnly, edgesInLevelOrder)
     }
 
-    /** [field] drawn in white over black, as ARGB pixels; [edgesOnly] skips halos and dots. */
-    private fun render(field: LayerField, width: Int, height: Int, approach: MorpheusGraphDrawingApproach, edgesOnly: Boolean = false): IntArray {
+    /** [field] drawn by [LayerField.draw], in point batches, in white over black, as ARGB pixels; [edgesOnly] skips halos and dots. */
+    private fun renderBatched(field: LayerField, width: Int, height: Int, edgesOnly: Boolean = false): IntArray {
         val stats = MorpheusGraphFrameStats().apply {
-            drawingApproach = approach
             skipHalos = edgesOnly
             skipDots = edgesOnly
         }
