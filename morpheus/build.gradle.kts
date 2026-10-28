@@ -7,6 +7,16 @@ kotlin {
         namespace = "com.rossomak.morpheus"
     }
 
+    // Desktop and wasm both draw through Skia, so they share skikoMain; Android draws through its own canvas.
+    applyDefaultHierarchyTemplate {
+        common {
+            group("skiko") {
+                withJvm()
+                withWasmJs()
+            }
+        }
+    }
+
     sourceSets {
         commonMain.dependencies {
             api(libs.jetbrains.compose.runtime)

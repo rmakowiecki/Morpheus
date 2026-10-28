@@ -85,6 +85,18 @@ class MorpheusGraphFrameStatsTest {
     }
 
     @Test
+    fun `changing the drawing approach starts a fresh window, but isn't a debug switch`() {
+        val stats = MorpheusGraphFrameStats()
+        stats.recordDraw(DRAW_NANOS * 3)
+        stats.recordFrame(HALF_WINDOW_NANOS)
+        stats.drawingApproach = MorpheusGraphDrawingApproach.PointBatches
+        stats.anySwitchOn shouldBe false
+        stats.recordDraw(DRAW_NANOS)
+        stats.recordFrame(WINDOW_NANOS)
+        stats.drawMillis shouldBe DRAW_NANOS / NANOS_PER_MILLI
+    }
+
+    @Test
     fun `the readings are stale from a reset until the next window is published`() {
         val stats = MorpheusGraphFrameStats()
         stats.isStale shouldBe false

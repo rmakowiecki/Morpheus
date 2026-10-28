@@ -31,7 +31,7 @@ private const val PUBLISH_INTERVAL_NANOS = 500_000_000L
  * The debug switches ([skipEdges], [skipHalos], [skipDots], [skipFillRecolor], [showViolations], [cometDebug]) are read
  * by every graph that reports here, every frame. A skipped step records no time and no draw calls, so
  * its raster and GPU cost shows as the change it makes to [frameMillis]. Flipping any of them, like
- * [reset], starts a fresh window.
+ * [reset] or a change of [drawingApproach], starts a fresh window.
  */
 @ExperimentalMorpheusGraphApi
 @Stable
@@ -62,6 +62,12 @@ public class MorpheusGraphFrameStats {
 
     /** The comet overlays each running morph draws, as the diagnostics overloads' own argument does. */
     public var cometDebug: MorpheusGraphCometDebug by ResettingSwitch(MorpheusGraphCometDebug.None)
+
+    /**
+     * How every graph that reports here draws its edges and dots. Changing it starts a fresh window; it isn't a
+     * debug switch, so [anySwitchOn] leaves it out. A batch counts as one draw call.
+     */
+    public var drawingApproach: MorpheusGraphDrawingApproach by ResettingSwitch(MorpheusGraphDrawingApproach.PerElement)
 
     /** True while any debug switch is on, the violations and comet overlays included. */
     public val anySwitchOn: Boolean
