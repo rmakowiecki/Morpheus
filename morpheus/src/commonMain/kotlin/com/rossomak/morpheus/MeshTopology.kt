@@ -22,8 +22,9 @@ internal const val MIN_GRAPH_NODES = 6
 /**
  * The edge set a layer actually draws, after [MeshWorkspace.enforceMinDegree].
  *
- * [alive] is false for every pruned node. [converged] is false only when the repair rounds hit
- * [MAX_ENFORCEMENT_ROUNDS] and the removal-only terminal pass had to finish the job.
+ * [edges] are ascending by key, so two topologies compare or merge in one walk, and edges draw in the same
+ * order on every platform. [alive] is false for every pruned node. [converged] is false only when the repair
+ * rounds hit [MAX_ENFORCEMENT_ROUNDS] and the removal-only terminal pass had to finish the job.
  */
 internal class MeshTopology(
     val edges: LongArray,
@@ -32,6 +33,38 @@ internal class MeshTopology(
     val prunedNodeCount: Int,
     val converged: Boolean,
 )
+
+/** Whether [key] is in this ascending array: a binary search. */
+internal fun LongArray.containsSorted(key: Long): Boolean {
+    var low = 0
+    var high = size - 1
+    while (low <= high) {
+        val middle = (low + high) ushr 1
+        val value = this[middle]
+        when {
+            value < key -> low = middle + 1
+            value > key -> high = middle - 1
+            else -> return true
+        }
+    }
+    return false
+}
+
+/** The keys of two ascending arrays, ascending, each once. */
+internal fun mergeSorted(first: LongArray, second: LongArray): LongArray {
+    val merged = LongArray(first.size + second.size)
+    var firstIndex = 0
+    var secondIndex = 0
+    var count = 0
+    while (firstIndex < first.size || secondIndex < second.size) {
+        val takesFirst = firstIndex < first.size && (secondIndex == second.size || first[firstIndex] <= second[secondIndex])
+        val takesSecond = secondIndex < second.size && (firstIndex == first.size || second[secondIndex] <= first[firstIndex])
+        merged[count++] = if (takesFirst) first[firstIndex] else second[secondIndex]
+        if (takesFirst) firstIndex++
+        if (takesSecond) secondIndex++
+    }
+    return merged.copyOf(count)
+}
 
 /** Whether an edge is kept; a `fun interface` rather than `(Long) -> Boolean`, so keys aren't boxed. */
 internal fun interface EdgeFilter {
@@ -810,6 +843,7 @@ internal class MeshWorkspace {
             if (!everyEdgeIsBase && key !in baseKeys) repaired++
             edges[index] = edgeKey(poolOf[edgeStart(key)], poolOf[edgeEnd(key)])
         }
+        edges.sort()
         val poolAlive = BooleanArray(poolCount)
         var aliveCount = 0
         for (node in 0 until nodeCount) {

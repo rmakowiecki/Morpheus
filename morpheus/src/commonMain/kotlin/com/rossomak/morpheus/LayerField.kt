@@ -318,8 +318,29 @@ internal class LayerField(
     private var nodeAlphas = FloatArray(0)
     private var glowFactors = FloatArray(0)
 
+    /** The drawn edges, ascending by key: [topology]'s edges and any still fading out after leaving it. */
     private var edgeKeys = LongArray(0)
+
+    /** Each drawn edge's fade times its morph weight, as drawn. */
     private var edgeFades = FloatArray(0)
+
+    /** Each drawn edge's own fade, kept while it fades out after leaving the set. */
+    private var fadeAlphas = FloatArray(0)
+
+    /** Each drawn edge's weight in the running morph, which a morph that stops leaves it at; 1 outside a morph. */
+    private var fadeWeights = FloatArray(0)
+
+    /** Each drawn edge's index in [topology]'s edges, -1 for one fading out after leaving it. */
+    private var edgeTopologyIndices = IntArray(0)
+
+    /** The arrays [updateFadingEdges] merges the next frame's drawn edges into, swapped with the drawn ones after. */
+    private var mergedKeys = LongArray(0)
+    private var mergedAlphas = FloatArray(0)
+    private var mergedWeights = FloatArray(0)
+    private var mergedTopologyIndices = IntArray(0)
+
+    /** The edges of the [topology] [updateFadingEdges] last merged. */
+    private var fadedTopologyEdges = LongArray(0)
 
     /** Each edge's alpha from length, depth, fade and layer alpha alone, before its dots limit it. */
     private var rawEdgeAlphas = FloatArray(0)
@@ -327,9 +348,6 @@ internal class LayerField(
     /** Each edge's alpha as drawn, before pulse: [rawEdgeAlphas] limited by the dimmer of its two dots. */
     private var edgeAlphas = FloatArray(0)
     private var edgeCount = 0
-
-    /** Each edge's current fade, kept while it fades out after leaving the set. */
-    private val fadingEdges = HashMap<Long, FadingEdge>()
 
     /** [fillDrawnTriangles]' triangles, and the drawn edges they were found for. */
     private var triangleCache = IntArray(0)
@@ -967,15 +985,21 @@ internal class LayerField(
         return MorphMesh(morph.from, morph.to, width, height, count, start, end, transit, switches).also { morphMesh = it }
     }
 
-    /** Scales each drawn edge by how far it is through its own switch, for an edge only one end of the morph has. */
+    /**
+     * Scales each drawn edge by how far it is through its own switch, for an edge only one end of the morph has.
+     * Mid-morph [topology] is the mesh's union, so each drawn edge's topology index is its index in the union.
+     */
     private fun applyMorphEdgeWeights(fraction: Float) {
         val mesh = morphMesh ?: return
         for (edge in 0 until edgeCount) {
-            val key = edgeKeys[edge]
-            val weight = mesh.leavingEdgeSwitches[key]?.let { switchAt -> 1f - switchProgress(switchAt, fraction) }
-                ?: mesh.arrivingEdgeSwitches[key]?.let { switchAt -> switchProgress(switchAt, fraction) }
-                ?: 1f
-            fadingEdges[key]?.morphWeight = weight
+            val unionEdge = edgeTopologyIndices[edge]
+            val switchAt = if (unionEdge < 0) Float.NaN else mesh.edgeSwitches[unionEdge]
+            val weight = when {
+                switchAt.isNaN() -> 1f
+                mesh.edgeArrivals[unionEdge] -> switchProgress(switchAt, fraction)
+                else -> 1f - switchProgress(switchAt, fraction)
+            }
+            fadeWeights[edge] = weight
             edgeFades[edge] *= weight
         }
     }
@@ -1038,47 +1062,95 @@ internal class LayerField(
 
     private fun ensureEdgeCapacity(capacity: Int) {
         if (edgeKeys.size >= capacity) return
-        edgeKeys = edgeKeys.copyOf(max(capacity, edgeKeys.size * 2))
-        edgeFades = edgeFades.copyOf(edgeKeys.size)
-        rawEdgeAlphas = rawEdgeAlphas.copyOf(edgeKeys.size)
-        edgeAlphas = edgeAlphas.copyOf(edgeKeys.size)
+        val size = max(capacity, edgeKeys.size * 2)
+        edgeKeys = edgeKeys.copyOf(size)
+        edgeFades = edgeFades.copyOf(size)
+        fadeAlphas = fadeAlphas.copyOf(size)
+        fadeWeights = fadeWeights.copyOf(size)
+        edgeTopologyIndices = edgeTopologyIndices.copyOf(size)
+        mergedKeys = LongArray(size)
+        mergedAlphas = FloatArray(size)
+        mergedWeights = FloatArray(size)
+        mergedTopologyIndices = IntArray(size)
+        rawEdgeAlphas = rawEdgeAlphas.copyOf(size)
+        edgeAlphas = edgeAlphas.copyOf(size)
     }
 
     /**
      * Edges entering [topology] fade in, edges leaving it fade out; the first frame starts fully drawn,
-     * and so does every edge of a running morph's mesh, which the morph fades itself.
+     * and so does every edge of a running morph's mesh, which the morph fades itself. Both lists are
+     * ascending by key, so the next frame's edges are one merge walk of the two.
      */
     private fun updateFadingEdges(stepSeconds: Float, isFirstFrame: Boolean, morphing: Boolean) {
-        for (edge in fadingEdges.values) {
-            edge.present = false
+        val edges = topology.edges
+        if (morphing && edges === fadedTopologyEdges && edgeCount == edges.size) {
+            // Mid-morph on the mesh the last frame merged, with nothing left fading out: the drawn edges are the
+            // mesh's own, in its order, each at full fade.
+            fadeAlphas.fill(1f, 0, edgeCount)
+            edgeFades.fill(1f, 0, edgeCount)
+            return
+        }
+        if (!morphing) {
             // A morph that stopped leaves each edge where it was, rather than handing it back its full fade.
-            if (!morphing) {
-                edge.alpha *= edge.morphWeight
-                edge.morphWeight = 1f
+            for (edge in 0 until edgeCount) {
+                fadeAlphas[edge] *= fadeWeights[edge]
+                fadeWeights[edge] = 1f
             }
         }
-        for (key in topology.edges) {
-            // Mid-morph, the morph's own switch fades each edge (see [applyMorphEdgeWeights]); a second,
-            // timed fade on top would hold back every edge the morph brings in for its first moments.
-            val edge = fadingEdges.getOrPut(key) { FadingEdge(alpha = if (isFirstFrame || morphing) 1f else 0f) }
-            if (morphing) edge.alpha = 1f
-            edge.present = true
-        }
-        val fadeStep = stepSeconds / EDGE_FLIP_FADE_SECONDS
-        val iterator = fadingEdges.entries.iterator()
-        edgeCount = 0
-        ensureEdgeCapacity(fadingEdges.size)
-        while (iterator.hasNext()) {
-            val (key, edge) = iterator.next()
-            edge.alpha = if (edge.present) min(1f, edge.alpha + fadeStep) else edge.alpha - fadeStep
-            if (edge.alpha <= 0f) {
-                iterator.remove()
-                continue
+        ensureEdgeCapacity(edgeCount + edges.size)
+        edgeCount = mergeFadingEdges(edges, fadeStep = stepSeconds / EDGE_FLIP_FADE_SECONDS, isFirstFrame = isFirstFrame, morphing = morphing)
+        swapMergedEdges()
+        fadedTopologyEdges = edges
+        fadeAlphas.copyInto(edgeFades, endIndex = edgeCount)
+    }
+
+    /**
+     * Merges the drawn edges with [edges], both ascending, into the merged arrays, each with its fade moved
+     * on by [fadeStep]: an edge in [edges] fades in, any other fades out, and one faded out entirely is
+     * dropped. Returns how many it merged.
+     */
+    private fun mergeFadingEdges(edges: LongArray, fadeStep: Float, isFirstFrame: Boolean, morphing: Boolean): Int {
+        var drawn = 0
+        var topologyEdge = 0
+        var merged = 0
+        while (drawn < edgeCount || topologyEdge < edges.size) {
+            val takesDrawn = drawn < edgeCount && (topologyEdge == edges.size || edgeKeys[drawn] <= edges[topologyEdge])
+            val takesTopology = topologyEdge < edges.size && (drawn == edgeCount || edges[topologyEdge] <= edgeKeys[drawn])
+            val alpha = when {
+                !takesTopology -> fadeAlphas[drawn] - fadeStep
+                // Mid-morph, the morph's own switch fades each edge (see [applyMorphEdgeWeights]); a second,
+                // timed fade on top would hold back every edge the morph brings in for its first moments.
+                morphing -> 1f
+                else -> min(1f, (if (takesDrawn) {
+                    fadeAlphas[drawn]
+                } else if (isFirstFrame) {
+                    1f
+                } else {
+                    0f
+                }) + fadeStep)
             }
-            edgeKeys[edgeCount] = key
-            edgeFades[edgeCount] = edge.alpha
-            edgeCount++
+            if (alpha > 0f) {
+                storeMerged(merged++, alpha, drawn.takeIf { takesDrawn } ?: -1, topologyEdge.takeIf { takesTopology } ?: -1, edges)
+            }
+            if (takesDrawn) drawn++
+            if (takesTopology) topologyEdge++
         }
+        return merged
+    }
+
+    /** Writes merged edge [slot] at [alpha]: drawn edge [drawn] and [edges]' [topologyEdge], either -1 where the edge isn't one. */
+    private fun storeMerged(slot: Int, alpha: Float, drawn: Int, topologyEdge: Int, edges: LongArray) {
+        mergedKeys[slot] = if (topologyEdge >= 0) edges[topologyEdge] else edgeKeys[drawn]
+        mergedAlphas[slot] = alpha
+        mergedWeights[slot] = if (drawn >= 0) fadeWeights[drawn] else 1f
+        mergedTopologyIndices[slot] = topologyEdge
+    }
+
+    private fun swapMergedEdges() {
+        mergedKeys = edgeKeys.also { edgeKeys = mergedKeys }
+        mergedAlphas = fadeAlphas.also { fadeAlphas = mergedAlphas }
+        mergedWeights = fadeWeights.also { fadeWeights = mergedWeights }
+        mergedTopologyIndices = edgeTopologyIndices.also { edgeTopologyIndices = mergedTopologyIndices }
     }
 
     /**
@@ -1443,9 +1515,6 @@ private class ClosenessRange {
     fun or(fallback: ClosenessRange): ClosenessRange = if (ranks) this else fallback
 }
 
-/** [morphWeight] is the share of [alpha] a running morph leaves the edge; it folds into [alpha] once the morph stops. */
-private class FadingEdge(var alpha: Float, var present: Boolean = true, var morphWeight: Float = 1f)
-
 /**
  * The [EdgeRule.FixedTriangulation] mesh of each end of one morph, and when each edge only one end has
  * switches. An edge leaves with the first of its nodes to leave and arrives with the last of its nodes
@@ -1472,16 +1541,19 @@ private class MorphMesh(
     val union: MeshTopology
     var cometOnlyNodeCount = 0
         private set
-    val leavingEdgeSwitches: Map<Long, Float>
-    val arrivingEdgeSwitches: Map<Long, Float>
+
+    /** Each of [union]'s edges' switch fraction, aligned with its edges; NaN for an edge both ends have, or only the transit mesh. */
+    val edgeSwitches: FloatArray
+
+    /** Whether each of [union]'s edges arrives, rather than leaves, at its switch. */
+    val edgeArrivals: BooleanArray
 
     init {
-        val startEdges = start.edges.toHashSet()
-        val endEdges = end.edges.toHashSet()
+        val startEdges = start.edges
+        val endEdges = end.edges
         val alive = BooleanArray(nodeCount) { start.alive[it] || end.alive[it] }
-        val transitEdges = transit?.let { connectTransit(it, startEdges, endEdges, alive, switches) }.orEmpty()
-        // Sorted: set order differs between the JVM and wasm.
-        val unionEdges = (startEdges + endEdges + transitEdges).toLongArray().apply { sort() }
+        val transitEdges = transit?.let { connectTransit(it, startEdges, endEdges, alive, switches) } ?: LongArray(0)
+        val unionEdges = mergeSorted(mergeSorted(startEdges, endEdges), transitEdges)
         val neighbours = Array(nodeCount) { ArrayList<Int>() }
         for (key in unionEdges) {
             neighbours[edgeStart(key)] += edgeEnd(key)
@@ -1496,11 +1568,19 @@ private class MorphMesh(
         fun ownSwitches(key: Long, arriving: Boolean): List<Float> = listOf(edgeStart(key), edgeEnd(key))
             .filter { node -> switches.arriving[node] == arriving }
             .mapNotNull(switches::at)
-        leavingEdgeSwitches = (startEdges - endEdges).associateWith { key ->
-            ownSwitches(key, arriving = false).minOrNull() ?: switchesAround(key).maxOrNull() ?: NEUTRAL_SWITCH
-        }
-        arrivingEdgeSwitches = (endEdges - startEdges).associateWith { key ->
-            ownSwitches(key, arriving = true).maxOrNull() ?: switchesAround(key).minOrNull() ?: NEUTRAL_SWITCH
+        edgeSwitches = FloatArray(unionEdges.size) { Float.NaN }
+        edgeArrivals = BooleanArray(unionEdges.size)
+        for (edge in unionEdges.indices) {
+            val key = unionEdges[edge]
+            val atStart = startEdges.containsSorted(key)
+            val atEnd = endEdges.containsSorted(key)
+            if (atStart == atEnd) continue
+            edgeArrivals[edge] = atEnd
+            edgeSwitches[edge] = if (atEnd) {
+                ownSwitches(key, arriving = true).maxOrNull() ?: switchesAround(key).minOrNull() ?: NEUTRAL_SWITCH
+            } else {
+                ownSwitches(key, arriving = false).minOrNull() ?: switchesAround(key).maxOrNull() ?: NEUTRAL_SWITCH
+            }
         }
         union = MeshTopology(
             edges = unionEdges,
@@ -1520,14 +1600,14 @@ private class MorphMesh(
      * other edges ran to nodes neither end keeps, is dropped with its edges, which can leave a neighbour
      * short in turn, so this repeats until nothing changes.
      */
-    private fun connectTransit(transit: TransitMesh, startEdges: Set<Long>, endEdges: Set<Long>, alive: BooleanArray, switches: NodeSwitches): List<Long> {
+    private fun connectTransit(transit: TransitMesh, startEdges: LongArray, endEdges: LongArray, alive: BooleanArray, switches: NodeSwitches): LongArray {
         val candidates = BooleanArray(nodeCount) { transit.nodes[it] && transit.topology.alive[it] }
         // Nodes a comet edge may reach: comet nodes, and nodes both ends keep; never one that leaves or arrives, which it would light up out of turn.
         val reachable = BooleanArray(nodeCount) { candidates[it] || (alive[it] && switches.at(it) == null) }
         var edges = transit.topology.edges.filter { key ->
             val first = edgeStart(key)
             val second = edgeEnd(key)
-            (candidates[first] || candidates[second]) && key !in startEdges && key !in endEdges && reachable[first] && reachable[second]
+            (candidates[first] || candidates[second]) && !startEdges.containsSorted(key) && !endEdges.containsSorted(key) && reachable[first] && reachable[second]
         }
         do {
             val short = shortCandidates(edges, candidates)
@@ -1539,7 +1619,7 @@ private class MorphMesh(
             alive[node] = true
             cometOnlyNodeCount++
         }
-        return edges
+        return edges.toLongArray()
     }
 
     /** The comet nodes still in [candidates] with fewer than two of [edges]. */

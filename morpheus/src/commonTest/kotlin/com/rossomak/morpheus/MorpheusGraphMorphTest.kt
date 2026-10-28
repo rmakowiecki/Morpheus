@@ -59,6 +59,27 @@ class MorpheusGraphMorphTest {
     }
 
     @Test
+    fun `every settled topology and every drawn edge list is ascending by key, for every edge rule`() {
+        val scrub = (0..SCRUB_STEPS).map { it / SCRUB_STEPS.toFloat() }.let { forward -> forward + forward.reversed() }
+
+        val unsorted = EdgeRule.entries.flatMap { edgeRule ->
+            val run = MorphRun(family[0].withEdgeRule(edgeRule), family[3].withEdgeRule(edgeRule), TALL_HERO_WIDTH, TALL_HERO_HEIGHT)
+            scrub.flatMap { fraction ->
+                run.advance(fraction)
+                run.fields.values.flatMap { field ->
+                    val drawn = (0 until field.drawnEdgeCount).map(field::drawnEdgeKey)
+                    listOfNotNull(
+                        "$edgeRule topology at $fraction".takeIf { field.topology.edges.toList() != field.topology.edges.sorted() },
+                        "$edgeRule drawn edges at $fraction".takeIf { drawn != drawn.sorted().distinct() },
+                    )
+                }
+            }
+        }
+
+        unsorted.shouldBeEmpty()
+    }
+
+    @Test
     fun `a pair of different morph families dissolves one mesh into the other instead of snapping`() {
         val from = MorpheusGraphPresets.baseline
         val to = MorpheusGraphPresets.ribbonMesh
