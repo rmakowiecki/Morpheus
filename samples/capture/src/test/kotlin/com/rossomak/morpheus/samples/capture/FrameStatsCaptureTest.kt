@@ -3,6 +3,7 @@
 package com.rossomak.morpheus.samples.capture
 
 import com.rossomak.morpheus.ExperimentalMorpheusGraphApi
+import com.rossomak.morpheus.MorpheusGraphDrawingApproach
 import com.rossomak.morpheus.MorpheusGraphFrameBreakdown
 import com.rossomak.morpheus.MorpheusGraphFrameStats
 import com.rossomak.morpheus.samples.LoopMode
@@ -14,6 +15,7 @@ import com.rossomak.morpheus.samples.showcase.heroRibbons
 import io.kotest.assertions.withClue
 import io.kotest.matchers.floats.shouldBeGreaterThan
 import io.kotest.matchers.floats.shouldBeGreaterThanOrEqual
+import io.kotest.matchers.floats.shouldBeLessThan
 import io.kotest.matchers.shouldBe
 import kotlin.test.Test
 import kotlin.time.Duration
@@ -76,6 +78,33 @@ class FrameStatsCaptureTest {
         val normal = measure(stillAt = LATE_MORPH)
         val shown = measure(stillAt = LATE_MORPH) { showViolations = true }
         withClue("the frames up to here pass through violations") { shown.breakdown.total.drawCalls shouldBeGreaterThan normal.breakdown.total.drawCalls }
+    }
+
+    @Test
+    fun `point batches draw the same elements in far fewer draw calls, and close to the same frame`() {
+        val perElement = measure()
+        val batched = measure { drawingApproach = MorpheusGraphDrawingApproach.PointBatches }
+        batched.breakdown.total.drawnEdges shouldBe perElement.breakdown.total.drawnEdges
+        batched.breakdown.total.drawnHalos shouldBe perElement.breakdown.total.drawnHalos
+        batched.breakdown.total.drawnDots shouldBe perElement.breakdown.total.drawnDots
+        withClue("${batched.breakdown.total.drawCalls} batched against ${perElement.breakdown.total.drawCalls} per element") {
+            batched.breakdown.total.drawCalls shouldBeLessThan perElement.breakdown.total.drawCalls / 4
+        }
+        withClue("dots round up by two levels at most, edges move a few levels where they overlap") {
+            (batched.frame.meanChannelDifference(perElement.frame) < 1.0) shouldBe true
+        }
+    }
+
+    @Test
+    fun `skipping dots in point batches removes their batches from the count`() {
+        val batched = measure { drawingApproach = MorpheusGraphDrawingApproach.PointBatches }
+        val skipped = measure {
+            drawingApproach = MorpheusGraphDrawingApproach.PointBatches
+            skipDots = true
+        }
+        skipped.breakdown.total.drawnDots shouldBe 0f
+        skipped.breakdown.total.dotsMillis shouldBe 0f
+        skipped.breakdown.total.drawCalls shouldBeLessThan batched.breakdown.total.drawCalls
     }
 
     @Test

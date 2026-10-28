@@ -57,7 +57,7 @@ fun Gallery(samples: List<Sample> = SampleRegistry.samples, onSpecExport: (sourc
     val session = remember(selectedId) { samples.firstOrNull { it.id == selectedId }?.let(::GallerySession) }
     var themeMode by remember { mutableStateOf(ThemeMode.System) }
     val previewFrame = remember { PreviewFrame().apply { if (benchmark != null) setUpForBenchmark() } }
-    val frameStats = remember { GalleryFrameStats().apply { benchmark?.let { stats.setUpForBenchmark(it.skips) } } }
+    val frameStats = remember { GalleryFrameStats().apply { benchmark?.let { stats.setUpForBenchmark(it) } } }
     val clipboard = LocalClipboard.current
     val coroutineScope = rememberCoroutineScope()
 
