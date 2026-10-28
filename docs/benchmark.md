@@ -248,8 +248,14 @@ specs don't compare with a new run; measure the base again instead.
    ```
 
    A change stacked on another pull request compares against the head of the branch it's stacked on,
-   not against `develop`. If the change edits a spec or the harness in a way the base should share,
-   copy that edit into the base worktree uncommitted, so both sides run the same thing.
+   not against `develop`:
+
+   ```sh
+   git worktree add ../morpheus-base origin/<parent-branch>
+   ```
+
+   If the change edits a spec or the harness in a way the base should share, copy that edit into the
+   base worktree uncommitted, so both sides run the same thing.
 
 2. Alternate between the two checkouts, at least three rounds each, on the same machine with nothing
    else heavy running: base, change, base, change and so on. Alternating spreads the machine's drift
@@ -297,12 +303,18 @@ Headless, Chrome, ranges of round medians:
 | Comet track build, forward                    | 51.84–52.17 ms   | 4.12–4.36 ms     | faster     |
 | Comet track build, way back                   | 52.48–52.91 ms   | 4.10–4.16 ms     | faster     |
 | Morph meshes, two ends and transit            | 98.14–99.17 ms   | 94.13–95.03 ms   | not worse  |
-| Loop, per frame: shape                        | 4.70 ms          | 4.78 ms          | not worse  |
+| Loop, per frame: shape                        | 4.70 ms          | 4.78 ms          | regression |
 | Loop, per frame: edge fades                   | 16.93 ms         | 13.51 ms         | not worse  |
 
 The comet track build is the phase the change targets. The change's slowest round median, 4.36 ms,
-beats the base's fastest, 51.84 ms, so it is **faster**. Every other row overlaps or improves, so it is
-**not worse**. The JVM numbers came from the same runs and are reported in the pull request, not gated.
+beats the base's fastest, 51.84 ms, so it is **faster**. The morph meshes improve, so they are **not
+worse**.
+
+#48 reported each loop row as one median per side, so each is a range of one value and the same rules
+apply. Edge fades improve, so they are **not worse**. Shape is 0.08 ms (2%) slower and the values don't
+overlap, so it is a **regression**. #48 didn't measure its cause and accepted it along with the recipe's
+regression below. The JVM numbers came from the same runs and are reported in the pull request, not
+gated.
 
 The recipe on wasm, ranges of round medians, ms per frame:
 
