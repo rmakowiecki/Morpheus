@@ -504,7 +504,7 @@ internal class LayerField(
             topology = morphMeshFor(morph, width, height).union
         } else if (isFirstFrame || presenceChanged || filtersChanged || wasMidMorph) {
             // Triangulated over rest positions: drift stays under a cell, so the mesh never tangles.
-            topology = settleTopology(homeX, homeY, presentMask, presences, spec)
+            topology = restingMorphEnd(width, height) ?: settleTopology(homeX, homeY, presentMask, presences, spec)
         }
         wasMidMorph = morph != null
         prunedNodeCount = (0 until count).count { presentMask[it] && !topology.alive[it] }
@@ -1067,6 +1067,21 @@ internal class LayerField(
         return shapeScratch[position]
     }
 
+    /**
+     * Standing at either end of the morph [morphCache] holds, the mesh it settled for that end, which is exactly what a
+     * still frame there settles: the same presences, so the same nodes, under the same filters. A layer at a morph's
+     * end draws the end's own shape, or a morph resting at 0 or 1. Null anywhere else, before the morph's meshes are
+     * built, or when [spec]'s filters differ from that end's own.
+     */
+    private fun restingMorphEnd(width: Float, height: Float): MeshTopology? {
+        val restingShape = when (val current = shape) {
+            is LayerShape.Morph -> if (current.fraction <= 0f) current.from else current.to
+            else -> current
+        }
+        val end = morphCache?.endMeshFor(restingShape, width, height, count) ?: return null
+        return end.takeIf { spec.settlesLike(restingShape.nearestSpec) }
+    }
+
     /** True if any value the edge filters or [restEdgeAlpha] use changed since the last settle. */
     private fun updateSettledFilters(): Boolean {
         val filters = floatArrayOf(
@@ -1462,6 +1477,18 @@ private fun rollWeight(roll: Float, share: Float): Float {
     return smoothStep(start, start + ROLL_BAND, share)
 }
 
+/** Whether a [EdgeRule.FixedTriangulation] settle under this spec and under [other] keeps the same edges: every value it reads matches. */
+private fun MorpheusGraphLayerSpec.settlesLike(other: MorpheusGraphLayerSpec): Boolean =
+    maxEdgeFactor == other.maxEdgeFactor &&
+        minAngleDegrees == other.minAngleDegrees &&
+        edgeKeepChance == other.edgeKeepChance &&
+        repairReach == other.repairReach &&
+        edgeAlpha == other.edgeAlpha &&
+        alpha == other.alpha &&
+        lengthFalloff == other.lengthFalloff &&
+        depthDimming == other.depthDimming &&
+        strictTriangles == other.strictTriangles
+
 /** A stable seed for one grid cell, so a cell's node is the same whenever and in whatever order it is created. */
 private fun cellSeed(column: Int, row: Int, seed: Int): Int {
     var hash = column * 73_856_093 xor row * 19_349_663 xor seed * 83_492_791
@@ -1592,6 +1619,20 @@ private class MorphCache(
 
     fun isFor(morph: LayerShape.Morph, width: Float, height: Float, nodeCount: Int): Boolean =
         morph.from == from && morph.to == to && width == this.width && height == this.height && nodeCount == this.nodeCount
+
+    /**
+     * The mesh settled for the end [shape] is, start or end, on the same surface and nodes; null for any other shape,
+     * or before the meshes are built. Each end's mesh depends on that end alone.
+     */
+    fun endMeshFor(shape: LayerShape, width: Float, height: Float, nodeCount: Int): MeshTopology? {
+        val mesh = mesh ?: return null
+        if (width != this.width || height != this.height || nodeCount != this.nodeCount) return null
+        return when (shape) {
+            to -> mesh.end
+            from -> mesh.start
+            else -> null
+        }
+    }
 }
 
 /**
@@ -1608,8 +1649,8 @@ private class MorphCache(
  */
 private class MorphMesh(
     private val nodeCount: Int,
-    start: MeshTopology,
-    end: MeshTopology,
+    val start: MeshTopology,
+    val end: MeshTopology,
     transit: TransitMesh?,
     switches: NodeSwitches,
 ) {

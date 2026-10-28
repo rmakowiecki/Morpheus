@@ -54,6 +54,26 @@ class MorphCacheTest {
         run.fields.values.map { it.morphMeshBuildCount } shouldBe List(run.fields.size) { 1 }
     }
 
+    @Test
+    fun `either end of a morph reuses the mesh it settled for that end, the mesh a still frame there settles`() {
+        val morph = MorpheusGraphMorph(heroPills, heroRibbons, 0f)
+
+        val mismatches = listOf(1f to heroRibbons, 0f to heroPills).flatMap { (fraction, endSpec) ->
+            val run = Run(cachesMorphs = true).also { it.advance(morph.copy(fraction = 0.5f)) }
+            val settlesBefore = run.fields.mapValues { it.value.settleCount }
+            run.advance(morph.copy(fraction = fraction))
+            val still = Run(cachesMorphs = true).also { it.advance(MorpheusGraphMorph(endSpec, endSpec, 0f)) }
+            run.fields.flatMap { (key, field) ->
+                listOfNotNull(
+                    "$key at $fraction settled again".takeIf { field.settleCount != settlesBefore.getValue(key) },
+                    "$key at $fraction differs from a still frame".takeIf { !field.topology.edges.contentEquals(still.fields.getValue(key).topology.edges) },
+                )
+            }
+        }
+
+        mismatches.shouldBeEmpty()
+    }
+
     /** Every difference between [frames] drawn with the cache on and with it off: presences, hot weights and edges. */
     private fun compare(name: String, frames: List<MorpheusGraphMorph>): List<String> {
         val cached = Run(cachesMorphs = true)
