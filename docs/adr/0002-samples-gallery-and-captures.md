@@ -32,6 +32,18 @@ specs as plain parameters with defaults, and specs read so that tuning one never
 Titles, controls, theme and background come from the host. Cycles follow the frame clock, never `delay`,
 so they advance with a capture's virtual clock.
 
+Driver helpers, such as `MorphCycle`, which seeks a morph state around a list of specs, are exempt from that
+rule: the library calls inside them are what a sample shows, so a sample's own code stays a few lines and
+quotes the helper's call rather than its body.
+
+### The gallery shows what the library displays, never app wiring
+
+A sample shows what the library draws and how it manipulates the visuals: specs, layers, morphs, fills and
+their parameters. It doesn't show how an app feeds the library, such as reacting to swipes or scroll
+position, so the gallery has no pager or scroll samples. The gallery's panes are one common set (theme, preview
+canvas, Tune, Pause, frame stats, comet debug), and a sample takes only the modules that apply to it: only a
+sample with morphs has a scrub slider, comet debug and timing controls.
+
 ### Captures render only from code
 
 The capture tool renders each sample at its default specs, headlessly, on a virtual frame clock, so every

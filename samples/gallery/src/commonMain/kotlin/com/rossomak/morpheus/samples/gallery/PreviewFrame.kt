@@ -21,7 +21,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import com.rossomak.morpheus.samples.CaptureRecipe
+import com.rossomak.morpheus.samples.ClassicCanvas
 import com.rossomak.morpheus.samples.PortraitCanvas
+import com.rossomak.morpheus.samples.SquareCanvas
 import com.rossomak.morpheus.samples.WideCanvas
 
 /** The canvas sizes the preview control offers. [size] is null where the size comes from elsewhere. */
@@ -32,8 +34,8 @@ internal enum class PreviewPreset(val label: String, val size: DpSize?) {
     /** The whole pane, at whatever ratio it has. */
     Fill("Fill pane", null),
     Wide("16:9", WideCanvas),
-    Classic("4:3", DpSize(640.dp, 480.dp)),
-    Square("1:1", DpSize(480.dp, 480.dp)),
+    Classic("4:3", ClassicCanvas),
+    Square("1:1", SquareCanvas),
     Portrait("9:16", PortraitCanvas),
 
     /** A width and height typed in. */

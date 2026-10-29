@@ -13,7 +13,11 @@ import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlinx.coroutines.runBlocking
 
-/** The renderer over the whole registry, so every sample registered later is covered as it lands. */
+/**
+ * The renderer over the whole registry, so every sample registered later is covered as it lands. Each sample and
+ * theme renders once for the whole class, and only a [CaptureDigest] of it is kept: a capture's frames run to a few
+ * hundred MB each, which a registry's worth of them wouldn't fit in memory.
+ */
 class CaptureRendererTest {
     private val samples = SampleRegistry.samples
 
@@ -25,15 +29,11 @@ class CaptureRendererTest {
             val height = (recipe.canvasSize.height.value * recipe.density).roundToInt()
             for (theme in recipe.themes.themes) {
                 withClue("${sample.id} in $theme") {
-                    val capture = captureOf(sample, theme)
-                    capture.frames shouldHaveSize declaredFrameCount(recipe)
-                    for ((index, frame) in (capture.frames + capture.still).withIndex()) {
-                        withClue("frame $index") {
-                            frame.width shouldBe width
-                            frame.height shouldBe height
-                            frame.isUniform shouldBe false
-                        }
-                    }
+                    val digest = digestOf(sample, theme)
+                    digest.frameCount shouldBe declaredFrameCount(recipe)
+                    digest.wrongSizeFrames shouldBe emptyList()
+                    digest.uniformFrames shouldBe emptyList()
+                    digest.frameSize shouldBe (width to height)
                 }
             }
         }
@@ -43,11 +43,11 @@ class CaptureRendererTest {
     fun `rendering a sample twice gives the same frames`() {
         for (sample in samples.filterNot { it.galleryOnly }) {
             val theme = sample.recipe.themes.themes.first()
-            val first = captureOf(sample, theme)
-            val second = runBlocking { renderCapture(sample, theme) }
+            val first = digestOf(sample, theme)
+            val second = CaptureDigest(sample, runBlocking { renderCapture(sample, theme) })
             withClue(sample.id) {
-                for (index in 0 until minOf(DETERMINISM_PREFIX, first.frames.size)) {
-                    withClue("frame $index") { first.frames[index].contentEquals(second.frames[index]) shouldBe true }
+                for ((index, frame) in first.head.withIndex()) {
+                    withClue("frame $index") { frame.contentEquals(second.head[index]) shouldBe true }
                 }
                 withClue("still") { first.still.contentEquals(second.still) shouldBe true }
             }
@@ -65,11 +65,9 @@ class CaptureRendererTest {
     fun `a crossfade's seam moves no more than a typical frame step`() {
         for (sample in samples.filter { it.recipe.loop == LoopMode.Crossfade }) {
             for (theme in sample.recipe.themes.themes) {
-                val frames = captureOf(sample, theme).frames
-                val steps = frames.zipWithNext { a, b -> a.meanChannelDifference(b) }.sorted()
-                val medianStep = steps[steps.size / 2]
-                withClue("${sample.id} in $theme, median step $medianStep") {
-                    frames.last().meanChannelDifference(frames.first()) shouldBeLessThanOrEqual SEAM_TOLERANCE * medianStep
+                val digest = digestOf(sample, theme)
+                withClue("${sample.id} in $theme, median step ${digest.medianStep}") {
+                    digest.seamStep shouldBeLessThanOrEqual SEAM_TOLERANCE * digest.medianStep
                 }
             }
         }
@@ -79,7 +77,11 @@ class CaptureRendererTest {
     fun `a boomerang's second half is its first half reversed`() {
         for (sample in samples.filter { it.recipe.loop == LoopMode.Boomerang }) {
             for (theme in sample.recipe.themes.themes) {
-                withClue("${sample.id} in $theme") { assertMirrored(captureOf(sample, theme).frames, sample.recipe.frameCount) }
+                withClue("${sample.id} in $theme") {
+                    val digest = digestOf(sample, theme)
+                    digest.frameCount shouldBe 2 * sample.recipe.frameCount
+                    digest.unmirroredFrames shouldBe emptyList()
+                }
             }
         }
     }
@@ -88,20 +90,55 @@ class CaptureRendererTest {
     fun `a two-theme sample looks different in light and dark`() {
         for (sample in samples.filter { it.recipe.themes == CaptureThemes.LightAndDark }) {
             withClue(sample.id) {
-                captureOf(sample, CaptureTheme.Light).still.contentEquals(captureOf(sample, CaptureTheme.Dark).still) shouldBe false
+                digestOf(sample, CaptureTheme.Light).still.contentEquals(digestOf(sample, CaptureTheme.Dark).still) shouldBe false
             }
         }
     }
 
     private companion object {
-        /** Each sample and theme renders once for the whole class; only the determinism test renders again. */
-        private val captures = HashMap<Pair<String, CaptureTheme>, Capture>()
+        private val digests = HashMap<Pair<String, CaptureTheme>, CaptureDigest>()
 
-        fun captureOf(sample: Sample, theme: CaptureTheme): Capture = captures.getOrPut(sample.id to theme) { runBlocking { renderCapture(sample, theme) } }
+        fun digestOf(sample: Sample, theme: CaptureTheme): CaptureDigest =
+            digests.getOrPut(sample.id to theme) { CaptureDigest(sample, runBlocking { renderCapture(sample, theme) }) }
 
         const val DETERMINISM_PREFIX = 10
         const val SEAM_TOLERANCE = 1.5
         val KEBAB_CASE = Regex("[a-z0-9]+(-[a-z0-9]+)*")
+    }
+
+    /** What the tests ask of one rendered [Capture], taken once so its frames can be dropped. */
+    private class CaptureDigest(sample: Sample, capture: Capture) {
+        val frameCount = capture.frames.size
+        val frameSize: Pair<Int, Int> = (capture.frames + capture.still).first().let { it.width to it.height }
+        val wrongSizeFrames = (capture.frames + capture.still).withIndex().filter { (_, frame) -> frame.width to frame.height != frameSize }.map { it.index }
+        val uniformFrames = (capture.frames + capture.still).withIndex().filter { (_, frame) -> frame.isUniform }.map { it.index }
+        val head: List<Frame> = capture.frames.take(DETERMINISM_PREFIX)
+        val still: Frame = capture.still
+
+        /** The mean difference between neighbouring frames, the middle one of them, and across the loop's seam. */
+        val medianStep: Double
+        val seamStep: Double
+
+        /** For a boomerang, the frames in its second half that aren't the matching ones of its first. */
+        val unmirroredFrames: List<Int>
+
+        init {
+            val frames = capture.frames
+            if (sample.recipe.loop == LoopMode.Crossfade && frames.size > 1) {
+                val steps = frames.zipWithNext { a, b -> a.meanChannelDifference(b) }.sorted()
+                medianStep = steps[steps.size / 2]
+                seamStep = frames.last().meanChannelDifference(frames.first())
+            } else {
+                medianStep = 0.0
+                seamStep = 0.0
+            }
+            val forward = sample.recipe.frameCount
+            unmirroredFrames = if (sample.recipe.loop == LoopMode.Boomerang) {
+                (1 until forward).filterNot { offset -> frames[forward + offset].contentEquals(frames[forward - offset]) }.map { forward + it }
+            } else {
+                emptyList()
+            }
+        }
     }
 }
 

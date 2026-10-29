@@ -1,6 +1,13 @@
 package com.rossomak.morpheus.samples
 
+import com.rossomak.morpheus.samples.catalog.compoundShapesSample
+import com.rossomak.morpheus.samples.catalog.edgeRulesSample
+import com.rossomak.morpheus.samples.catalog.layersSample
 import com.rossomak.morpheus.samples.catalog.minimalSample
+import com.rossomak.morpheus.samples.catalog.presetTourSample
+import com.rossomak.morpheus.samples.catalog.ringAndArcsSample
+import com.rossomak.morpheus.samples.catalog.shapePrimitivesSample
+import com.rossomak.morpheus.samples.catalog.waveAndPulseSample
 import com.rossomak.morpheus.samples.showcase.cometPlaygroundSample
 import com.rossomak.morpheus.samples.showcase.heroSample
 
@@ -10,6 +17,13 @@ object SampleRegistry {
         minimalSample,
         heroSample,
         cometPlaygroundSample,
+        presetTourSample,
+        layersSample,
+        edgeRulesSample,
+        shapePrimitivesSample,
+        waveAndPulseSample,
+        ringAndArcsSample,
+        compoundShapesSample,
     )
 
     init {

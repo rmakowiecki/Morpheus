@@ -10,7 +10,8 @@ import kotlin.time.Duration.Companion.seconds
 /**
  * How the capture tool renders a sample, so captures are reproducible without command-line flags. The
  * gallery also shows the sample at [canvasSize], with a window reference of that size. Samples use one of
- * the standard canvases, [WideCanvas] or [PortraitCanvas], unless their composition needs its own.
+ * the standard canvases, [WideCanvas], [ClassicCanvas], [SquareCanvas] or [PortraitCanvas], unless their
+ * composition needs its own.
  *
  * Animated captures render [duration] at [fps] (plus [crossfade] in [LoopMode.Crossfade]); the still
  * frame is the one at [stillAt]. A file over [budgetBytes] fails the capture.
@@ -59,6 +60,12 @@ const val MIN_CAPTURE_FPS = 20
 
 /** The standard 16:9 sample canvas, also the gallery's 16:9 preview. */
 val WideCanvas = DpSize(640.dp, 360.dp)
+
+/** The standard 4:3 sample canvas, also the gallery's 4:3 preview. */
+val ClassicCanvas = DpSize(640.dp, 480.dp)
+
+/** The standard 1:1 sample canvas, also the gallery's 1:1 preview. */
+val SquareCanvas = DpSize(480.dp, 480.dp)
 
 /** The standard 9:16 sample canvas, also the gallery's 9:16 preview. */
 val PortraitCanvas = DpSize(360.dp, 640.dp)

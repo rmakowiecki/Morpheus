@@ -5,6 +5,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.rossomak.morpheus.ExperimentalMorpheusGraphApi
+import com.rossomak.morpheus.MorpheusGraphFrameStats
 import com.rossomak.morpheus.MorpheusGraphSpec
 import com.rossomak.morpheus.samples.CycleControl
 import com.rossomak.morpheus.samples.MorphEasing
@@ -14,12 +16,16 @@ import com.rossomak.morpheus.samples.SampleSpecs
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
- * One open sample: its preparation, its tuned specs, morph easings and timing, the tuning sheet and its cycle
- * control.
+ * One open sample: its preparation, its tuned specs, morph easings and timing, the tuning sheet, its cycle
+ * control and the stats of its grid tiles, which mirror the debug switches of the page's [pageStats].
  * Dropped, and so reset, when the sample is left.
  */
+@OptIn(ExperimentalMorpheusGraphApi::class)
 @Stable
-internal class GallerySession(val sample: Sample) {
+internal class GallerySession(val sample: Sample, pageStats: MorpheusGraphFrameStats) {
+    /** The stats of the sample's grid tiles; empty for a sample that isn't a grid. */
+    val tiles = TileStatsGroup(pageStats)
+
     private val tunedSpecs = mutableStateMapOf<String, MorpheusGraphSpec>().apply { sample.specs.forEach { put(it.name, it.default) } }
     private val tunedEasings = mutableStateMapOf<String, MorphEasing>().apply { sample.morphs.forEach { put(it.name, it.default) } }
 
@@ -34,8 +40,14 @@ internal class GallerySession(val sample: Sample) {
 
     var isTuning by mutableStateOf(false)
 
-    /** Pauses and scrubs the sample's cycle, such as a morph held at one end while its spec is tuned. */
+    /**
+     * Pauses the sample, and scrubs its cycle when it runs one, such as a morph held at one end while its spec is
+     * tuned. Pausing holds the sample's lifecycle below STARTED too, so the library's own clock stands still.
+     */
     val cycle = CycleControl()
+
+    /** True for a sample with morphs, which runs a cycle: only such a sample has a scrub slider, comet debug and timing. */
+    val runsCycle: Boolean get() = sample.timing != null
 
     /** The spec the sheet tunes; null only for a sample without specs. */
     var selectedSpecName: String? by mutableStateOf(sample.specs.firstOrNull()?.name)

@@ -1,30 +1,32 @@
-package com.rossomak.morpheus.samples.showcase
+package com.rossomak.morpheus.samples
 
 import androidx.compose.animation.core.Easing
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import com.rossomak.morpheus.MorpheusGraphMorphState
 import com.rossomak.morpheus.MorpheusGraphSpec
-import com.rossomak.morpheus.samples.MorphTiming
-import com.rossomak.morpheus.samples.rememberCycleTime
+import kotlin.time.Duration
 
 /**
  * Drives [state] around [specs] in turn on a loop, one leg per spec: each leg holds its spec for half the
  * [timing]'s hold, morphs to the next spec over its morph through its own entry of [easings], then holds the
- * next spec for the other half. The loop starts halfway through the first spec's hold. Each leg is a morph of its own, from its spec to the next, so a way back plans its comets from
- * where it starts instead of replaying the way there. The cycle follows the frame clock, and a tuned spec easing
- * or timing takes effect from the next frame.
+ * next spec for the other half. The loop starts halfway through the first spec's hold. Each leg is a morph of
+ * its own, from its spec to the next, so a way back plans its comets from where it starts instead of
+ * replaying the way there. A tuned spec easing or timing takes effect from the next frame.
+ *
+ * The cycle follows [cycleTime], which the caller creates with [rememberCycleTime] over [cyclePeriod], so that
+ * several states can share one cycle, and one [CycleControl] pauses and scrubs them together.
  */
 @Composable
-internal fun MorphCycle(state: MorpheusGraphMorphState, specs: List<MorpheusGraphSpec>, easings: List<Easing>, timing: MorphTiming) {
+internal fun MorphCycle(state: MorpheusGraphMorphState, specs: List<MorpheusGraphSpec>, easings: List<Easing>, timing: MorphTiming, cycleTime: State<Duration>) {
     require(specs.size == easings.size) { "Each of the ${specs.size} legs needs an easing, got ${easings.size}" }
     val currentSpecs by rememberUpdatedState(specs)
     val currentEasings by rememberUpdatedState(easings)
     val currentTiming by rememberUpdatedState(timing)
-    val cycleTime = rememberCycleTime(period = timing.leg * specs.size)
     LaunchedEffect(state) {
         var seeking: Pair<MorpheusGraphSpec, MorpheusGraphSpec>? = null
         snapshotFlow { Triple(currentSpecs, currentEasings, cycleTime.value) }.collect { (legSpecs, legEasings, time) ->
@@ -42,3 +44,6 @@ internal fun MorphCycle(state: MorpheusGraphMorphState, specs: List<MorpheusGrap
         }
     }
 }
+
+/** How long one trip around [legs] legs takes: the period to give [rememberCycleTime] for a [MorphCycle] of that many specs. */
+internal fun MorphTiming.cyclePeriod(legs: Int): Duration = leg * legs

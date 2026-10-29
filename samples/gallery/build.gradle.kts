@@ -35,6 +35,8 @@ kotlin {
             implementation(project(":samples:shared"))
             implementation(project(":morpheus-tuner"))
             implementation(libs.jetbrains.compose.material.icons.extended)
+            // The lifecycle the lib's renderer reads, which pausing a sample holds below STARTED.
+            implementation(libs.jetbrains.lifecycle.runtime.compose)
         }
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)

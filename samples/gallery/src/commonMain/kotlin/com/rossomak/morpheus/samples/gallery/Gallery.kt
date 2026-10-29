@@ -54,10 +54,10 @@ fun Gallery(samples: List<Sample> = SampleRegistry.samples, onSpecExport: (sourc
     val orderedSamples = remember(samples) { samples.sortedBy { it.category.ordinal } }
     var selectedId by remember { mutableStateOf(benchmark?.sampleId) }
     // Held here rather than in a pane, so a layout switch keeps the open sample's preparation and tuning.
-    val session = remember(selectedId) { samples.firstOrNull { it.id == selectedId }?.let(::GallerySession) }
     var themeMode by remember { mutableStateOf(ThemeMode.System) }
     val previewFrame = remember { PreviewFrame().apply { if (benchmark != null) setUpForBenchmark() } }
     val frameStats = remember { GalleryFrameStats().apply { benchmark?.let { stats.setUpForBenchmark(it.skips) } } }
+    val session = remember(selectedId) { samples.firstOrNull { it.id == selectedId }?.let { GallerySession(it, frameStats.stats) } }
     val clipboard = LocalClipboard.current
     val coroutineScope = rememberCoroutineScope()
 
@@ -106,13 +106,13 @@ fun Gallery(samples: List<Sample> = SampleRegistry.samples, onSpecExport: (sourc
                         } else {
                             detail(session, Modifier.weight(1f).fillMaxHeight())
                         }
-                        val debugPanes = frameStats.takeIf { session != null && (it.isBreakdownExpanded || it.isCometDebugExpanded) }
-                        if (tuning != null || debugPanes != null) {
+                        if (tuning != null || frameStats.showsFrameStats(session) || frameStats.showsCometDebug(session)) {
                             VerticalDivider()
                             SideColumn(
                                 tuning = tuning?.let { open -> { tuneSheet(open, Modifier) } },
                                 onCloseTuning = { tuning?.isTuning = false },
-                                debugPanes = debugPanes,
+                                frameStats = frameStats,
+                                session = session,
                                 modifier = Modifier.width(SIDE_SHEET_WIDTH).fillMaxHeight(),
                             )
                         }
@@ -132,42 +132,50 @@ fun Gallery(samples: List<Sample> = SampleRegistry.samples, onSpecExport: (sourc
     }
 }
 
+/** The frame stats pane is open, for the open sample. */
+private fun GalleryFrameStats.showsFrameStats(session: GallerySession?): Boolean = session != null && isBreakdownExpanded
+
+/** The comet debug pane is open, for a sample that runs a cycle: the comets are what a morph sends. */
+private fun GalleryFrameStats.showsCometDebug(session: GallerySession?): Boolean = session != null && session.runsCycle && isCometDebugExpanded
+
 /**
  * The wide layout's right-hand column, which stacks the tuner, the frame stats and the comet debug panes like an
  * IDE's side panes; the comet debug pane takes only what its switches need.
  * The tuner takes whatever height the frame stats pane leaves; that pane takes only what its table needs, up to
  * [FRAME_STATS_MAX_SHARE] of the column, and scrolls inside itself past that. Either pane alone fills what it needs.
- * [debugPanes] shows the frame stats and comet debug panes it has open.
+ * The frame stats and comet debug panes are the open [session]'s; the comet debug pane is for a sample that runs
+ * a cycle only.
  */
 @Composable
 private fun SideColumn(
     tuning: (@Composable () -> Unit)?,
     onCloseTuning: () -> Unit,
-    debugPanes: GalleryFrameStats?,
+    frameStats: GalleryFrameStats,
+    session: GallerySession?,
     modifier: Modifier = Modifier,
 ) {
-    val frameStats = debugPanes?.takeIf { it.isBreakdownExpanded }
-    val cometDebug = debugPanes?.takeIf { it.isCometDebugExpanded }
+    val showsFrameStats = frameStats.showsFrameStats(session)
+    val showsCometDebug = frameStats.showsCometDebug(session)
     BoxWithConstraints(modifier = modifier) {
         val frameStatsMaxHeight = maxHeight * FRAME_STATS_MAX_SHARE
         Column(modifier = Modifier.fillMaxSize()) {
             if (tuning != null) {
                 SideSheet(title = "Tune", onClose = onCloseTuning, modifier = Modifier.weight(1f).fillMaxWidth()) { tuning() }
             }
-            if (frameStats != null) {
+            if (showsFrameStats && session != null) {
                 if (tuning != null) HorizontalDivider()
                 SideSheet(
                     title = "Frame stats",
                     onClose = { frameStats.isBreakdownExpanded = false },
                     modifier = Modifier.fillMaxWidth().heightIn(max = frameStatsMaxHeight),
                 ) {
-                    FrameBreakdownPanel(frameStats = frameStats, maxHeight = Dp.Infinity, modifier = Modifier.fillMaxWidth())
+                    FrameBreakdownPanel(frameStats = frameStats, tiles = session.tiles, maxHeight = Dp.Infinity, modifier = Modifier.fillMaxWidth())
                 }
             }
-            if (cometDebug != null) {
-                if (tuning != null || frameStats != null) HorizontalDivider()
-                SideSheet(title = "Comet debug", onClose = { cometDebug.isCometDebugExpanded = false }, modifier = Modifier.fillMaxWidth()) {
-                    CometDebugPanel(stats = cometDebug.stats, modifier = Modifier.fillMaxWidth())
+            if (showsCometDebug) {
+                if (tuning != null || showsFrameStats) HorizontalDivider()
+                SideSheet(title = "Comet debug", onClose = { frameStats.isCometDebugExpanded = false }, modifier = Modifier.fillMaxWidth()) {
+                    CometDebugPanel(stats = frameStats.stats, modifier = Modifier.fillMaxWidth())
                 }
             }
         }
