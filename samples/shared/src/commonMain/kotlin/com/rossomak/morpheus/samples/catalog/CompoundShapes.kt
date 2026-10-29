@@ -2,15 +2,12 @@
 
 package com.rossomak.morpheus.samples.catalog
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.rossomak.morpheus.MorpheusGraphSpec
 import com.rossomak.morpheus.ShapePrimitive.Rect
 import com.rossomak.morpheus.ShapePrimitive.Ring
 import com.rossomak.morpheus.ShapePrimitive.Triangle
-import com.rossomak.morpheus.morpheusGraphBackground
 import com.rossomak.morpheus.samples.Sample
 import com.rossomak.morpheus.samples.SampleCategory
 import com.rossomak.morpheus.samples.TunableSpec
@@ -32,7 +29,7 @@ private val compoundShapesSpec = MorpheusGraphSpec(
 /** A layer takes the strongest of its shapes at each point, so a [Ring], a [Rect] and a [Triangle] overlap into one union. */
 @Composable
 fun CompoundShapesSample(modifier: Modifier = Modifier, spec: MorpheusGraphSpec = compoundShapesSpec) {
-    Box(modifier.fillMaxSize().morpheusGraphBackground(spec))
+    SampleGraph(spec, modifier)
 }
 
 private const val COMPOUND_SHAPES = "Compound shapes"
@@ -41,7 +38,7 @@ internal val compoundShapesSample = Sample(
     id = "compound-shapes",
     title = "Compound shapes",
     description = "A triangle and a rectangle each crossing a ring, merged in one layer.",
-    category = SampleCategory.Catalog,
+    category = SampleCategory.BasicShapes,
     specs = listOf(TunableSpec(COMPOUND_SHAPES, compoundShapesSpec)),
     content = { specs -> CompoundShapesSample(spec = specs[COMPOUND_SHAPES]) },
 )

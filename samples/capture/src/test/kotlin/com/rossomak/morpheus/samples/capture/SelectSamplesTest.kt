@@ -40,5 +40,5 @@ class SelectSamplesTest {
     }
 
     private fun sample(id: String, galleryOnly: Boolean = false) =
-        Sample(id = id, title = id, description = id, category = SampleCategory.Catalog, galleryOnly = galleryOnly, content = {})
+        Sample(id = id, title = id, description = id, category = SampleCategory.BasicShapes, galleryOnly = galleryOnly, content = {})
 }

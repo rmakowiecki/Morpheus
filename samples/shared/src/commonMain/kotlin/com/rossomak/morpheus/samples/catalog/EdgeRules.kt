@@ -2,14 +2,11 @@
 
 package com.rossomak.morpheus.samples.catalog
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.rossomak.morpheus.EdgeRule
 import com.rossomak.morpheus.MorpheusGraphLayerSpec
 import com.rossomak.morpheus.MorpheusGraphSpec
-import com.rossomak.morpheus.morpheusGraphBackground
 import com.rossomak.morpheus.samples.Sample
 import com.rossomak.morpheus.samples.SampleCategory
 import com.rossomak.morpheus.samples.SampleGrid
@@ -57,9 +54,9 @@ fun EdgeRulesSample(
         modifier = modifier,
         columns = 3,
         tiles = listOf(
-            SampleTile(PROXIMITY) { Box(Modifier.fillMaxSize().morpheusGraphBackground(proximity)) },
-            SampleTile(FIXED_TRIANGULATION) { Box(Modifier.fillMaxSize().morpheusGraphBackground(fixedTriangulation)) },
-            SampleTile(LIVING_DELAUNAY) { Box(Modifier.fillMaxSize().morpheusGraphBackground(livingDelaunay)) },
+            SampleTile(PROXIMITY) { SampleGraph(proximity) },
+            SampleTile(FIXED_TRIANGULATION) { SampleGraph(fixedTriangulation) },
+            SampleTile(LIVING_DELAUNAY) { SampleGraph(livingDelaunay) },
         ),
     )
 }
@@ -68,7 +65,7 @@ internal val edgeRulesSample = Sample(
     id = "edge-rules",
     title = "Edge rules",
     description = "The same nodes joined by proximity, by a fixed triangulation and by a Delaunay triangulation redone every frame.",
-    category = SampleCategory.Catalog,
+    category = SampleCategory.BasicShapes,
     specs = listOf(
         TunableSpec(PROXIMITY, proximitySpec),
         TunableSpec(FIXED_TRIANGULATION, fixedTriangulationSpec),

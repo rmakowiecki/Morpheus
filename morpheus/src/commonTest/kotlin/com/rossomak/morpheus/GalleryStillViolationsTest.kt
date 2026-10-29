@@ -7,16 +7,16 @@ import kotlin.math.min
 import kotlin.test.Test
 
 /**
- * Keeps "Show violations" clean on every gallery sample's still frames: Minimal (the [MorpheusGraphPresets.baseline]
- * preset) and both ends of the "Pills to ribbons" showcase, plus the frames where the showcase's morph
+ * Keeps "Show violations" clean on the gallery's still frames: the [MorpheusGraphPresets.baseline] preset and both
+ * ends of the "Pills to ribbons" showcase, plus the frames where the showcase's morph
  * ends and settles. Each frame is checked as the overlay rings it, through [LayerField.nodeViolations]
  * and [LayerField.ringedConnectivityViolations]. Stepped at 30 fps from t = 0, as [GoldenTopologyTest] steps.
  */
 class GalleryStillViolationsTest {
 
     @Test
-    fun `every gallery sample's still frames show no violations`() {
-        val stills = listOf("minimal" to MorpheusGraphPresets.baseline, "hero pills" to heroPills, "hero ribbons" to heroRibbons)
+    fun `the gallery's still frames show no violations`() {
+        val stills = listOf("baseline" to MorpheusGraphPresets.baseline, "hero pills" to heroPills, "hero ribbons" to heroRibbons)
         val violations = stills.flatMap { (name, spec) ->
             spec.layers.flatMapIndexed { index, layer -> stillViolations("$name/layer $index", layer) }
         }
