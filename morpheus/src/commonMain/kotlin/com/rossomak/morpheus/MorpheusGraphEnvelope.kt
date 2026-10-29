@@ -86,11 +86,11 @@ internal class MorpheusGraphEnvelope(private val seed: Int) {
             val nearness = when (primitive) {
                 is Uniform -> 1f
                 is Ribbon -> 1f - (abs(y - ribbonCenterAt(primitive, ribbonPhases(ordinal), width, height, x)) / height).coerceIn(0f, 1f)
-                is Bloom -> closenessOf(hypot(primitive.x * width - x, primitive.y * height - y), width, height)
+                is Bloom -> centerCloseness(primitive.x, primitive.y, width, height, x, y)
                 is Pill -> closenessOf(pillAxisDistance(primitive, width, height, x, y), width, height)
                 is Ring -> closenessOf(ringCurveDistance(primitive, width, height, x, y), width, height)
-                is Rect -> closenessOf(hypot(primitive.x * width - x, primitive.y * height - y), width, height)
-                is Triangle -> closenessOf(hypot(primitive.x * width - x, primitive.y * height - y), width, height)
+                is Rect -> centerCloseness(primitive.x, primitive.y, width, height, x, y)
+                is Triangle -> centerCloseness(primitive.x, primitive.y, width, height, x, y)
             }
             closeness = max(closeness, weight * nearness)
         }
@@ -115,6 +115,9 @@ internal class MorpheusGraphEnvelope(private val seed: Int) {
 }
 
 internal const val TWO_PI = 6.2831855f
+
+private fun centerCloseness(centerX: Float, centerY: Float, width: Float, height: Float, x: Float, y: Float): Float =
+    closenessOf(hypot(centerX * width - x, centerY * height - y), width, height)
 
 private fun closenessOf(distance: Float, width: Float, height: Float): Float =
     1f - (distance / hypot(width, height)).coerceIn(0f, 1f)

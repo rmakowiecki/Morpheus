@@ -1,6 +1,7 @@
 package com.rossomak.morpheus
 
 import com.rossomak.morpheus.ShapePrimitive.Triangle
+import io.kotest.matchers.floats.plusOrMinus
 import io.kotest.matchers.shouldBe
 import kotlin.test.Test
 
@@ -76,11 +77,15 @@ class TriangleEnvelopeTest {
     @Test
     fun `the plateau sets how much of the inradius is held at full density`() {
         val hard = layerOf(Triangle(width = 0.4f, height = 0.3f, cornerRadius = 0f, plateau = 0.95f))
+        val half = layerOf(Triangle(width = 0.4f, height = 0.3f, cornerRadius = 0f, plateau = 0.5f))
         val soft = layerOf(Triangle(width = 0.4f, height = 0.3f, cornerRadius = 0f, plateau = 0f))
         val nearBase = CENTER_Y + 80f
 
+        // 20px above the base is 20 / 107 = 0.187 of the inradius. The falloff spans all of it with no plateau and the
+        // outer half with a plateau of 0.5, so smoothStep gives 0.092 and 0.315. A plateau of 0.95 holds it at 1.
         densityAt(hard, CENTER_X, nearBase) shouldBe 1f
-        (densityAt(soft, CENTER_X, nearBase) < 1f) shouldBe true
+        densityAt(half, CENTER_X, nearBase) shouldBe (0.315f plusOrMinus 0.01f)
+        densityAt(soft, CENTER_X, nearBase) shouldBe (0.092f plusOrMinus 0.01f)
     }
 
     @Test

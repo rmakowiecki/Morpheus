@@ -331,7 +331,7 @@ private fun primitiveSliders(primitive: ShapePrimitive): List<PrimitiveSlider<Sh
         PrimitiveSlider("Length", 0.02f..1.5f, { it.length }, { shape, value -> shape.copy(length = value) }),
         PrimitiveSlider("Thickness", 0.02f..0.8f, { it.thickness }, { shape, value -> shape.copy(thickness = value) }),
         PrimitiveSlider("Rotation (°)", -180f..180f, { it.rotation }, { shape, value -> shape.copy(rotation = value) }),
-        PrimitiveSlider("Plateau", 0f..0.95f, { it.plateau }, { shape, value -> shape.copy(plateau = value) }),
+        PrimitiveSlider("Plateau (0 soft, 1 hard edge)", 0f..0.95f, { it.plateau }, { shape, value -> shape.copy(plateau = value) }),
         PrimitiveSlider("Center x", 0f..1f, { it.x }, { shape, value -> shape.copy(x = value) }),
         PrimitiveSlider("Center y", 0f..1f, { it.y }, { shape, value -> shape.copy(y = value) }),
     )
@@ -341,7 +341,7 @@ private fun primitiveSliders(primitive: ShapePrimitive): List<PrimitiveSlider<Sh
         PrimitiveSlider("Thickness", 0.02f..0.8f, { it.thickness }, { shape, value -> shape.copy(thickness = value) }),
         PrimitiveSlider("Start angle (°)", -180f..180f, { it.startAngle }, { shape, value -> shape.copy(startAngle = value) }),
         PrimitiveSlider("Sweep (°)", 0f..360f, { it.sweep }, { shape, value -> shape.copy(sweep = value) }),
-        PrimitiveSlider("Plateau", 0f..0.95f, { it.plateau }, { shape, value -> shape.copy(plateau = value) }),
+        PrimitiveSlider("Plateau (0 soft, 1 hard edge)", 0f..0.95f, { it.plateau }, { shape, value -> shape.copy(plateau = value) }),
         PrimitiveSlider("Center x", 0f..1f, { it.x }, { shape, value -> shape.copy(x = value) }),
         PrimitiveSlider("Center y", 0f..1f, { it.y }, { shape, value -> shape.copy(y = value) }),
     )
@@ -351,7 +351,7 @@ private fun primitiveSliders(primitive: ShapePrimitive): List<PrimitiveSlider<Sh
         PrimitiveSlider("Height", 0.02f..1.5f, { it.height }, { shape, value -> shape.copy(height = value) }),
         PrimitiveSlider("Rotation (°)", -180f..180f, { it.rotation }, { shape, value -> shape.copy(rotation = value) }),
         PrimitiveSlider("Corner radius", 0f..0.5f, { it.cornerRadius }, { shape, value -> shape.copy(cornerRadius = value) }),
-        PrimitiveSlider("Plateau", 0f..0.95f, { it.plateau }, { shape, value -> shape.copy(plateau = value) }),
+        PrimitiveSlider("Plateau (0 fades to center, 1 hard edge)", 0f..0.95f, { it.plateau }, { shape, value -> shape.copy(plateau = value) }),
         PrimitiveSlider("Center x", 0f..1f, { it.x }, { shape, value -> shape.copy(x = value) }),
         PrimitiveSlider("Center y", 0f..1f, { it.y }, { shape, value -> shape.copy(y = value) }),
     )
@@ -361,7 +361,7 @@ private fun primitiveSliders(primitive: ShapePrimitive): List<PrimitiveSlider<Sh
         PrimitiveSlider("Height", 0.02f..1.5f, { it.height }, { shape, value -> shape.copy(height = value) }),
         PrimitiveSlider("Rotation (°)", -180f..180f, { it.rotation }, { shape, value -> shape.copy(rotation = value) }),
         PrimitiveSlider("Corner radius", 0f..0.5f, { it.cornerRadius }, { shape, value -> shape.copy(cornerRadius = value) }),
-        PrimitiveSlider("Plateau", 0f..0.95f, { it.plateau }, { shape, value -> shape.copy(plateau = value) }),
+        PrimitiveSlider("Plateau (0 fades to center, 1 hard edge)", 0f..0.95f, { it.plateau }, { shape, value -> shape.copy(plateau = value) }),
         PrimitiveSlider("Center x", 0f..1f, { it.x }, { shape, value -> shape.copy(x = value) }),
         PrimitiveSlider("Center y", 0f..1f, { it.y }, { shape, value -> shape.copy(y = value) }),
     )
