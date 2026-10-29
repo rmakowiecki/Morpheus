@@ -83,6 +83,8 @@ internal class TileStatsGroup(private val source: MorpheusGraphFrameStats) : Sam
     override fun statsFor(tileLabel: String): MorpheusGraphFrameStats = byLabel.getOrPut(tileLabel) {
         MorpheusGraphFrameStats().also { stats ->
             mirrorSwitches(stats)
+            // Written during composition on purpose: a grid's first composition recomposes once more, but the getOrPut and the
+            // caller's remember make a tile register once, so it cannot loop. Registering from an effect would delay a tile's first reading a frame.
             tiles = tiles + TileStats(tileLabel, stats)
         }
     }
@@ -94,6 +96,7 @@ internal class TileStatsGroup(private val source: MorpheusGraphFrameStats) : Sam
     /** Copies the page's debug switches to every tile; a switch already at its value starts no new window. */
     fun mirrorSwitches() = byLabel.values.forEach(::mirrorSwitches)
 
+    // This list and [switches] name the same six switches; add a new switch to both.
     private fun mirrorSwitches(target: MorpheusGraphFrameStats) {
         target.skipEdges = source.skipEdges
         target.skipHalos = source.skipHalos
@@ -332,3 +335,6 @@ private const val STALE_ALPHA = 0.5f
 private const val MILLIS_PER_SECOND = 1000f
 private const val DECIMAL_BASE = 10L
 private const val ROUNDING_HALF = 0.5
+
+/** The debug switches a grid's tiles mirror, as a value that changes when any of them does. Keep it in step with [TileStatsGroup.mirrorSwitches]. */
+internal fun MorpheusGraphFrameStats.switches(): List<Any> = listOf(skipEdges, skipHalos, skipDots, skipFillRecolor, showViolations, cometDebug)

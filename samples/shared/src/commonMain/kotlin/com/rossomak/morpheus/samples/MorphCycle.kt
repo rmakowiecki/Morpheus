@@ -29,8 +29,11 @@ internal fun MorphCycle(state: MorpheusGraphMorphState, specs: List<MorpheusGrap
     val currentTiming by rememberUpdatedState(timing)
     LaunchedEffect(state) {
         var seeking: Pair<MorpheusGraphSpec, MorpheusGraphSpec>? = null
-        snapshotFlow { Triple(currentSpecs, currentEasings, cycleTime.value) }.collect { (legSpecs, legEasings, time) ->
-            val leg = currentTiming.leg
+        snapshotFlow { CycleInputs(currentSpecs, currentEasings, currentTiming, cycleTime.value) }.collect { inputs ->
+            val legSpecs = inputs.specs
+            val legTiming = inputs.timing
+            val time = inputs.time
+            val leg = legTiming.leg
             val index = (time / leg).toInt().coerceIn(0, legSpecs.size - 1)
             val from = legSpecs[index]
             val to = legSpecs[(index + 1) % legSpecs.size]
@@ -39,11 +42,14 @@ internal fun MorphCycle(state: MorpheusGraphMorphState, specs: List<MorpheusGrap
                 state.snapTo(from)
                 seeking = from to to
             }
-            val linear = ((time - leg * index - currentTiming.hold / 2) / currentTiming.morph).toFloat().coerceIn(0f, 1f)
-            state.seekTo(to, legEasings[index].transform(linear))
+            val linear = ((time - leg * index - legTiming.hold / 2) / legTiming.morph).toFloat().coerceIn(0f, 1f)
+            state.seekTo(to, inputs.easings[index].transform(linear))
         }
     }
 }
+
+/** What [MorphCycle] re-seeks on, so a change to any of it moves the morph even while the cycle is paused. */
+private data class CycleInputs(val specs: List<MorpheusGraphSpec>, val easings: List<Easing>, val timing: MorphTiming, val time: Duration)
 
 /** How long one trip around [legs] legs takes: the period to give [rememberCycleTime] for a [MorphCycle] of that many specs. */
 internal fun MorphTiming.cyclePeriod(legs: Int): Duration = leg * legs

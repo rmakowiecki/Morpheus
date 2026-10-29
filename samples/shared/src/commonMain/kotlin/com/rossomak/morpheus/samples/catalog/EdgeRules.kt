@@ -16,7 +16,10 @@ import com.rossomak.morpheus.samples.SampleGrid
 import com.rossomak.morpheus.samples.SampleTile
 import com.rossomak.morpheus.samples.TunableSpec
 
-/** One uniform layer, the same in every tile but for its edge rule; they share a seed, so the nodes start out where they do in the others. */
+/**
+ * One uniform layer, the same in every tile but for its edge rule and its reach; they share a seed, so the nodes start out where they do in the others.
+ * [EdgeRule.Proximity] gets a shorter reach (see [edgeRuleSpec]), because at the triangulations' reach it would link nearly every pair into a hairball.
+ */
 private val edgeRuleLayer = MorpheusGraphLayerSpec(
     density = 28f,
     jitter = 0.5f,

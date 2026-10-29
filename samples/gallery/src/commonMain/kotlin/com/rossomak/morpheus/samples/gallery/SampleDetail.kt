@@ -54,7 +54,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.rossomak.morpheus.ExperimentalMorpheusGraphApi
 import com.rossomak.morpheus.LocalMorpheusGraphFrameStats
-import com.rossomak.morpheus.MorpheusGraphFrameStats
 import com.rossomak.morpheus.samples.CaptureThemes
 import com.rossomak.morpheus.samples.CycleControl
 import com.rossomak.morpheus.samples.LocalCycleControl
@@ -170,9 +169,6 @@ private fun resetStats(frameStats: GalleryFrameStats, session: GallerySession) {
     frameStats.stats.reset()
     session.tiles.reset()
 }
-
-/** The debug switches a grid's tiles mirror, as a value that changes when any of them does. */
-private fun MorpheusGraphFrameStats.switches(): List<Any> = listOf(skipEdges, skipHalos, skipDots, skipFillRecolor, showViolations, cometDebug)
 
 /**
  * Pauses and resumes the sample, whatever it is; while paused, a sample with a cycle (a [scrubPeriod]) gets a slider

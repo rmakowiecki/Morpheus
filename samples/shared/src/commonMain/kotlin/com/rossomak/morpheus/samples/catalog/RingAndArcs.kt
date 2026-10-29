@@ -19,10 +19,10 @@ private val ringAndArcsSpec = MorpheusGraphSpec(
     layers = listOf(
         shapeSampleLayer.copy(
             shapes = listOf(
-                Ring(x = 0.28f, y = 0.5f, radius = 0.3f, thickness = 0.12f),
-                Ring(x = 0.28f, y = 0.5f, radius = 0.15f, thickness = 0.04f),
-                Ring(x = 0.7f, y = 0.3f, radius = 0.17f, thickness = 0.07f, startAngle = 180f, sweep = 180f),
-                Ring(x = 0.72f, y = 0.7f, radius = 0.17f, thickness = 0.04f, startAngle = 0f, sweep = 90f),
+                Ring(x = 0.28f, y = 0.5f, radius = 0.22f, thickness = 0.12f),
+                Ring(x = 0.28f, y = 0.5f, radius = 0.1f, thickness = 0.04f),
+                Ring(x = 0.75f, y = 0.4f, radius = 0.17f, thickness = 0.07f, startAngle = 180f, sweep = 180f),
+                Ring(x = 0.75f, y = 0.65f, radius = 0.17f, thickness = 0.04f, startAngle = 0f, sweep = 90f),
             ),
         ),
     ),
