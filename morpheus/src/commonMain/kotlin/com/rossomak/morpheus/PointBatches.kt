@@ -33,7 +33,7 @@ private const val BIN_CENTER = 0.5f
 private const val INITIAL_FLOATS = 32
 
 /**
- * One layer's edges and dots for [MorpheusGraphDrawingApproach.PointBatches], refilled every frame: each
+ * One layer's edges and dots as [LayerField.draw] paints them, refilled every frame: each
  * edge goes into the batch of its 8-bit alpha level, each dot into a punch batch per size bin and an add
  * batch per alpha bucket and size bin. Each non-empty batch is one draw call: up to 255 for the edges, 8
  * for the punches and 1,024 for the adds, though a frame uses a fraction of them.

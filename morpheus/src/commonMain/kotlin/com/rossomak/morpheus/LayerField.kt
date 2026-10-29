@@ -229,9 +229,6 @@ private const val NODE_ALPHA = 0.85f
 private const val HOT_NODE_SCALE = 1.4f
 private const val NODE_SIZE_FLOOR = 0.2f
 
-/** A dot is a punch and an add; see `drawCores`. */
-private const val DRAW_CALLS_PER_DOT = 2
-
 /** How much a far node shrinks at full [MorpheusGraphLayerSpec.depthDimming]. */
 private const val DEPTH_SIZE_SHRINK = 0.45f
 
@@ -426,7 +423,7 @@ internal class LayerField(
      */
     private val layerPaint by lazy(LazyThreadSafetyMode.NONE) { Paint() }
 
-    /** Reused each frame for [MorpheusGraphDrawingApproach.PointBatches]. */
+    /** The edges and dots [draw] paints, refilled every frame. */
     private val pointBatches = PointBatches()
 
     /** Edge alpha of node [index]'s second-brightest edge, as of the last [advance]. */
@@ -466,7 +463,7 @@ internal class LayerField(
     /** Node [index]'s position this frame, drift and wave included, as of the last [advance]. */
     internal fun nodePosition(index: Int): Offset = Offset(positionsX[index], positionsY[index])
 
-    /** Node [index]'s dot radius as [MorpheusGraphDrawingApproach.PerElement] draws it, as of the last [advance]. */
+    /** Node [index]'s dot radius, before [PointBatches] draws it at its size bin's center, as of the last [advance]. */
     internal fun dotRadius(index: Int): Float {
         val depthShrink = 1f - DEPTH_SIZE_SHRINK * spec.depthDimming * (1f - nodes[index].depth)
         val hotScale = lerp(1f, HOT_NODE_SCALE, hotWeights[index])
@@ -567,9 +564,9 @@ internal class LayerField(
 
     /**
      * Paints the layer into its own offscreen layer, composited onto the canvas once. Edges and halos
-     * blend with each other there, but each dot is punched out with [BlendMode.DstOut] and then added with
-     * [BlendMode.Plus], so it replaces whatever lies under it: a dot's pixels are exactly its own alpha
-     * instead of summing with the edges it anchors. Everything drawn into the offscreen must be in the
+     * blend with each other there, but every dot is punched out with [BlendMode.DstOut] before any is added
+     * with [BlendMode.Plus], so dots replace the edges and halos under them instead of summing with the edges
+     * they anchor. Where dots overlap, their alphas add up. Everything drawn into the offscreen must be in the
      * fill's mask color, because [BlendMode.Plus] adds color too.
      *
      * A [LayerFill.Masked] layer is drawn in white first, then recolored as a whole while still
@@ -577,9 +574,8 @@ internal class LayerField(
      * [BlendMode.SrcAtop] blends each overlay over it the same way. The offscreen layer is composited
      * at the fill's [LayerFill.layerAlpha].
      *
-     * [probe] times each step and counts what was drawn, and its switches skip steps entirely; its stats'
-     * [MorpheusGraphFrameStats.drawingApproach] picks how edges and dots are drawn. [cometDebug] picks the
-     * overlays the running morph's comets draw over the layer.
+     * Edges and dots are drawn in [pointBatches]. [probe] times each step and counts what was drawn, and its
+     * switches skip steps entirely. [cometDebug] picks the overlays the running morph's comets draw over the layer.
      */
     fun draw(
         scope: DrawScope,
@@ -596,17 +592,12 @@ internal class LayerField(
         // The save and its restore count as one draw call.
         var drawCalls = 1
         probe?.lap(FramePhase.Composite)
-        val batches = pointBatches.takeIf { probe?.stats?.drawingApproach == MorpheusGraphDrawingApproach.PointBatches }
-        batches?.resetDrawCalls()
-        val drawnEdges = probe.timed(FramePhase.Edges, skip = probe?.stats?.skipEdges == true) {
-            if (batches != null) drawEdgeBatches(batches, color, timeSeconds) else drawEdges(color, timeSeconds)
-        }
+        pointBatches.resetDrawCalls()
+        val drawnEdges = probe.timed(FramePhase.Edges, skip = probe?.stats?.skipEdges == true) { drawEdgeBatches(color, timeSeconds) }
         val drawnHalos = probe.timed(FramePhase.Halos, skip = probe?.stats?.skipHalos == true) { drawGlows(halos) }
-        val drawnDots = probe.timed(FramePhase.Dots, skip = probe?.stats?.skipDots == true) {
-            if (batches != null) drawDotBatches(batches, color) else drawCores(color)
-        }
-        // A skipped pass made no calls, batched or not.
-        drawCalls += drawnHalos + (batches?.drawCalls ?: (drawnEdges + drawnDots * DRAW_CALLS_PER_DOT))
+        val drawnDots = probe.timed(FramePhase.Dots, skip = probe?.stats?.skipDots == true) { drawDotBatches(color) }
+        // A skipped pass made no batch calls.
+        drawCalls += drawnHalos + pointBatches.drawCalls
         if (fill is LayerFill.Masked) {
             drawCalls += probe.timed(FramePhase.Fill, skip = probe?.stats?.skipFillRecolor == true) {
                 drawRect(brush = fill.base, blendMode = BlendMode.SrcIn)
@@ -1409,46 +1400,14 @@ internal class LayerField(
 
     private fun depthAlpha(index: Int): Float = 1f - spec.depthDimming * (1f - nodes[index].depth)
 
-    /** Returns how many edges it drew. */
-    private fun DrawScope.drawEdges(color: Color, timeSeconds: Float): Int {
-        val strokeWidth = edgeStrokeWidth
-        var drawn = 0
-        forEachVisibleEdge(timeSeconds) { alpha, start, end ->
-            drawLine(color = color.copy(alpha = alpha), start = nodePosition(start), end = nodePosition(end), strokeWidth = strokeWidth)
-            drawn++
-        }
-        return drawn
-    }
-
     /** Halos are exempt from the alpha rule but still fade with their node's presence and edges. Returns how many it drew. */
-    private fun DrawScope.drawGlows(halos: HaloBrushCache): Int {
+    internal fun DrawScope.drawGlows(halos: HaloBrushCache): Int {
         if (spec.glowStrength <= 0f) return 0
         var drawn = 0
         for (index in 0 until count) {
             if (hotWeights[index] <= 0f) continue
             val radius = spec.glowRadiusDp * pxPerDp * sizeFactor(index)
             if (drawHalo(halos, positionsX[index], positionsY[index], radius, nodeHaloAlpha(index))) drawn++
-        }
-        return drawn
-    }
-
-    /**
-     * Drawn last, so a dot replaces the edges and halo under it rather than summing with them. Each dot is two
-     * fixed-function blends: a [BlendMode.DstOut] punch at alpha 1 leaves `d·(1−c)` at coverage `c`, then the
-     * dot at its alpha `a` with [BlendMode.Plus] adds `a·c`. That is the antialiased [BlendMode.Src] result,
-     * `c·a + (1−c)·d`, without Src itself: on WebGL, which has no dual-source blending, Skia draws an
-     * antialiased Src by copying the layer once per dot. [BlendMode.Plus] adds color as well as alpha, so it is
-     * exact only because everything in the layer's offscreen is in the one mask [color]. Returns how many dots
-     * it drew, each two draw calls.
-     */
-    private fun DrawScope.drawCores(color: Color): Int {
-        var drawn = 0
-        forEachVisibleDot { node, alpha ->
-            val radius = dotRadius(node)
-            val center = nodePosition(node)
-            drawCircle(color = color, radius = radius, center = center, blendMode = BlendMode.DstOut)
-            drawCircle(color = color.copy(alpha = alpha), radius = radius, center = center, blendMode = BlendMode.Plus)
-            drawn++
         }
         return drawn
     }
@@ -1475,17 +1434,26 @@ internal class LayerField(
         return sorted
     }
 
-    /** [drawEdges] in one call per alpha level, in level order. Returns how many edges it drew. */
-    private fun DrawScope.drawEdgeBatches(batches: PointBatches, color: Color, timeSeconds: Float): Int {
-        val drawn = fillEdgeBatches(batches, timeSeconds)
-        drawIntoCanvas { canvas -> batches.drawEdges(canvas, color, edgeStrokeWidth) }
+    /** The edges in one call per alpha level, in level order. Returns how many edges it drew. */
+    private fun DrawScope.drawEdgeBatches(color: Color, timeSeconds: Float): Int {
+        val drawn = fillEdgeBatches(pointBatches, timeSeconds)
+        drawIntoCanvas { canvas -> pointBatches.drawEdges(canvas, color, edgeStrokeWidth) }
         return drawn
     }
 
-    /** [drawCores] in batches; see [PointBatches]. Returns how many dots it drew. */
-    private fun DrawScope.drawDotBatches(batches: PointBatches, color: Color): Int {
-        val drawn = fillDotBatches(batches)
-        drawIntoCanvas { canvas -> batches.drawDots(canvas, color) }
+    /**
+     * Drawn last, so a dot replaces the edges and halo under it rather than summing with them. Each dot is two
+     * fixed-function blends: a [BlendMode.DstOut] punch at alpha 1 leaves `d·(1−c)` at coverage `c`, then the
+     * dot at its alpha `a` with [BlendMode.Plus] adds `a·c`. That is the antialiased [BlendMode.Src] result,
+     * `c·a + (1−c)·d`, without Src itself: on WebGL, which has no dual-source blending, Skia draws an
+     * antialiased Src by copying the layer once per dot. [BlendMode.Plus] adds color as well as alpha, so it is
+     * exact only because everything in the layer's offscreen is in the one mask [color]. Every punch goes in one
+     * batch per size bin and every add in one per size bin and alpha bucket; see [PointBatches]. Returns how
+     * many dots it drew.
+     */
+    private fun DrawScope.drawDotBatches(color: Color): Int {
+        val drawn = fillDotBatches(pointBatches)
+        drawIntoCanvas { canvas -> pointBatches.drawDots(canvas, color) }
         return drawn
     }
 

@@ -31,7 +31,7 @@ private const val PUBLISH_INTERVAL_NANOS = 500_000_000L
  * The debug switches ([skipEdges], [skipHalos], [skipDots], [skipFillRecolor], [showViolations], [cometDebug]) are read
  * by every graph that reports here, every frame. A skipped step records no time and no draw calls, so
  * its raster and GPU cost shows as the change it makes to [frameMillis]. Flipping any of them, like
- * [reset] or a change of [drawingApproach], starts a fresh window.
+ * [reset], starts a fresh window.
  */
 @ExperimentalMorpheusGraphApi
 @Stable
@@ -62,12 +62,6 @@ public class MorpheusGraphFrameStats {
 
     /** The comet overlays each running morph draws, as the diagnostics overloads' own argument does. */
     public var cometDebug: MorpheusGraphCometDebug by ResettingSwitch(MorpheusGraphCometDebug.None)
-
-    /**
-     * How every graph that reports here draws its edges and dots. Changing it starts a fresh window; it isn't a
-     * debug switch, so [anySwitchOn] leaves it out. A batch counts as one draw call.
-     */
-    public var drawingApproach: MorpheusGraphDrawingApproach by ResettingSwitch(MorpheusGraphDrawingApproach.PerElement)
 
     /** True while any debug switch is on, the violations and comet overlays included. */
     public val anySwitchOn: Boolean
@@ -192,8 +186,8 @@ public class MorpheusGraphFrameBreakdown internal constructor(
  * - [compositeMillis]: the offscreen layer's save and restore.
  *
  * Counts are per frame too: the [nodes] in the pool, the [visibleNodes], the [drawnEdges], [drawnHalos] and [drawnDots],
- * and the [drawCalls]. A draw call is any painting `DrawScope` call: a line, circle, rect, points or vertices,
- * with an offscreen layer's save and restore counting as one; transforms and clips don't count. [settles]
+ * and the [drawCalls]. A draw call is any painting `DrawScope` call (a line, circle or rect) or one batch of edges
+ * or dots; an offscreen layer's save and restore count as one, and transforms and clips don't count. [settles]
  * (topology settles) and [morphMeshes] (a morph's mesh builds) are totals over the window, and [meshes] is
  * the most fields that drew the spec layer in any one background's frame. In a total, [meshes] sums the layers'.
  */

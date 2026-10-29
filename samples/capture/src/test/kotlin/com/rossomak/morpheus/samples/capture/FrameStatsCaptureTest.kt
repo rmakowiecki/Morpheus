@@ -3,7 +3,6 @@
 package com.rossomak.morpheus.samples.capture
 
 import com.rossomak.morpheus.ExperimentalMorpheusGraphApi
-import com.rossomak.morpheus.MorpheusGraphDrawingApproach
 import com.rossomak.morpheus.MorpheusGraphFrameBreakdown
 import com.rossomak.morpheus.MorpheusGraphFrameStats
 import com.rossomak.morpheus.samples.LoopMode
@@ -16,6 +15,7 @@ import io.kotest.assertions.withClue
 import io.kotest.matchers.floats.shouldBeGreaterThan
 import io.kotest.matchers.floats.shouldBeGreaterThanOrEqual
 import io.kotest.matchers.floats.shouldBeLessThan
+import io.kotest.matchers.floats.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import kotlin.test.Test
 import kotlin.time.Duration
@@ -30,12 +30,14 @@ class FrameStatsCaptureTest {
     private val hero = SampleRegistry.samples.single { it.id == "hero" }
 
     @Test
-    fun `skipping edges removes them from the frame and their draw calls from the count`() {
+    fun `skipping edges removes them from the frame and their batches from the count`() {
         val normal = measure()
         val skipped = measure { skipEdges = true }
         skipped.frame.contentEquals(normal.frame) shouldBe false
         normal.breakdown.total.drawnEdges shouldBeGreaterThan 0f
-        skipped.breakdown.total.drawCalls shouldBe normal.breakdown.total.drawCalls - normal.breakdown.total.drawnEdges
+        withClue("one batch per alpha level in use, in each layer") {
+            normal.dropsBatchesTo(skipped, elements = normal.breakdown.total.drawnEdges, batchesPerLayer = EDGE_BATCHES_PER_LAYER)
+        }
         skipped.breakdown.total.drawnEdges shouldBe 0f
         skipped.breakdown.total.edgesMillis shouldBe 0f
     }
@@ -51,13 +53,13 @@ class FrameStatsCaptureTest {
     }
 
     @Test
-    fun `skipping dots removes them from the frame and their draw calls from the count`() {
+    fun `skipping dots removes them from the frame and their batches from the count`() {
         val normal = measure()
         val skipped = measure { skipDots = true }
         skipped.frame.contentEquals(normal.frame) shouldBe false
         normal.breakdown.total.drawnDots shouldBeGreaterThan 0f
-        withClue("each dot is a punch and an add") {
-            skipped.breakdown.total.drawCalls shouldBe normal.breakdown.total.drawCalls - 2 * normal.breakdown.total.drawnDots
+        withClue("a punch batch per size bin and an add batch per size bin and alpha bucket in use, in each layer") {
+            normal.dropsBatchesTo(skipped, elements = DRAW_CALLS_PER_DOT_PER_ELEMENT * normal.breakdown.total.drawnDots, batchesPerLayer = DOT_BATCHES_PER_LAYER)
         }
         skipped.breakdown.total.drawnDots shouldBe 0f
         skipped.breakdown.total.dotsMillis shouldBe 0f
@@ -81,30 +83,12 @@ class FrameStatsCaptureTest {
     }
 
     @Test
-    fun `point batches draw the same elements in far fewer draw calls, and close to the same frame`() {
-        val perElement = measure()
-        val batched = measure { drawingApproach = MorpheusGraphDrawingApproach.PointBatches }
-        batched.breakdown.total.drawnEdges shouldBe perElement.breakdown.total.drawnEdges
-        batched.breakdown.total.drawnHalos shouldBe perElement.breakdown.total.drawnHalos
-        batched.breakdown.total.drawnDots shouldBe perElement.breakdown.total.drawnDots
-        withClue("${batched.breakdown.total.drawCalls} batched against ${perElement.breakdown.total.drawCalls} per element") {
-            batched.breakdown.total.drawCalls shouldBeLessThan perElement.breakdown.total.drawCalls / 4
-        }
-        withClue("dots round up by two levels at most, edges move a few levels where they overlap") {
-            (batched.frame.meanChannelDifference(perElement.frame) < 1.0) shouldBe true
-        }
-    }
-
-    @Test
-    fun `skipping dots in point batches removes their batches from the count`() {
-        val batched = measure { drawingApproach = MorpheusGraphDrawingApproach.PointBatches }
-        val skipped = measure {
-            drawingApproach = MorpheusGraphDrawingApproach.PointBatches
-            skipDots = true
-        }
-        skipped.breakdown.total.drawnDots shouldBe 0f
-        skipped.breakdown.total.dotsMillis shouldBe 0f
-        skipped.breakdown.total.drawCalls shouldBeLessThan batched.breakdown.total.drawCalls
+    fun `edges and dots draw in far fewer draw calls than elements`() {
+        val total = measure().breakdown.total
+        // Halos are still drawn one by one, so they are left out of both sides.
+        val batched = total.drawCalls - total.drawnHalos
+        val perElement = total.drawnEdges + DRAW_CALLS_PER_DOT_PER_ELEMENT * total.drawnDots
+        withClue("$batched draw calls for $perElement per element") { batched shouldBeLessThan perElement / 4 }
     }
 
     @Test
@@ -141,6 +125,16 @@ class FrameStatsCaptureTest {
         return Measurement(capture.still, stats.breakdown)
     }
 
+    /** Skipping a pass in [skipped] dropped at least one draw call, fewer than its [elements], and at most [batchesPerLayer] per layer. */
+    private fun Measurement.dropsBatchesTo(skipped: Measurement, elements: Float, batchesPerLayer: Int) {
+        val dropped = breakdown.total.drawCalls - skipped.breakdown.total.drawCalls
+        withClue("$dropped draw calls dropped for $elements per element") {
+            dropped shouldBeGreaterThan 0f
+            dropped shouldBeLessThan elements
+            dropped shouldBeLessThanOrEqual (batchesPerLayer * breakdown.layers.size).toFloat()
+        }
+    }
+
     private infix fun Int.shouldBeGreaterThan(other: Int) = withClue("$this > $other") { (this > other) shouldBe true }
 
     private companion object {
@@ -152,5 +146,14 @@ class FrameStatsCaptureTest {
 
         /** Late in the morph, where the hero's mesh has nodes short of two visible edges. */
         val LATE_MORPH = 3500.milliseconds
+
+        /** One batch per 8-bit alpha level. Mirrors `PointBatches`. */
+        const val EDGE_BATCHES_PER_LAYER = 255
+
+        /** 8 size bins of punches, and 8 of adds in each of 128 alpha buckets. Mirrors `PointBatches`. */
+        const val DOT_BATCHES_PER_LAYER = 8 + 8 * 128
+
+        /** A dot drawn per element is a punch and an add. */
+        const val DRAW_CALLS_PER_DOT_PER_ELEMENT = 2
     }
 }

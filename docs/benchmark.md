@@ -47,12 +47,11 @@ sample change, until the next reading arrives:
 - The **phase table** splits the graphs' time per frame into shape, mesh, edge fades, alpha settle,
   fill, edges, halos, dots and composite, in total and per spec layer, back to front.
 - The **counts** are per frame (nodes, visible nodes, drawn edges, halos and dots, draw calls) or per
-  half-second window (settles, morph meshes, meshes).
+  half-second window (settles, morph meshes, meshes). Edges and dots are drawn in point batches, and
+  each batch is one draw call: one per alpha level for the edges, and for the dots one punch per
+  size bin and one add per size bin and alpha bucket.
 - The **switches** skip drawing edges, halos, dots or the fill recolor, or show violations. A skipped
   step records no time and no draw calls; its raster and GPU cost shows as the drop in **frame**.
-- The **drawing approach** picks how edges and dots are drawn: per element, the default, or in point
-  batches, one draw call per batch. It isn't a switch: a reading in either approach is a benchmark
-  number. The button names the approach when it isn't the default.
 
 The button flags a reading that isn't a benchmark number:
 
@@ -93,8 +92,7 @@ Phases under the timer's resolution read 0.00 until enough frames add up: in the
 ### Browser, scripted
 
 ```sh
-python3 scripts/gallery_benchmark.py [--sample hero|comet-playground] [--loops 3] [--skip edges,halos,dots,fill|all]
-    [--drawing per-element|point-batches] [--skip-build] [--chrome PATH]
+python3 scripts/gallery_benchmark.py [--sample hero|comet-playground] [--loops 3] [--skip edges,halos,dots,fill|all] [--skip-build] [--chrome PATH]
 ```
 
 It builds the production bundle, serves it, and opens it in a separate Chrome with the flags above and
@@ -112,10 +110,6 @@ off. `--skip halos` opens the gallery with `?benchmark&skip=halos` and measures 
 so on; `--skip all` turns every skip switch on, for the all skips on row. With `--skip`, every reading
 must show its switches on, or the script stops: the bundle didn't read `&skip=`.
 
-`--drawing point-batches` opens the gallery with `&drawing=point-batches`, to compare the drawing
-approaches in the same build; the default is `per-element`. Every reading must show the approach asked
-for, or the script stops. Alternate the approaches run by run, so a drift in the machine hits both.
-
 ```sh
 python3 scripts/gallery_benchmark.py
 python3 scripts/gallery_benchmark.py --skip-build --skip edges
@@ -124,7 +118,6 @@ python3 scripts/gallery_benchmark.py --skip-build --skip dots
 python3 scripts/gallery_benchmark.py --skip-build --skip fill
 python3 scripts/gallery_benchmark.py --skip-build --skip all
 python3 scripts/gallery_benchmark.py --skip-build --sample comet-playground
-python3 scripts/gallery_benchmark.py --skip-build --sample comet-playground --drawing point-batches
 ```
 
 ### Then, on either platform
