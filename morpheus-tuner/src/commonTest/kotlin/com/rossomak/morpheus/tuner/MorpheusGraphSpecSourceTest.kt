@@ -78,6 +78,38 @@ class MorpheusGraphSpecSourceTest {
     }
 
     @Test
+    fun `a ring prints only the arguments that differ from its defaults`() {
+        val layer = MorpheusGraphLayerSpec(shapes = listOf(ShapePrimitive.Ring(radius = 0.3f, startAngle = 45f, sweep = 180f)))
+
+        MorpheusGraphSpec(seed = 1, layers = listOf(layer)).toKotlinSource() shouldContain
+            "shapes = listOf(ShapePrimitive.Ring(radius = 0.3f, startAngle = 45.0f, sweep = 180.0f))"
+    }
+
+    @Test
+    fun `a rect prints only the arguments that differ from its defaults`() {
+        val layer = MorpheusGraphLayerSpec(shapes = listOf(ShapePrimitive.Rect(width = 0.5f, rotation = 20f, cornerRadius = 0f)))
+
+        MorpheusGraphSpec(seed = 1, layers = listOf(layer)).toKotlinSource() shouldContain
+            "shapes = listOf(ShapePrimitive.Rect(width = 0.5f, rotation = 20.0f, cornerRadius = 0.0f))"
+    }
+
+    @Test
+    fun `a triangle prints only the arguments that differ from its defaults`() {
+        val layer = MorpheusGraphLayerSpec(shapes = listOf(ShapePrimitive.Triangle(y = 0.6f, height = 0.4f, plateau = 0.5f)))
+
+        MorpheusGraphSpec(seed = 1, layers = listOf(layer)).toKotlinSource() shouldContain
+            "shapes = listOf(ShapePrimitive.Triangle(y = 0.6f, height = 0.4f, plateau = 0.5f))"
+    }
+
+    @Test
+    fun `default new shapes print as bare constructor calls`() {
+        val layer = MorpheusGraphLayerSpec(shapes = listOf(ShapePrimitive.Ring(), ShapePrimitive.Rect(), ShapePrimitive.Triangle()))
+
+        MorpheusGraphSpec(seed = 1, layers = listOf(layer)).toKotlinSource() shouldContain
+            "shapes = listOf(ShapePrimitive.Ring(), ShapePrimitive.Rect(), ShapePrimitive.Triangle())"
+    }
+
+    @Test
     fun `a spec fill and gradient stops print as constructor calls`() {
         val fill = MorpheusGraphFill.Linear(listOf(GradientStop(0f, Color.White), GradientStop(1f, Color(0x33FFFFFF))), angleDegrees = 90f)
         val source = MorpheusGraphSpec(seed = 3, layers = listOf(MorpheusGraphLayerSpec()), fill = fill).toKotlinSource()

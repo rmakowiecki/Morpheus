@@ -2,7 +2,10 @@ package com.rossomak.morpheus
 
 import com.rossomak.morpheus.ShapePrimitive.Bloom
 import com.rossomak.morpheus.ShapePrimitive.Pill
+import com.rossomak.morpheus.ShapePrimitive.Rect
 import com.rossomak.morpheus.ShapePrimitive.Ribbon
+import com.rossomak.morpheus.ShapePrimitive.Ring
+import com.rossomak.morpheus.ShapePrimitive.Triangle
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.ints.shouldBeGreaterThan
 import kotlin.math.max
@@ -30,6 +33,20 @@ class MinDegreeInvariantTest {
         },
         "pill, rotated" to { it.copy(shapes = listOf(Pill(rotation = -30f))) },
         "two thin crossing pills" to { it.copy(shapes = listOf(Pill(thickness = 0.06f, rotation = 30f), Pill(weight = 0.8f, thickness = 0.06f, rotation = -60f))) },
+        "ring" to { it.copy(shapes = listOf(Ring())) },
+        "thin arc" to { it.copy(shapes = listOf(Ring(thickness = 0.06f, startAngle = 200f, sweep = 140f))) },
+        "rect, rotated" to { it.copy(shapes = listOf(Rect(width = 0.5f, height = 0.2f, rotation = 25f))) },
+        "triangle" to { it.copy(shapes = listOf(Triangle())) },
+        "ring + rect + triangle + pill" to {
+            it.copy(
+                shapes = listOf(
+                    Ring(x = 0.3f, radius = 0.2f),
+                    Rect(x = 0.65f, y = 0.4f, rotation = -20f),
+                    Triangle(x = 0.5f, y = 0.7f, rotation = 35f),
+                    Pill(x = 0.8f, y = 0.8f, thickness = 0.06f, rotation = 60f),
+                ),
+            )
+        },
     )
 
     private val extremes: List<Pair<String, (MorpheusGraphLayerSpec) -> MorpheusGraphLayerSpec>> = listOf(

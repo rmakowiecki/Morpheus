@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+
+- `ShapePrimitive.Ring` (a full ring or an arc with round caps), `ShapePrimitive.Rect` (a rotated rectangle with
+  rounded corners) and `ShapePrimitive.Triangle` (an isosceles triangle with rounded corners), sized as fractions
+  of the surface's longer side like `Pill`. `:morpheus-tuner` adds, edits and exports them.
+
 ### Changed
 
 - `:morpheus` draws every layer's edges and dots in point batches, one native draw call per batch, on every

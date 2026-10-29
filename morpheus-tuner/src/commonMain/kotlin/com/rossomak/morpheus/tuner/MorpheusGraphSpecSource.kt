@@ -15,6 +15,9 @@ private val UniformDefaults = ShapePrimitive.Uniform()
 private val RibbonDefaults = ShapePrimitive.Ribbon()
 private val BloomDefaults = ShapePrimitive.Bloom()
 private val PillDefaults = ShapePrimitive.Pill()
+private val RingDefaults = ShapePrimitive.Ring()
+private val RectDefaults = ShapePrimitive.Rect()
+private val TriangleDefaults = ShapePrimitive.Triangle()
 private val CometDefaults = MorpheusGraphComets()
 
 /**
@@ -138,6 +141,36 @@ private fun ShapePrimitive.toSource(): String {
             "thickness" to (thickness to PillDefaults.thickness),
             "rotation" to (rotation to PillDefaults.rotation),
             "plateau" to (plateau to PillDefaults.plateau),
+        )
+        is ShapePrimitive.Ring -> listOf(
+            "weight" to (weight to RingDefaults.weight),
+            "x" to (x to RingDefaults.x),
+            "y" to (y to RingDefaults.y),
+            "radius" to (radius to RingDefaults.radius),
+            "thickness" to (thickness to RingDefaults.thickness),
+            "startAngle" to (startAngle to RingDefaults.startAngle),
+            "sweep" to (sweep to RingDefaults.sweep),
+            "plateau" to (plateau to RingDefaults.plateau),
+        )
+        is ShapePrimitive.Rect -> listOf(
+            "weight" to (weight to RectDefaults.weight),
+            "x" to (x to RectDefaults.x),
+            "y" to (y to RectDefaults.y),
+            "width" to (width to RectDefaults.width),
+            "height" to (height to RectDefaults.height),
+            "rotation" to (rotation to RectDefaults.rotation),
+            "cornerRadius" to (cornerRadius to RectDefaults.cornerRadius),
+            "plateau" to (plateau to RectDefaults.plateau),
+        )
+        is ShapePrimitive.Triangle -> listOf(
+            "weight" to (weight to TriangleDefaults.weight),
+            "x" to (x to TriangleDefaults.x),
+            "y" to (y to TriangleDefaults.y),
+            "width" to (width to TriangleDefaults.width),
+            "height" to (height to TriangleDefaults.height),
+            "rotation" to (rotation to TriangleDefaults.rotation),
+            "cornerRadius" to (cornerRadius to TriangleDefaults.cornerRadius),
+            "plateau" to (plateau to TriangleDefaults.plateau),
         )
     }
     val changed = arguments.filter { (_, values) -> values.first != values.second }

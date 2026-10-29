@@ -4,7 +4,10 @@ package com.rossomak.morpheus
 
 import com.rossomak.morpheus.ShapePrimitive.Bloom
 import com.rossomak.morpheus.ShapePrimitive.Pill
+import com.rossomak.morpheus.ShapePrimitive.Rect
 import com.rossomak.morpheus.ShapePrimitive.Ribbon
+import com.rossomak.morpheus.ShapePrimitive.Ring
+import com.rossomak.morpheus.ShapePrimitive.Triangle
 import com.rossomak.morpheus.ShapePrimitive.Uniform
 import kotlin.math.abs
 import kotlin.math.cos
@@ -25,7 +28,7 @@ private const val RIBBON_THICKNESS_VARIATION = 0.35f
 // band's border is ragged rather than a ruled line.
 private const val RIBBON_SOFT_EDGE = 0.55f
 private const val WAVE_CYCLES = 1.1f
-private const val DEGREES_TO_RADIANS = 0.017453292f
+internal const val DEGREES_TO_RADIANS = 0.017453292f
 
 /** Seeds of the second and later ribbons' phases are this far apart, so two ribbons never meander alike. */
 private const val RIBBON_PHASE_SEED_STRIDE = 104_729
@@ -71,6 +74,9 @@ internal class MorpheusGraphEnvelope(private val seed: Int) {
                 is Ribbon -> ribbonDensity(primitive, ribbonPhases(ordinal), width, height, x, y)
                 is Bloom -> bloomDensity(primitive, width, height, x, y)
                 is Pill -> pillDensity(primitive, width, height, x, y)
+                is Ring -> ringDensity(primitive, width, height, x, y)
+                is Rect -> rectDensity(primitive, width, height, x, y)
+                is Triangle -> triangleDensity(primitive, width, height, x, y)
             }
             density = max(density, weight * falloff)
         }
@@ -79,8 +85,8 @@ internal class MorpheusGraphEnvelope(private val seed: Int) {
 
     /**
      * How near the point is to the shape, from 0 (the far side of the surface) to 1 (on a ribbon's
-     * center line, a bloom's center or a pill's axis), as the strongest weighted primitive like [densityAt]. Uniform
-     * is equally near everywhere.
+     * center line, a bloom's, rectangle's or triangle's center, a pill's axis or a ring's curve), as the
+     * strongest weighted primitive like [densityAt]. Uniform is equally near everywhere.
      */
     fun closenessAt(spec: MorpheusGraphLayerSpec, width: Float, height: Float, x: Float, y: Float): Float {
         var closeness = 0f
@@ -92,8 +98,11 @@ internal class MorpheusGraphEnvelope(private val seed: Int) {
             val nearness = when (primitive) {
                 is Uniform -> 1f
                 is Ribbon -> 1f - (abs(y - ribbonCenterAt(primitive, ribbonPhases(ordinal), width, height, x)) / height).coerceIn(0f, 1f)
-                is Bloom -> 1f - (hypot(primitive.x * width - x, primitive.y * height - y) / hypot(width, height)).coerceIn(0f, 1f)
+                is Bloom -> closenessOf(hypot(primitive.x * width - x, primitive.y * height - y), width, height)
                 is Pill -> 1f - (pillAxisDistance(primitive, width, height, x, y) / hypot(width, height)).coerceIn(0f, 1f)
+                is Ring -> closenessOf(ringCurveDistance(primitive, width, height, x, y), width, height)
+                is Rect -> closenessOf(hypot(primitive.x * width - x, primitive.y * height - y), width, height)
+                is Triangle -> closenessOf(hypot(primitive.x * width - x, primitive.y * height - y), width, height)
             }
             closeness = max(closeness, weight * nearness)
         }
@@ -178,6 +187,9 @@ private const val MIN_PILL_THICKNESS = 0.01f
 private const val MAX_PILL_PLATEAU = 0.95f
 
 internal const val TWO_PI = 6.2831855f
+
+private fun closenessOf(distance: Float, width: Float, height: Float): Float =
+    1f - (distance / hypot(width, height)).coerceIn(0f, 1f)
 
 internal fun smoothStep(edgeStart: Float, edgeEnd: Float, value: Float): Float {
     val progress = ((value - edgeStart) / (edgeEnd - edgeStart)).coerceIn(0f, 1f)

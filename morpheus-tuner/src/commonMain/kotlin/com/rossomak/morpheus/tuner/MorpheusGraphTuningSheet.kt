@@ -41,7 +41,10 @@ import com.rossomak.morpheus.MorpheusGraphSpec
 import com.rossomak.morpheus.ShapePrimitive
 import com.rossomak.morpheus.ShapePrimitive.Bloom
 import com.rossomak.morpheus.ShapePrimitive.Pill
+import com.rossomak.morpheus.ShapePrimitive.Rect
 import com.rossomak.morpheus.ShapePrimitive.Ribbon
+import com.rossomak.morpheus.ShapePrimitive.Ring
+import com.rossomak.morpheus.ShapePrimitive.Triangle
 import com.rossomak.morpheus.ShapePrimitive.Uniform
 import kotlin.math.roundToInt
 
@@ -281,6 +284,9 @@ private val ShapePrimitive.kindName: String
         is Ribbon -> "Ribbon"
         is Bloom -> "Bloom"
         is Pill -> "Pill"
+        is Ring -> "Ring"
+        is Rect -> "Rect"
+        is Triangle -> "Triangle"
     }
 
 /** What each add chip inserts: a centered bloom rather than another corner one, so it shows up at once. */
@@ -289,6 +295,9 @@ private val newPrimitives: List<ShapePrimitive> = listOf(
     Ribbon(),
     Bloom(x = 0.5f, y = 0.5f, reach = 0.3f),
     Pill(),
+    Ring(),
+    Rect(),
+    Triangle(),
 )
 
 private class PrimitiveSlider<T : ShapePrimitive>(
@@ -322,7 +331,37 @@ private fun primitiveSliders(primitive: ShapePrimitive): List<PrimitiveSlider<Sh
         PrimitiveSlider("Length", 0.02f..1.5f, { it.length }, { shape, value -> shape.copy(length = value) }),
         PrimitiveSlider("Thickness", 0.02f..0.8f, { it.thickness }, { shape, value -> shape.copy(thickness = value) }),
         PrimitiveSlider("Rotation (°)", -180f..180f, { it.rotation }, { shape, value -> shape.copy(rotation = value) }),
-        PrimitiveSlider("Plateau (0 soft, 1 hard edge)", 0f..0.95f, { it.plateau }, { shape, value -> shape.copy(plateau = value) }),
+        PrimitiveSlider("Plateau", 0f..0.95f, { it.plateau }, { shape, value -> shape.copy(plateau = value) }),
+        PrimitiveSlider("Center x", 0f..1f, { it.x }, { shape, value -> shape.copy(x = value) }),
+        PrimitiveSlider("Center y", 0f..1f, { it.y }, { shape, value -> shape.copy(y = value) }),
+    )
+    is Ring -> listOf<PrimitiveSlider<Ring>>(
+        PrimitiveSlider("Weight", 0f..1f, { it.weight }, { shape, value -> shape.copy(weight = value) }),
+        PrimitiveSlider("Radius", 0f..1f, { it.radius }, { shape, value -> shape.copy(radius = value) }),
+        PrimitiveSlider("Thickness", 0.02f..0.8f, { it.thickness }, { shape, value -> shape.copy(thickness = value) }),
+        PrimitiveSlider("Start angle (°)", -180f..180f, { it.startAngle }, { shape, value -> shape.copy(startAngle = value) }),
+        PrimitiveSlider("Sweep (°)", 0f..360f, { it.sweep }, { shape, value -> shape.copy(sweep = value) }),
+        PrimitiveSlider("Plateau", 0f..0.95f, { it.plateau }, { shape, value -> shape.copy(plateau = value) }),
+        PrimitiveSlider("Center x", 0f..1f, { it.x }, { shape, value -> shape.copy(x = value) }),
+        PrimitiveSlider("Center y", 0f..1f, { it.y }, { shape, value -> shape.copy(y = value) }),
+    )
+    is Rect -> listOf<PrimitiveSlider<Rect>>(
+        PrimitiveSlider("Weight", 0f..1f, { it.weight }, { shape, value -> shape.copy(weight = value) }),
+        PrimitiveSlider("Width", 0.02f..1.5f, { it.width }, { shape, value -> shape.copy(width = value) }),
+        PrimitiveSlider("Height", 0.02f..1.5f, { it.height }, { shape, value -> shape.copy(height = value) }),
+        PrimitiveSlider("Rotation (°)", -180f..180f, { it.rotation }, { shape, value -> shape.copy(rotation = value) }),
+        PrimitiveSlider("Corner radius", 0f..0.5f, { it.cornerRadius }, { shape, value -> shape.copy(cornerRadius = value) }),
+        PrimitiveSlider("Plateau", 0f..0.95f, { it.plateau }, { shape, value -> shape.copy(plateau = value) }),
+        PrimitiveSlider("Center x", 0f..1f, { it.x }, { shape, value -> shape.copy(x = value) }),
+        PrimitiveSlider("Center y", 0f..1f, { it.y }, { shape, value -> shape.copy(y = value) }),
+    )
+    is Triangle -> listOf<PrimitiveSlider<Triangle>>(
+        PrimitiveSlider("Weight", 0f..1f, { it.weight }, { shape, value -> shape.copy(weight = value) }),
+        PrimitiveSlider("Width (base)", 0.02f..1.5f, { it.width }, { shape, value -> shape.copy(width = value) }),
+        PrimitiveSlider("Height", 0.02f..1.5f, { it.height }, { shape, value -> shape.copy(height = value) }),
+        PrimitiveSlider("Rotation (°)", -180f..180f, { it.rotation }, { shape, value -> shape.copy(rotation = value) }),
+        PrimitiveSlider("Corner radius", 0f..0.5f, { it.cornerRadius }, { shape, value -> shape.copy(cornerRadius = value) }),
+        PrimitiveSlider("Plateau", 0f..0.95f, { it.plateau }, { shape, value -> shape.copy(plateau = value) }),
         PrimitiveSlider("Center x", 0f..1f, { it.x }, { shape, value -> shape.copy(x = value) }),
         PrimitiveSlider("Center y", 0f..1f, { it.y }, { shape, value -> shape.copy(y = value) }),
     )
