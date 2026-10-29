@@ -62,7 +62,7 @@ crossfade (the default, for directional motion), a boomerang (for morphs and scr
 
 The capture tool writes into `docs/media`, which git ignores. Media is regenerated on demand with
 `./gradlew :samples:capture:run` and never checked in, so the repository's history doesn't grow by
-megabytes of binaries every time a spec or a default changes (one 6 s Minimal loop is about 2.2 MB).
+megabytes of binaries every time a spec or a default changes (a 6 s loop is a couple of megabytes).
 
 The few images the README and the Pages fallback show are the exception: hand-picked copies of captures,
 committed in `docs/assets`. A recapture never touches them; refreshing one is a deliberate copy from

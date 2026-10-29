@@ -88,7 +88,7 @@ class CycleTimeCaptureTest {
             id = "cycle-time",
             title = "Cycle time",
             description = "The cycle-time helper's share of its period, as a gray level.",
-            category = SampleCategory.Catalog,
+            category = SampleCategory.BasicShapes,
             content = { CycleTimeGray() },
         )
     }

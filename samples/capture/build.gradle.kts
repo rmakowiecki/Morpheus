@@ -1,7 +1,7 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 // The headless capture tool: renders registered samples to the WebP animations and PNG stills in
-// docs/media. Run it with `./gradlew :samples:capture:run --args="minimal"`, or `--args="all"`. Never
+// docs/media. Run it with `./gradlew :samples:capture:run --args="hero"`, or `--args="all"`. Never
 // published and never run in CI; its renderer tests are. See ADR-0002.
 plugins {
     id("org.jetbrains.kotlin.jvm")

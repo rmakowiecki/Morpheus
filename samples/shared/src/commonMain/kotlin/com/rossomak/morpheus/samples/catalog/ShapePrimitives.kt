@@ -2,8 +2,6 @@
 
 package com.rossomak.morpheus.samples.catalog
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.rossomak.morpheus.MorpheusGraphSpec
@@ -14,7 +12,6 @@ import com.rossomak.morpheus.ShapePrimitive.Rect
 import com.rossomak.morpheus.ShapePrimitive.Ribbon
 import com.rossomak.morpheus.ShapePrimitive.Ring
 import com.rossomak.morpheus.ShapePrimitive.Triangle
-import com.rossomak.morpheus.morpheusGraphBackground
 import com.rossomak.morpheus.samples.Sample
 import com.rossomak.morpheus.samples.SampleCategory
 import com.rossomak.morpheus.samples.SampleGrid
@@ -56,12 +53,12 @@ fun ShapePrimitivesSample(
         modifier = modifier,
         columns = 3,
         tiles = listOf(
-            SampleTile(RIBBON) { Box(Modifier.fillMaxSize().morpheusGraphBackground(ribbon)) },
-            SampleTile(BLOOM) { Box(Modifier.fillMaxSize().morpheusGraphBackground(bloom)) },
-            SampleTile(PILL) { Box(Modifier.fillMaxSize().morpheusGraphBackground(pill)) },
-            SampleTile(RING) { Box(Modifier.fillMaxSize().morpheusGraphBackground(ring)) },
-            SampleTile(RECT) { Box(Modifier.fillMaxSize().morpheusGraphBackground(rect)) },
-            SampleTile(TRIANGLE) { Box(Modifier.fillMaxSize().morpheusGraphBackground(triangle)) },
+            SampleTile(RIBBON) { SampleGraph(ribbon) },
+            SampleTile(BLOOM) { SampleGraph(bloom) },
+            SampleTile(PILL) { SampleGraph(pill) },
+            SampleTile(RING) { SampleGraph(ring) },
+            SampleTile(RECT) { SampleGraph(rect) },
+            SampleTile(TRIANGLE) { SampleGraph(triangle) },
         ),
     )
 }
@@ -70,7 +67,7 @@ internal val shapePrimitivesSample = Sample(
     id = "shape-primitives",
     title = "Shape primitives",
     description = "A ribbon, a bloom, a pill, a ring, a rectangle and a triangle: the shapes that decide where a layer's nodes sit.",
-    category = SampleCategory.Catalog,
+    category = SampleCategory.BasicShapes,
     specs = listOf(
         TunableSpec(RIBBON, ribbonSpec),
         TunableSpec(BLOOM, bloomSpec),

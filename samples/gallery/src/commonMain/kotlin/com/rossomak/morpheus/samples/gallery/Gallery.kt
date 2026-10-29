@@ -50,7 +50,7 @@ internal const val GALLERY_TITLE = "Morpheus samples"
  */
 @Composable
 fun Gallery(samples: List<Sample> = SampleRegistry.samples, onSpecExport: (source: String) -> Unit = {}, benchmark: GalleryBenchmark? = null) {
-    // Showcases first, then the catalog, each in registry order.
+    // Grouped by category in menu order, each group in registry order.
     val orderedSamples = remember(samples) { samples.sortedBy { it.category.ordinal } }
     var selectedId by remember { mutableStateOf(benchmark?.sampleId) }
     // Held here rather than in a pane, so a layout switch keeps the open sample's preparation and tuning.

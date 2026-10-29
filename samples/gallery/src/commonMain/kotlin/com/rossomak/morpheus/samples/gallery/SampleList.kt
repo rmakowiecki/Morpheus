@@ -68,5 +68,6 @@ internal fun NoSampleSelected(modifier: Modifier = Modifier) {
 private val SampleCategory.heading: String
     get() = when (this) {
         SampleCategory.Showcase -> "Showcase"
-        SampleCategory.Catalog -> "Catalog"
+        SampleCategory.BasicShapes -> "Basic shapes"
+        SampleCategory.Fills -> "Fills"
     }

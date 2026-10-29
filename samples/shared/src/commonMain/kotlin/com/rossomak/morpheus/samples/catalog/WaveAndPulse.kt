@@ -2,14 +2,11 @@
 
 package com.rossomak.morpheus.samples.catalog
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.rossomak.morpheus.MorpheusGraphLayerSpec
 import com.rossomak.morpheus.MorpheusGraphSpec
 import com.rossomak.morpheus.ShapePrimitive.Ribbon
-import com.rossomak.morpheus.morpheusGraphBackground
 import com.rossomak.morpheus.samples.Sample
 import com.rossomak.morpheus.samples.SampleCategory
 import com.rossomak.morpheus.samples.TunableSpec
@@ -38,7 +35,7 @@ private val waveAndPulseSpec = MorpheusGraphSpec(
 /** A wave travelling through the nodes' rest positions, and the pulse that dims and brightens the edges. */
 @Composable
 fun WaveAndPulseSample(modifier: Modifier = Modifier, spec: MorpheusGraphSpec = waveAndPulseSpec) {
-    Box(modifier.fillMaxSize().morpheusGraphBackground(spec))
+    SampleGraph(spec, modifier)
 }
 
 private const val WAVE_AND_PULSE = "Wave and pulse"
@@ -47,7 +44,7 @@ internal val waveAndPulseSample = Sample(
     id = "wave-and-pulse",
     title = "Wave and pulse",
     description = "A ribbon rippling with a travelling wave while its edges pulse.",
-    category = SampleCategory.Catalog,
+    category = SampleCategory.BasicShapes,
     specs = listOf(TunableSpec(WAVE_AND_PULSE, waveAndPulseSpec)),
     content = { specs -> WaveAndPulseSample(spec = specs[WAVE_AND_PULSE]) },
 )
