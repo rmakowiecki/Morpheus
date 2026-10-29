@@ -164,9 +164,13 @@ python3 scripts/headless_benchmark.py [--rounds 3] [--platform jvm|wasm|both] [-
 ```
 
 It runs each benchmark test alone, in its own Gradle test run, so each gets a fresh JVM or a fresh Karma
-page; see [why alone](#why-each-test-runs-alone). With more than one round it interleaves the tests and
-prints each line's numbers as their range over the rounds, low-high. On wasm, set `CHROME_BIN` to a Chrome or Chrome
-for Testing binary if Karma can't find one.
+page; see [why alone](#why-each-test-runs-alone). It prints each run's lines as soon as that run finishes,
+so a later failure never loses them. With more than one round it interleaves the tests and ends by
+printing each line's numbers as their range over the rounds, low-high; a test that failed some rounds
+gets the range over the rest, headed `range over 2 of 3 rounds:`. A run that fails, as when Karma's
+600 s limit stops a slow test, is listed at the end and the other runs go ahead; the script then exits
+non-zero. Ctrl-C ends the runs and, with more than one round, still prints the end summary. On wasm,
+set `CHROME_BIN` to a Chrome or Chrome for Testing binary if Karma can't find one.
 
 They print:
 
@@ -220,9 +224,9 @@ way, so a benchmark's wasm timings depend on which tests ran before it. For exam
 edge fades measured about 9.6 ms a frame right after the morph-mesh test, and about 17 to 18 ms alone,
 close to the gallery's 18.8 ms. The JVM showed no such effect, but runs alone too, the same way.
 
-The script stops when a run reports the test more than once. That happens when a headless Chrome
-left over from a killed run is still open: it reconnects to Karma's port and runs the test at the same
-time as the new one, which slows both down. Quit the leftover `Google Chrome for Testing` process,
+When a run reports the test more than once, the script prints the end summary and stops all runs. That
+happens when a headless Chrome left over from a killed run is still open: it reconnects to Karma's port
+and runs the test at the same time as the new one, which slows both down. Quit the leftover `Google Chrome for Testing` process,
 whose `--user-data-dir` ends in `karma-…`.
 
 ### Writing a benchmark
