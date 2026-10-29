@@ -184,6 +184,12 @@ They print:
   same three for "Comet playground", per morph: frame to blooms, blooms to cross and cross to frame. The
   loop prints a start and an end row for each morph.
 - **`LivingDelaunayBenchmark`:** that preset's phases per frame, still. It settles its mesh every frame.
+- **`AlphaSettleBenchmark`:** the alpha settle per frame, every layer summed, in three steps: `reference`,
+  the old sweep over every node and edge every round; `per-node constants`, the same with each node's
+  constants computed once a frame; and `frontier rounds`, the field's own. On the showcase and playground
+  loops, `baseline` at density 20, 48 and 96, and living Delaunay, the stills over 120 frames.
+- **`AlphaSettleReport`, showcase loop and playground loop:** the alpha settle's work per layer, still and
+  morph frames apart: rounds, round cap hits, frontier nodes, relevant nodes and edges above alpha 0.
 
 Each run starts with a header line naming the benchmark, the platform and the timer's measured step.
 Without `MORPHEUS_BENCHMARK`, each benchmark class prints `<Class> skipped: MORPHEUS_BENCHMARK not set`

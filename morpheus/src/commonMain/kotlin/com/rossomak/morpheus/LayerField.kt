@@ -157,14 +157,14 @@ internal const val NODE_VISIBLE_ALPHA = 0.03f
  * A node's dot is at full alpha once its second-brightest edge reaches this share of the edge alpha
  * nominal at the node's depth and presence, and fades out below it, reaching zero at [EDGE_VISIBLE_ALPHA].
  */
-private const val NODE_FULL_AT_EDGE_SHARE = 0.35f
+internal const val NODE_FULL_AT_EDGE_SHARE = 0.35f
 
 /**
  * Cap on [LayerField]'s dot/edge alpha rounds. Each round only lowers alphas, so they settle on their
  * own; a dot whose edges barely clear [EDGE_VISIBLE_ALPHA] can keep sinking for many rounds, and the
  * removal-only pass after the cap hides it instead.
  */
-private const val MAX_ALPHA_ROUNDS = 16
+internal const val MAX_ALPHA_ROUNDS = 16
 
 /**
  * How far over [EDGE_VISIBLE_ALPHA] an edge must be drawn at rest to count toward the mesh rules: one
@@ -183,7 +183,7 @@ private const val MAX_VISIBILITY_PASSES = 3
 private const val MAX_TRIANGLE_FILL_ROUNDS = 3
 
 /** An alpha round that lowers no dot by more than this counts as settled. */
-private const val ALPHA_SETTLE_EPSILON = 1e-4f
+internal const val ALPHA_SETTLE_EPSILON = 1e-4f
 
 /** How much brighter than an edge a dot may be before "Show violations" doubts the alpha rule held. */
 private const val ALPHA_RULE_TOLERANCE = 1e-4f
@@ -225,7 +225,7 @@ private const val COMET_CLEARANCE_MAX_ALPHA = 0.45f
 private const val COMET_CLEARANCE_LEVELS = 8
 
 /** A plain node's dot alpha before layer alpha and depth; raised to the layer's edge alpha when that is higher. */
-private const val NODE_ALPHA = 0.85f
+internal const val NODE_ALPHA = 0.85f
 private const val HOT_NODE_SCALE = 1.4f
 private const val NODE_SIZE_FLOOR = 0.2f
 
@@ -361,9 +361,53 @@ internal class LayerField(
     private var edgeAlphas = FloatArray(0)
     private var edgeCount = 0
 
-    /** [fillDrawnTriangles]' triangles, and the drawn edges they were found for. */
+    /**
+     * Goes up whenever the drawn edges' keys change, an edge only fading doesn't count, and whenever the node pool
+     * grows. Each reader keeps the generation it last acted on, so one that doesn't run every frame still sees a
+     * change, and no reader clears another's.
+     */
+    private var drawnEdgesGeneration = 0
+
+    /** [fillDrawnTriangles]' triangles, and the [drawnEdgesGeneration] they were found for. */
     private var triangleCache = IntArray(0)
-    private var triangleCacheKeys = LongArray(0)
+    private var triangleCacheGeneration = -1
+
+    /** Each node's drawn edges, and the [drawnEdgesGeneration] they were listed for. */
+    private val incidentEdges = IncidentEdges()
+    private var incidentEdgesGeneration = -1
+
+    /** Each node's [depthAlpha], for [depthAlphasDimming]; rebuilt when the pool or [MorpheusGraphLayerSpec.depthDimming] changes. */
+    private var depthAlphas = FloatArray(0)
+    private var depthAlphasDimming = Float.NaN
+
+    /**
+     * The nodes the alpha settle covers, ascending: present ones and the endpoints of drawn edges. Every other node
+     * ends the settle at 0 in all of its alpha values. The last frame's list is kept to zero the nodes that leave it.
+     */
+    private var relevantNodes = IntArray(0)
+    private var previousRelevantNodes = IntArray(0)
+    private var previousRelevantCount = 0
+
+    /** Each relevant node's dot alpha with two healthy edges, and the second-brightest edge alpha it is full at, this frame. */
+    private var dotBaseAlphas = FloatArray(0)
+    private var dotFullAts = FloatArray(0)
+
+    /** The drawn edges with a raw alpha above 0: every other edge is drawn at its raw alpha and never limited. */
+    private var liveEdges = IntArray(0)
+
+    /** The edges the alpha settle's last edge limit changed, and the dots its last round changed or its removal pass hid. */
+    private var changedEdges = IntArray(0)
+    private var changedEdgeCount = 0
+    private var changedDots = IntArray(0)
+    private var changedDotCount = 0
+
+    /** The nodes a round of the alpha settle recomputes: both endpoints of every edge the last edge limit changed. */
+    private var frontier = IntArray(0)
+    private var frontierCount = 0
+
+    /** Per node, the last [markStamp] it was marked with: as an endpoint of a drawn edge, or as a frontier node. */
+    private var nodeMarks = IntArray(0)
+    private var markStamp = 0
 
     /** The edge-filter and rest-alpha values [EdgeRule.FixedTriangulation] last settled with; a change re-settles it. */
     private val settledFilters = FloatArray(SETTLED_FILTER_COUNT)
@@ -415,6 +459,22 @@ internal class LayerField(
     internal val facesFirstSettleCount: Int get() = meshWorkspace.facesFirstSettles
     internal val facesFirstFallbackCount: Int get() = meshWorkspace.facesFirstFallbacks
 
+    /** The last [advance]'s alpha settle: how many rounds it took, and whether it stopped at [MAX_ALPHA_ROUNDS] before settling. */
+    internal var alphaRounds = 0
+        private set
+    internal var alphaRoundCapHit = false
+        private set
+
+    /** The last [advance]'s alpha settle: how many frontier nodes its rounds after the first recomputed, all rounds summed. */
+    internal var alphaFrontierVisits = 0
+        private set
+
+    /** The last [advance]'s relevant nodes (see [relevantNodes]) and drawn edges with a raw alpha above 0. */
+    internal var relevantNodeCount = 0
+        private set
+    internal var liveEdgeCount = 0
+        private set
+
     private var lastTimeSeconds = Float.NaN
 
     /**
@@ -425,6 +485,9 @@ internal class LayerField(
 
     /** The edges and dots [draw] paints, refilled every frame. */
     private val pointBatches = PointBatches()
+
+    /** Edge alpha of node [index]'s brightest edge, as of the last [advance]. */
+    internal fun brightestEdgeAlpha(index: Int): Float = brightestEdgeAlphas[index]
 
     /** Edge alpha of node [index]'s second-brightest edge, as of the last [advance]. */
     internal fun secondEdgeAlpha(index: Int): Float = secondEdgeAlphas[index]
@@ -443,7 +506,13 @@ internal class LayerField(
 
     /** Node [index]'s halo alpha as [draw] draws it, as of the last [advance]. */
     internal fun nodeHaloAlpha(index: Int): Float =
-        spec.glowStrength * spec.alpha * depthAlpha(index) * glowFactors[index] * hotWeights[index] * presences[index]
+        spec.glowStrength * spec.alpha * depthAlphas[index] * glowFactors[index] * hotWeights[index] * presences[index]
+
+    /** Node [index]'s depth, from 0 (far) to 1 (near), which never changes once the node exists. */
+    internal fun nodeDepth(index: Int): Float = nodes[index].depth
+
+    /** The grid's cell size, which sets the length edges fade over. */
+    internal val cellSize: Float get() = cell
 
     /**
      * True while a running morph switches node [index] in or out, as of the last [advance]; false for a node the same at both
@@ -504,6 +573,12 @@ internal class LayerField(
     internal val drawnEdgeCount: Int get() = edgeCount
 
     internal fun drawnEdgeKey(edge: Int): Long = edgeKeys[edge]
+
+    /** Drawn edge [edge]'s fade times its morph weight, as of the last [advance]. */
+    internal fun drawnEdgeFade(edge: Int): Float = edgeFades[edge]
+
+    /** Drawn edge [edge]'s alpha before the pulse, as the alpha settle left it in the last [advance]. */
+    internal fun settledEdgeAlpha(edge: Int): Float = edgeAlphas[edge]
 
     /** Drawn edge [edge]'s alpha at [timeSeconds], pulse included — exactly what [draw] paints. */
     internal fun drawnEdgeAlpha(edge: Int, timeSeconds: Float): Float {
@@ -746,7 +821,15 @@ internal class LayerField(
         visibleEdgeCounts = visibleEdgeCounts.copyOf(newCount)
         nodeAlphas = nodeAlphas.copyOf(newCount)
         glowFactors = glowFactors.copyOf(newCount)
+        relevantNodes = relevantNodes.copyOf(newCount)
+        previousRelevantNodes = previousRelevantNodes.copyOf(newCount)
+        dotBaseAlphas = FloatArray(newCount)
+        dotFullAts = FloatArray(newCount)
+        changedDots = IntArray(newCount)
+        frontier = IntArray(newCount)
+        nodeMarks = nodeMarks.copyOf(newCount)
         count = newCount
+        drawnEdgesGeneration++
     }
 
     /** One node per cell, from randoms that depend only on the cell and [seed], never on spec values that morph. */
@@ -1184,6 +1267,8 @@ internal class LayerField(
         mergedTopologyIndices = IntArray(size)
         rawEdgeAlphas = rawEdgeAlphas.copyOf(size)
         edgeAlphas = edgeAlphas.copyOf(size)
+        liveEdges = IntArray(size)
+        changedEdges = IntArray(size)
     }
 
     /**
@@ -1217,12 +1302,13 @@ internal class LayerField(
     /**
      * Merges the drawn edges with [edges], both ascending, into the merged arrays, each with its fade moved
      * on by [fadeStep]: an edge in [edges] fades in, any other fades out, and one faded out entirely is
-     * dropped. Returns how many it merged.
+     * dropped. Moves [drawnEdgesGeneration] on if an edge arrived or was dropped. Returns how many it merged.
      */
     private fun mergeFadingEdges(edges: LongArray, fadeStep: Float, isFirstFrame: Boolean, morphing: Boolean): Int {
         var drawn = 0
         var topologyEdge = 0
         var merged = 0
+        var keysChanged = false
         while (drawn < edgeCount || topologyEdge < edges.size) {
             val takesDrawn = drawn < edgeCount && (topologyEdge == edges.size || edgeKeys[drawn] <= edges[topologyEdge])
             val takesTopology = topologyEdge < edges.size && (drawn == edgeCount || edges[topologyEdge] <= edgeKeys[drawn])
@@ -1231,9 +1317,12 @@ internal class LayerField(
             if (alpha > 0f) {
                 storeMerged(merged++, alpha, drawnSlot, if (takesTopology) topologyEdge else -1, edges)
             }
+            // An edge arriving is kept but wasn't drawn; one dropped was drawn but isn't kept.
+            if ((alpha > 0f) != takesDrawn) keysChanged = true
             if (takesDrawn) drawn++
             if (takesTopology) topologyEdge++
         }
+        if (keysChanged) drawnEdgesGeneration++
         return merged
     }
 
@@ -1276,26 +1365,99 @@ internal class LayerField(
      * Limiting edges can lower a neighbour's second-brightest edge and so its dot, so the two settle
      * over rounds. Rounds only ever lower alphas; after [MAX_ALPHA_ROUNDS], a removal-only pass hides
      * any dot still short of two visible edges.
+     *
+     * The rounds are synchronous: each lowers its dots from the tally as it stood before the round, then
+     * limits the edges. A dot's value depends only on its own constants and its tally, which changes only
+     * when one of its edges does, so after the first round, which covers every relevant node and every edge
+     * with a raw alpha above 0, each round recomputes only its frontier: both endpoints of every edge the
+     * last limit changed. That gives exactly the values a sweep over every node and edge would, and every
+     * tally ends exact.
      */
     private fun updateAlphas() {
+        updateDepthAlphas()
+        updateRelevantNodes()
         updateRawEdgeAlphas()
-        for (index in 0 until count) nodeAlphas[index] = dotBaseAlpha(index)
-        var settled = false
-        var rounds = 0
+        if (incidentEdgesGeneration != drawnEdgesGeneration) {
+            incidentEdges.build(count, edgeKeys, edgeCount)
+            incidentEdgesGeneration = drawnEdgesGeneration
+        }
+        updateDotConstants()
+        tallyLiveEdges()
+        var settled = !lowerDotsToTheirEdges(relevantNodes, relevantNodeCount)
+        limitLiveEdges()
+        var rounds = 1
+        alphaFrontierVisits = 0
         while (!settled && rounds < MAX_ALPHA_ROUNDS) {
-            tallyIncidentEdges()
-            settled = !lowerDotsToTheirEdges()
-            limitEdgesByDots()
+            retallyFrontier()
+            alphaFrontierVisits += frontierCount
+            settled = !lowerDotsToTheirEdges(frontier, frontierCount)
+            limitEdgesOfChangedDots()
             rounds++
         }
-        do {
-            tallyIncidentEdges()
-            val hidAny = hideUnderconnectedDots()
-            if (hidAny) limitEdgesByDots()
-        } while (hidAny)
-        visibleNodeCount = (0 until count).count { nodeAlphas[it] >= NODE_VISIBLE_ALPHA }
+        alphaRounds = rounds
+        alphaRoundCapHit = !settled
+        retallyFrontier()
+        var hidAny = hideUnderconnectedDots(relevantNodes, relevantNodeCount)
+        while (hidAny) {
+            limitEdgesOfChangedDots()
+            retallyFrontier()
+            hidAny = hideUnderconnectedDots(frontier, frontierCount)
+        }
+        var visible = 0
+        for (position in 0 until relevantNodeCount) if (nodeAlphas[relevantNodes[position]] >= NODE_VISIBLE_ALPHA) visible++
+        visibleNodeCount = visible
     }
 
+    private fun updateDepthAlphas() {
+        if (depthAlphas.size == count && depthAlphasDimming == spec.depthDimming) return
+        if (depthAlphas.size != count) depthAlphas = FloatArray(count)
+        for (index in 0 until count) depthAlphas[index] = depthAlpha(index)
+        depthAlphasDimming = spec.depthDimming
+    }
+
+    /**
+     * Lists this frame's [relevantNodes]: one pass marks the drawn edges' endpoints, one over the pool collects them
+     * and the present nodes. Then zeroes every node that left the list since the last frame, found by walking the
+     * two ascending lists together, so it ends this frame where a sweep over every node would leave it.
+     */
+    private fun updateRelevantNodes() {
+        previousRelevantNodes = relevantNodes.also { relevantNodes = previousRelevantNodes }
+        previousRelevantCount = relevantNodeCount
+        val stamp = nextMarkStamp()
+        for (edge in 0 until edgeCount) {
+            val key = edgeKeys[edge]
+            nodeMarks[edgeStart(key)] = stamp
+            nodeMarks[edgeEnd(key)] = stamp
+        }
+        var relevant = 0
+        for (index in 0 until count) {
+            if (presences[index] > 0f || nodeMarks[index] == stamp) relevantNodes[relevant++] = index
+        }
+        relevantNodeCount = relevant
+        var next = 0
+        for (position in 0 until previousRelevantCount) {
+            val node = previousRelevantNodes[position]
+            while (next < relevant && relevantNodes[next] < node) next++
+            if (next < relevant && relevantNodes[next] == node) continue
+            nodeAlphas[node] = 0f
+            glowFactors[node] = 0f
+            clearTally(node)
+        }
+    }
+
+    /** A stamp no node is marked with yet; once the counter would wrap, every mark is cleared first. */
+    private fun nextMarkStamp(): Int {
+        if (markStamp == Int.MAX_VALUE) {
+            nodeMarks.fill(0)
+            markStamp = 0
+        }
+        return ++markStamp
+    }
+
+    /**
+     * Each drawn edge's alpha from length, depth, fade and layer alpha, which starts it in the settle, and the
+     * [liveEdges] among them. The pass covers every edge, because [fillDrawnTriangles] lifts edges before the fade.
+     */
     private fun updateRawEdgeAlphas() {
         val referenceLength = spec.maxEdgeFactor * cell
         for (edge in 0 until edgeCount) {
@@ -1306,15 +1468,18 @@ internal class LayerField(
             val deltaY = positionsY[end] - positionsY[start]
             val length = sqrt(deltaX * deltaX + deltaY * deltaY)
             val lengthFactor = 1f - spec.lengthFalloff * (length / referenceLength).coerceIn(0f, 1f)
-            val depthFactor = min(depthAlpha(start), depthAlpha(end))
+            val depthFactor = min(depthAlphas[start], depthAlphas[end])
             rawEdgeAlphas[edge] = (spec.edgeAlpha * spec.alpha * lengthFactor * depthFactor).coerceIn(0f, 1f)
         }
         if (spec.strictTriangles) fillDrawnTriangles()
+        var live = 0
         for (edge in 0 until edgeCount) {
             val alpha = rawEdgeAlphas[edge] * edgeFades[edge]
             rawEdgeAlphas[edge] = alpha
             edgeAlphas[edge] = alpha
+            if (alpha > 0f) liveEdges[live++] = edge
         }
+        liveEdgeCount = live
     }
 
     /**
@@ -1322,9 +1487,9 @@ internal class LayerField(
      * which for a mesh rebuilt every frame is still only when an edge flips.
      */
     private fun fillDrawnTriangles() {
-        if (!triangleCacheKeys.contentEquals(edgeKeys.copyOf(edgeCount))) {
-            triangleCacheKeys = edgeKeys.copyOf(edgeCount)
+        if (triangleCacheGeneration != drawnEdgesGeneration) {
             triangleCache = meshWorkspace.triangleSearch.edgeTriangles(count, edgeKeys, edgeCount)
+            triangleCacheGeneration = drawnEdgesGeneration
         }
         fillTriangles(triangleCache, rawEdgeAlphas)
     }
@@ -1335,14 +1500,30 @@ internal class LayerField(
      */
     private fun dotBaseAlpha(index: Int): Float {
         val baseAlpha = lerp(max(NODE_ALPHA, spec.edgeAlpha), 1f, hotWeights[index])
-        return (baseAlpha * spec.alpha * depthAlpha(index) * presences[index]).coerceIn(0f, 1f)
+        return (baseAlpha * spec.alpha * depthAlphas[index] * presences[index]).coerceIn(0f, 1f)
     }
 
-    private fun tallyIncidentEdges() {
-        brightestEdgeAlphas.fill(0f)
-        secondEdgeAlphas.fill(0f)
-        visibleEdgeCounts.fill(0)
-        for (edge in 0 until edgeCount) {
+    /**
+     * Each relevant node's [dotBaseAlphas] and [dotFullAts], which the rounds read, and its dot at its base alpha to
+     * start from. The full-alpha point scales with presence, so a half-present node next to fully present ones
+     * settles at half alpha instead of sinking to nothing over the rounds.
+     */
+    private fun updateDotConstants() {
+        val nominalEdgeAlpha = spec.edgeAlpha * spec.alpha
+        for (position in 0 until relevantNodeCount) {
+            val index = relevantNodes[position]
+            val baseAlpha = dotBaseAlpha(index)
+            dotBaseAlphas[index] = baseAlpha
+            nodeAlphas[index] = baseAlpha
+            dotFullAts[index] = max(NODE_FULL_AT_EDGE_SHARE * nominalEdgeAlpha * depthAlphas[index] * presences[index], 2f * EDGE_VISIBLE_ALPHA)
+        }
+    }
+
+    /** The first round's tally, from the [liveEdges]: no other edge counts toward one. */
+    private fun tallyLiveEdges() {
+        for (position in 0 until relevantNodeCount) clearTally(relevantNodes[position])
+        for (position in 0 until liveEdgeCount) {
+            val edge = liveEdges[position]
             val key = edgeKeys[edge]
             recordIncidentEdge(edgeStart(key), edgeAlphas[edge])
             recordIncidentEdge(edgeEnd(key), edgeAlphas[edge])
@@ -1360,42 +1541,90 @@ internal class LayerField(
     }
 
     /**
-     * Fades each dot with its second-brightest edge, never raising one; true if any dot dropped
-     * noticeably. The full-alpha point scales with presence, so a half-present node next to fully
-     * present ones settles at half alpha instead of sinking to nothing over the rounds.
+     * Lists the [frontier] and tallies each of its nodes again from all of its edges: a brightest and second-brightest
+     * can't be updated by subtraction, and don't depend on the order the edges come in, ties included.
      */
-    private fun lowerDotsToTheirEdges(): Boolean {
-        val nominalEdgeAlpha = spec.edgeAlpha * spec.alpha
+    private fun retallyFrontier() {
+        val stamp = nextMarkStamp()
+        frontierCount = 0
+        for (position in 0 until changedEdgeCount) {
+            val key = edgeKeys[changedEdges[position]]
+            markFrontier(edgeStart(key), stamp)
+            markFrontier(edgeEnd(key), stamp)
+        }
+        for (position in 0 until frontierCount) {
+            val node = frontier[position]
+            clearTally(node)
+            incidentEdges.forEachEdge(node) { edge -> recordIncidentEdge(node, edgeAlphas[edge]) }
+        }
+    }
+
+    private fun clearTally(node: Int) {
+        brightestEdgeAlphas[node] = 0f
+        secondEdgeAlphas[node] = 0f
+        visibleEdgeCounts[node] = 0
+    }
+
+    private fun markFrontier(node: Int, stamp: Int) {
+        if (nodeMarks[node] == stamp) return
+        nodeMarks[node] = stamp
+        frontier[frontierCount++] = node
+    }
+
+    /**
+     * Fades each of the first [size] dots of [nodes] with its second-brightest edge, never raising one, and lists
+     * those it changed in [changedDots]; true if any dot dropped noticeably.
+     */
+    private fun lowerDotsToTheirEdges(nodes: IntArray, size: Int): Boolean {
         var lowered = false
-        for (index in 0 until count) {
+        changedDotCount = 0
+        for (position in 0 until size) {
+            val index = nodes[position]
             val second = secondEdgeAlphas[index]
-            val fullAt = max(NODE_FULL_AT_EDGE_SHARE * nominalEdgeAlpha * depthAlpha(index) * presences[index], 2f * EDGE_VISIBLE_ALPHA)
-            val factor = if (second < EDGE_VISIBLE_ALPHA) 0f else smoothStep(EDGE_VISIBLE_ALPHA, fullAt, second)
-            val alpha = min(nodeAlphas[index], dotBaseAlpha(index) * factor)
+            val factor = if (second < EDGE_VISIBLE_ALPHA) 0f else smoothStep(EDGE_VISIBLE_ALPHA, dotFullAts[index], second)
+            val alpha = min(nodeAlphas[index], dotBaseAlphas[index] * factor)
             if (nodeAlphas[index] - alpha > ALPHA_SETTLE_EPSILON) lowered = true
+            if (alpha != nodeAlphas[index]) changedDots[changedDotCount++] = index
             nodeAlphas[index] = alpha
             glowFactors[index] = factor
         }
         return lowered
     }
 
-    private fun limitEdgesByDots() {
-        for (edge in 0 until edgeCount) {
-            val key = edgeKeys[edge]
-            edgeAlphas[edge] = min(rawEdgeAlphas[edge], min(nodeAlphas[edgeStart(key)], nodeAlphas[edgeEnd(key)]))
-        }
+    /** The first round's edge limit, over the [liveEdges]; lists those it changed in [changedEdges]. */
+    private fun limitLiveEdges() {
+        changedEdgeCount = 0
+        for (position in 0 until liveEdgeCount) limitEdge(liveEdges[position])
     }
 
-    /** Hides every dot still drawn with its second-brightest edge under [EDGE_VISIBLE_ALPHA]; true if any. */
-    private fun hideUnderconnectedDots(): Boolean {
-        var hidAny = false
-        for (index in 0 until count) {
+    /** The edge limit after the first round: only the edges of [changedDots] can change. Lists those it changed in [changedEdges]. */
+    private fun limitEdgesOfChangedDots() {
+        changedEdgeCount = 0
+        for (position in 0 until changedDotCount) incidentEdges.forEachEdge(changedDots[position], ::limitEdge)
+    }
+
+    /** Caps [edge] at the dimmer of its two dots; an edge it changes goes into [changedEdges], once, since a second limit leaves it as it is. */
+    private fun limitEdge(edge: Int) {
+        val key = edgeKeys[edge]
+        val alpha = min(rawEdgeAlphas[edge], min(nodeAlphas[edgeStart(key)], nodeAlphas[edgeEnd(key)]))
+        if (alpha != edgeAlphas[edge]) changedEdges[changedEdgeCount++] = edge
+        edgeAlphas[edge] = alpha
+    }
+
+    /**
+     * Hides each of the first [size] dots of [nodes] still drawn with its second-brightest edge under
+     * [EDGE_VISIBLE_ALPHA], and lists them in [changedDots]; true if any.
+     */
+    private fun hideUnderconnectedDots(nodes: IntArray, size: Int): Boolean {
+        changedDotCount = 0
+        for (position in 0 until size) {
+            val index = nodes[position]
             if (nodeAlphas[index] <= 0f || secondEdgeAlphas[index] >= EDGE_VISIBLE_ALPHA) continue
             nodeAlphas[index] = 0f
             glowFactors[index] = 0f
-            hidAny = true
+            changedDots[changedDotCount++] = index
         }
-        return hidAny
+        return changedDotCount > 0
     }
 
     private fun depthAlpha(index: Int): Float = 1f - spec.depthDimming * (1f - nodes[index].depth)
@@ -2174,7 +2403,7 @@ private fun restEdgeAlpha(key: Long, xs: FloatArray, ys: FloatArray, presence: F
  * length can leave an edge fainter than both other sides of its triangle; and each edge keeps its own
  * fade, so an edge fading in or out still does. [triangles] holds edge index triples into [alphas].
  */
-private fun fillTriangles(triangles: IntArray, alphas: FloatArray) {
+internal fun fillTriangles(triangles: IntArray, alphas: FloatArray) {
     var rounds = 0
     var raised = true
     while (raised && rounds < MAX_TRIANGLE_FILL_ROUNDS) {
@@ -2236,6 +2465,37 @@ private fun ruleEdges(
 
 /** An edge rule's output for [enforceMinDegree]: its filtered edges, repair candidates and, for Delaunay rules, triangles. */
 private class RuleEdges(val base: LongArray, val candidates: LongArray, val triangles: IntArray?)
+
+/**
+ * Each node's edges, as indices into a list of edge keys, in compressed rows: node `n`'s are [edges] from
+ * `starts[n]` until `starts[n + 1]`. Its arrays only grow, so a rebuild allocates nothing once warm.
+ */
+private class IncidentEdges {
+    private var starts = IntArray(1)
+    private var edges = IntArray(0)
+
+    inline fun forEachEdge(node: Int, action: (edge: Int) -> Unit) {
+        for (slot in starts[node] until starts[node + 1]) action(edges[slot])
+    }
+
+    /** Lists the edges of nodes 0 until [count] among the first [edgeCount] of [keys]. */
+    fun build(count: Int, keys: LongArray, edgeCount: Int) {
+        if (starts.size < count + 1) starts = IntArray(count + 1) else starts.fill(0, 0, count + 1)
+        if (edges.size < 2 * edgeCount) edges = IntArray(2 * edgeCount)
+        for (edge in 0 until edgeCount) {
+            starts[edgeStart(keys[edge]) + 1]++
+            starts[edgeEnd(keys[edge]) + 1]++
+        }
+        for (node in 1..count) starts[node] += starts[node - 1]
+        // Each node's start serves as its write cursor, which leaves it at the next node's start; shift them back after.
+        for (edge in 0 until edgeCount) {
+            edges[starts[edgeStart(keys[edge])]++] = edge
+            edges[starts[edgeEnd(keys[edge])]++] = edge
+        }
+        for (node in count downTo 1) starts[node] = starts[node - 1]
+        starts[0] = 0
+    }
+}
 
 /** A node's depth by index; a `fun interface` rather than `(Int) -> Float`, so nothing is boxed. */
 private fun interface NodeDepths {

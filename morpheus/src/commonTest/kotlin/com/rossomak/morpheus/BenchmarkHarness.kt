@@ -103,8 +103,11 @@ internal class GalleryLoop(private val canvas: BenchmarkCanvas = BenchmarkCanvas
     private val holder = MorpheusGraphHolder()
     private var frames = 0
 
-    /** Advances [morph] by one frame; returns each of [ADVANCE_PHASES]' nanoseconds, every layer summed. */
-    fun frame(morph: MorpheusGraphMorph): LongArray {
+    /**
+     * Advances [morph] by one frame; returns each of [ADVANCE_PHASES]' nanoseconds, every layer summed. [advanced]
+     * sees the frame's fields once every one is advanced, outside the timed phases.
+     */
+    fun frame(morph: MorpheusGraphMorph, advanced: (fields: List<LayerField>) -> Unit = {}): LongArray {
         val stats = MorpheusGraphFrameStats()
         val time = frames++ / fps.toFloat()
         val layers = holder.layersFor(morph, FILL)
@@ -114,6 +117,7 @@ internal class GalleryLoop(private val canvas: BenchmarkCanvas = BenchmarkCanvas
             field.advance(time, canvas.width, canvas.height, stats.probe)
             stats.probe.endLayer(field)
         }
+        advanced(fields)
         holder.endFrame()
         val slots = layers.map { it.slotFromFront }.distinct()
         return LongArray(ADVANCE_PHASES.size) { phase -> slots.sumOf { stats.slotRecord(it).phaseNanos[ADVANCE_PHASES[phase].ordinal] } }
@@ -156,6 +160,9 @@ internal inline fun replayLoopFields(
         holder.endFrame()
     }
 }
+
+/** True between the morph's ends, where it draws its morph meshes rather than either end's still. */
+internal val MorpheusGraphMorph.isMidMorph: Boolean get() = fraction > 0f && fraction < 1f
 
 /** These frames' mean, phase by phase: one frame of [GalleryLoop.ADVANCE_PHASES]' nanoseconds. */
 internal fun List<LongArray>.meanFrame(): LongArray = LongArray(GalleryLoop.ADVANCE_PHASES.size) { phase -> sumOf { it[phase] } / size }
