@@ -5,6 +5,9 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
 
+/** How many mismatches with [ReferenceAlphaSettle] a failure lists. */
+internal const val MISMATCHES_SHOWN = 10
+
 /**
  * [LayerField]'s alpha settle as it was before it recomputed only each round's frontier: every round tallies,
  * lowers and limits every node and every drawn edge. The reference the field's settle must match bit for bit

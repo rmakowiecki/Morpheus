@@ -1,13 +1,15 @@
 package com.rossomak.morpheus
 
+import io.kotest.assertions.withClue
+import io.kotest.matchers.shouldBe
 import kotlin.math.roundToInt
 import kotlin.test.Test
 
 /**
  * Prints, per layer, still and morph frames apart, how much work the alpha settle does: its rounds, how often it hits
  * the round cap, the frontier nodes its rounds after the first recompute, the relevant nodes as a share of the pool,
- * and the drawn edges with a raw alpha above 0 among all drawn edges. Mean per frame. Only runs with
- * `MORPHEUS_BENCHMARK` set:
+ * and the drawn edges with a raw alpha above 0 among all drawn edges. Mean per frame. Every frame's rounds and cap hit
+ * must match [ReferenceAlphaSettle]'s. Only runs with `MORPHEUS_BENCHMARK` set:
  *
  * `MORPHEUS_BENCHMARK=1 ./gradlew :morpheus:jvmTest --tests '*AlphaSettleReport' -i`
  */
@@ -24,12 +26,22 @@ class AlphaSettleReport {
     }
 
     private fun report(frames: Int, morphAt: (time: Float) -> MorpheusGraphMorph) {
+        val references = HashMap<LayerField, ReferenceAlphaSettle>()
         val tallies = LinkedHashMap<String, Tally>()
-        replayLoopFields(frames, morphAt = morphAt) { _, morph, layers, fields ->
+        val mismatches = ArrayList<String>()
+        replayLoopFields(frames, morphAt = morphAt) { time, morph, layers, fields ->
             val motion = if (morph.isMidMorph) "morph" else "still"
-            fields.forEachIndexed { index, field -> tallies.getOrPut("slot ${layers[index].slotFromFront}, $motion") { Tally() }.add(field) }
+            fields.forEachIndexed { index, field ->
+                val reference = references.getOrPut(field) { ReferenceAlphaSettle() }.apply { settle(field) }
+                if (field.alphaRounds != reference.rounds || field.alphaRoundCapHit != reference.roundCapHit) {
+                    mismatches +=
+                        "t=$time slot ${layers[index].slotFromFront}: rounds ${field.alphaRounds} vs ${reference.rounds}, cap ${field.alphaRoundCapHit} vs ${reference.roundCapHit}"
+                }
+                tallies.getOrPut("slot ${layers[index].slotFromFront}, $motion") { Tally() }.add(field)
+            }
         }
         for ((name, tally) in tallies) println("$name: ${tally.describe()}")
+        withClue(mismatches.take(MISMATCHES_SHOWN).joinToString("\n")) { mismatches.size shouldBe 0 }
     }
 
     /** One layer's settle work, summed over its frames. */

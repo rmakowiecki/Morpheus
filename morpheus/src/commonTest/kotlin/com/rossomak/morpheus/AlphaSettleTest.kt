@@ -107,6 +107,5 @@ class AlphaSettleTest {
 
     private companion object {
         const val ROUND_CAP_CASE = "playground blooms to cross"
-        const val MISMATCHES_SHOWN = 10
     }
 }
