@@ -9,10 +9,10 @@ import kotlin.time.TimeSource
  * Times the alpha settle per frame, every layer summed, in three steps: [ReferenceAlphaSettle], the same `withConstants`,
  * and [LayerField]'s own. Frames replay through [GalleryLoop] on the recipe's canvas; the references settle each frame's
  * fields after their `advance`, outside the field's own timing. Every bias favours the references: they time `settle`
- * alone, where the field's lap also rebuilds its incident edges and relevant nodes, and they read node depths from an
- * array. The field's own settle always runs first, inside `advance`, then the two references in a fixed order; the
- * order is not alternated; running first, the field's own step is the one a cold cache would penalize, if any is.
- * Printed, not asserted; runs on [benchmark], see `docs/benchmark.md`.
+ * alone, where the field's lap also rebuilds its incident edges, and its relevant nodes when the drawn edges changed,
+ * and they read node depths from an array. The field's own settle always runs first, inside `advance`, then the two
+ * references in a fixed order, not alternated; running first, the field's own step is the one a cold cache would
+ * penalize, if any is. Printed, not asserted; runs on [benchmark], see `docs/benchmark.md`.
  */
 class AlphaSettleBenchmark {
 
@@ -38,8 +38,6 @@ class AlphaSettleBenchmark {
     @Test
     fun `the alpha settle on living Delaunay`() = benchmark(this::class, "living Delaunay") { timeStill("living Delaunay", MorpheusGraphPresets.livingDelaunay) }
 
-    private fun baselineAt(density: Float) = MorpheusGraphPresets.baseline.let { spec -> spec.copy(layers = spec.layers.map { it.copy(density = density) }) }
-
     private fun timeStill(name: String, spec: MorpheusGraphSpec) {
         val still = GalleryLoop.still(spec)
         timeSteps(name, List(STILL_LOOP_FRAMES) { still })
@@ -64,7 +62,7 @@ class AlphaSettleBenchmark {
             }
             if (loopIndex >= WARM_UP_LOOPS) Step.entries.forEach { step -> stepLoops[step.ordinal] += nanos[step.ordinal] / morphs.size }
         }
-        val steps = Step.entries.joinToString { step -> "${step.label} ${stepLoops[step.ordinal].sorted()[MEASURED_LOOPS / 2].millis()} ms" }
+        val steps = Step.entries.joinToString { step -> "${step.label} ${stepLoops[step.ordinal].median().millis()} ms" }
         println("$name, alpha settle per frame, median of $MEASURED_LOOPS loops of ${morphs.size} frames: $steps")
     }
 

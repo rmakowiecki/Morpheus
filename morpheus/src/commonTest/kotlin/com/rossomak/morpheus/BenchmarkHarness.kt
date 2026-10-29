@@ -97,9 +97,9 @@ internal data class BenchmarkCanvas(val width: Float, val height: Float, val ref
  * Replays frames as the gallery's modifier runs them on [canvas] at [fps], through the modifier's own
  * [MorpheusGraphHolder]: its layers and fields, kept across frames as the modifier keeps them, each frame's
  * `advance` phases timed through the gallery's own probe. [frame] takes the morph to draw; [still] gives
- * the one the modifier draws for a still spec.
+ * the one the modifier draws for a still spec. [cachesStillFrames] sets [LayerField.cachesStillFrames] on every field.
  */
-internal class GalleryLoop(private val canvas: BenchmarkCanvas = BenchmarkCanvas.Recipe, private val fps: Int = 60) {
+internal class GalleryLoop(private val canvas: BenchmarkCanvas = BenchmarkCanvas.Recipe, private val fps: Int = 60, private val cachesStillFrames: Boolean = true) {
     private val holder = MorpheusGraphHolder()
     private var frames = 0
 
@@ -113,6 +113,7 @@ internal class GalleryLoop(private val canvas: BenchmarkCanvas = BenchmarkCanvas
         val layers = holder.layersFor(morph, FILL)
         val fields = holder.fieldsFor(layers, canvas.referenceSize, canvas.pxPerDp)
         fields.forEachIndexed { index, field ->
+            field.cachesStillFrames = cachesStillFrames
             stats.probe.startLayer(layers[index].slotFromFront, field)
             field.advance(time, canvas.width, canvas.height, stats.probe)
             stats.probe.endLayer(field)
@@ -168,7 +169,14 @@ internal val MorpheusGraphMorph.isMidMorph: Boolean get() = fraction > 0f && fra
 internal fun List<LongArray>.meanFrame(): LongArray = LongArray(GalleryLoop.ADVANCE_PHASES.size) { phase -> sumOf { it[phase] } / size }
 
 /** Each of [GalleryLoop.ADVANCE_PHASES]' median over these frames, as "shape 0.123 ms, mesh …". */
-internal fun List<LongArray>.medianPhases(): String = describePhases { phase -> map { it[phase] }.sorted().let { it[it.size / 2] } }
+internal fun List<LongArray>.medianPhases(): String = describePhases { phase -> map { it[phase] }.median() }
+
+/** The middle of these values, the upper one of the two for an even count. */
+internal fun List<Long>.median(): Long = sorted()[size / 2]
+
+/** [MorpheusGraphPresets.baseline] with every layer at [density]. */
+internal fun baselineAt(density: Float): MorpheusGraphSpec =
+    MorpheusGraphPresets.baseline.let { spec -> spec.copy(layers = spec.layers.map { it.copy(density = density) }) }
 
 /** Each of [GalleryLoop.ADVANCE_PHASES]' mean over these frames, as "shape 0.123 ms, mesh …". */
 internal fun List<LongArray>.meanPhases(): String = meanFrame().let { mean -> describePhases { phase -> mean[phase] } }
