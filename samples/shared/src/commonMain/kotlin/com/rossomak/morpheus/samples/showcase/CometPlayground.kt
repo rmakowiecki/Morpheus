@@ -23,11 +23,14 @@ import com.rossomak.morpheus.morpheusGraphBackground
 import com.rossomak.morpheus.rememberMorpheusGraphMorphState
 import com.rossomak.morpheus.samples.CaptureRecipe
 import com.rossomak.morpheus.samples.CaptureThemes
+import com.rossomak.morpheus.samples.MorphCycle
 import com.rossomak.morpheus.samples.MorphTiming
 import com.rossomak.morpheus.samples.Sample
 import com.rossomak.morpheus.samples.SampleCategory
 import com.rossomak.morpheus.samples.TunableMorph
 import com.rossomak.morpheus.samples.TunableSpec
+import com.rossomak.morpheus.samples.cyclePeriod
+import com.rossomak.morpheus.samples.rememberCycleTime
 import kotlin.time.Duration.Companion.milliseconds
 
 private val Teal = Color(0xFF1FD1B2)
@@ -127,7 +130,8 @@ fun CometPlaygroundSample(
     timing: MorphTiming = PlaygroundTiming,
 ) {
     val state = rememberMorpheusGraphMorphState(specs.first())
-    MorphCycle(state, specs, easings, timing)
+    val cycleTime = rememberCycleTime(period = timing.cyclePeriod(legs = specs.size))
+    MorphCycle(state, specs, easings, timing, cycleTime)
     Box(modifier.fillMaxSize().background(NearBlack).morpheusGraphBackground(state))
 }
 

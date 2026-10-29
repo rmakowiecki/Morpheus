@@ -51,11 +51,13 @@ import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.rossomak.morpheus.ExperimentalMorpheusGraphApi
 import com.rossomak.morpheus.LocalMorpheusGraphFrameStats
 import com.rossomak.morpheus.samples.CaptureThemes
 import com.rossomak.morpheus.samples.CycleControl
 import com.rossomak.morpheus.samples.LocalCycleControl
+import com.rossomak.morpheus.samples.LocalSampleTileStats
 import com.rossomak.morpheus.samples.SampleTheme
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -64,8 +66,8 @@ import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * The open sample on the [previewFrame]'s canvas, centered on the sample theme's background, under its title,
- * the theme control, the Tune and Reset to defaults actions, the cycle control for a sample that runs a cycle,
- * the frame time button and the preview canvas control. The frame time button opens the breakdown panel, which
+ * the theme control, the Tune and Reset to defaults actions, Pause for every sample, the scrub slider and the comet
+ * debug button for a sample that runs a cycle, the frame time button and the preview canvas control. The frame time button opens the breakdown panel, which
  * the wide layout shows in its side column and [showsInlineBreakdown] shows under the preview instead; the
  * sample reports into [frameStats] through [LocalMorpheusGraphFrameStats], so neither needs anything from the
  * sample. [onBack] is the single-pane layout's way back to the list. [logsBenchmarkReadings] prints each reading
@@ -90,12 +92,16 @@ internal fun SampleDetail(
     val dark = darkOnly || themeMode.isDark(systemDark)
     val canvasSize = previewFrame.canvasSize(sample.recipe)
     var canvasScaled by remember { mutableStateOf(false) }
-    RecordFrameIntervals(frameStats.stats)
+    RecordFrameIntervals(frameStats, session.tiles)
     if (logsBenchmarkReadings) LogBenchmarkReadings(frameStats.stats) { canvasScaled }
     // No published reading straddles a change of what is measured.
-    LaunchedEffect(frameStats, session, dark, canvasSize, previewFrame.scalesToFit) { frameStats.stats.reset() }
+    LaunchedEffect(frameStats, session, dark, canvasSize, previewFrame.scalesToFit) { resetStats(frameStats, session) }
     LaunchedEffect(frameStats, session) {
-        snapshotFlow { session.currentSpecs to session.cycle.isPaused }.collect { frameStats.stats.reset() }
+        snapshotFlow { session.currentSpecs to session.cycle.isPaused }.collect { resetStats(frameStats, session) }
+    }
+    // A grid's tiles report with the page's switches: a flipped switch reaches every tile's stats.
+    LaunchedEffect(frameStats, session) {
+        snapshotFlow { frameStats.stats.switches() }.collect { session.tiles.mirrorSwitches() }
     }
     Column(modifier = modifier) {
         Row(modifier = Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -124,9 +130,9 @@ internal fun SampleDetail(
                     Text("Reset to defaults")
                 }
             }
-            session.cycle.period?.let { period -> CycleControls(control = session.cycle, period = period) }
-            FrameStatsButton(frameStats = frameStats, canvasScaled = canvasScaled)
-            CometDebugButton(frameStats = frameStats)
+            CycleControls(control = session.cycle, scrubPeriod = session.cycle.period.takeIf { session.runsCycle })
+            FrameStatsButton(frameStats = frameStats, tiles = session.tiles, canvasScaled = canvasScaled)
+            if (session.runsCycle) CometDebugButton(frameStats = frameStats)
         }
         PreviewFrameControl(frame = previewFrame, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 8.dp))
         SampleTheme(dark = dark, modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -143,35 +149,46 @@ internal fun SampleDetail(
                     CompositionLocalProvider(
                         LocalCycleControl provides session.cycle,
                         LocalMorpheusGraphFrameStats provides frameStats.stats,
+                        LocalSampleTileStats provides session.tiles,
+                        LocalLifecycleOwner provides rememberPausableLifecycleOwner(isPaused = session.cycle.isPaused),
                     ) { sample.content(session.specs) }
                 }
             }
         }
         if (showsInlineBreakdown && frameStats.isBreakdownExpanded) {
-            FrameBreakdownPanel(frameStats = frameStats, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 8.dp))
+            FrameBreakdownPanel(frameStats = frameStats, tiles = session.tiles, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 8.dp))
         }
-        if (showsInlineBreakdown && frameStats.isCometDebugExpanded) {
+        if (showsInlineBreakdown && session.runsCycle && frameStats.isCometDebugExpanded) {
             CometDebugPanel(stats = frameStats.stats, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 8.dp))
         }
     }
 }
 
-/** Pauses and resumes the sample's cycle; while paused, a slider scrubs it, so a morph can be held anywhere. */
+/** Starts a fresh window on the page's stats and on every tile's. */
+private fun resetStats(frameStats: GalleryFrameStats, session: GallerySession) {
+    frameStats.stats.reset()
+    session.tiles.reset()
+}
+
+/**
+ * Pauses and resumes the sample, whatever it is; while paused, a sample with a cycle (a [scrubPeriod]) gets a slider
+ * to scrub it, so a morph can be held anywhere.
+ */
 @Composable
-private fun CycleControls(control: CycleControl, period: Duration) {
+private fun CycleControls(control: CycleControl, scrubPeriod: Duration?) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FilledTonalButton(onClick = { control.isPaused = !control.isPaused }) {
             val icon = if (control.isPaused) Icons.Filled.PlayArrow else Icons.Filled.Pause
             Icon(icon, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
             Text(if (control.isPaused) "Play" else "Pause")
         }
-        if (control.isPaused) {
+        if (control.isPaused && scrubPeriod != null) {
             Slider(
-                value = (control.time / period).toFloat(),
-                onValueChange = { control.time = period * it.toDouble() },
+                value = (control.time / scrubPeriod).toFloat(),
+                onValueChange = { control.time = scrubPeriod * it.toDouble() },
                 modifier = Modifier.width(240.dp),
             )
-            Text(text = "${seconds(control.time)} / ${seconds(period)} s", style = MaterialTheme.typography.bodyMedium)
+            Text(text = "${seconds(control.time)} / ${seconds(scrubPeriod)} s", style = MaterialTheme.typography.bodyMedium)
         }
     }
 }

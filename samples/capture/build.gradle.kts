@@ -42,7 +42,7 @@ compose.desktop {
 
 tasks.test {
     useJUnitPlatform()
-    // The renderer tests keep every sample's frames in memory: the hero's alone run to a few hundred MB.
+    // One sample's frames are in memory at a time, and they run to a few hundred MB.
     maxHeapSize = "2g"
     systemProperty("java.awt.headless", "true")
     testLogging { exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }

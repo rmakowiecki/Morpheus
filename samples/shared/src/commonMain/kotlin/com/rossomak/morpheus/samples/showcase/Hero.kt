@@ -24,11 +24,14 @@ import com.rossomak.morpheus.rememberMorpheusGraphMorphState
 import com.rossomak.morpheus.samples.CaptureRecipe
 import com.rossomak.morpheus.samples.CaptureThemes
 import com.rossomak.morpheus.samples.LoopMode
+import com.rossomak.morpheus.samples.MorphCycle
 import com.rossomak.morpheus.samples.MorphTiming
 import com.rossomak.morpheus.samples.Sample
 import com.rossomak.morpheus.samples.SampleCategory
 import com.rossomak.morpheus.samples.TunableMorph
 import com.rossomak.morpheus.samples.TunableSpec
+import com.rossomak.morpheus.samples.cyclePeriod
+import com.rossomak.morpheus.samples.rememberCycleTime
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -113,7 +116,8 @@ fun HeroSample(
     timing: MorphTiming = HeroTiming,
 ) {
     val state = rememberMorpheusGraphMorphState(pills)
-    MorphCycle(state, specs = listOf(pills, ribbons), easings = listOf(toRibbons, toPills), timing = timing)
+    val cycleTime = rememberCycleTime(period = timing.cyclePeriod(legs = 2))
+    MorphCycle(state, specs = listOf(pills, ribbons), easings = listOf(toRibbons, toPills), timing = timing, cycleTime = cycleTime)
     Box(modifier.fillMaxSize().background(NearBlack).morpheusGraphBackground(state))
 }
 
