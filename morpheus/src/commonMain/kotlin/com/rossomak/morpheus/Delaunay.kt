@@ -11,7 +11,6 @@ import kotlin.math.sqrt
 /** How far past the points' bounding box the enclosing super-triangle reaches, in box spans. */
 private const val SUPER_TRIANGLE_SCALE = 20.0
 private const val DEGENERATE_DETERMINANT = 1e-9
-private const val DEGREES_TO_RADIANS = 0.017453292f
 
 /**
  * Bowyer–Watson Delaunay triangulation, hand-written rather than pulled in as a dependency. Each

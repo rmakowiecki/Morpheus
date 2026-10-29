@@ -46,6 +46,16 @@ private const val BLOOM_DEFAULT_REACH = 0.8f
 private const val PILL_DEFAULT_LENGTH = 0.5f
 private const val PILL_DEFAULT_THICKNESS = 0.18f
 private const val PILL_DEFAULT_PLATEAU = 0.8f
+private const val RING_DEFAULT_RADIUS = 0.25f
+private const val RING_DEFAULT_THICKNESS = 0.1f
+private const val RING_DEFAULT_SWEEP = 360f
+private const val RING_DEFAULT_PLATEAU = 0.8f
+private const val RECT_DEFAULT_SIZE = 0.3f
+private const val RECT_DEFAULT_CORNER_RADIUS = 0.04f
+private const val TRIANGLE_DEFAULT_WIDTH = 0.35f
+private const val TRIANGLE_DEFAULT_HEIGHT = 0.3f
+private const val TRIANGLE_DEFAULT_CORNER_RADIUS = 0.03f
+private const val SOLID_DEFAULT_PLATEAU = 0.8f
 
 /**
  * One part of a layer's shape: a density field over the surface, from 0 to 1, scaled by [weight]. A
@@ -102,6 +112,64 @@ public sealed interface ShapePrimitive {
         val rotation: Float = 0f,
         /** Share of the half-thickness held at full density before the falloff starts: 0 = soft, near 1 = a hard edge. */
         val plateau: Float = PILL_DEFAULT_PLATEAU,
+    ) : ShapePrimitive
+
+    /**
+     * A circle outline, or an arc of one, dense along its curve. An arc ends in round caps, and a
+     * [sweep] of 0 leaves a dot. Sizes are fractions of the surface's longer side.
+     */
+    public data class Ring(
+        override val weight: Float = 1f,
+        val x: Float = 0.5f,
+        val y: Float = 0.5f,
+        /** To the center of the band. */
+        val radius: Float = RING_DEFAULT_RADIUS,
+        /** Rim to rim across the band. */
+        val thickness: Float = RING_DEFAULT_THICKNESS,
+        /** Clockwise from the width axis, in degrees. */
+        val startAngle: Float = 0f,
+        /** Clockwise from [startAngle], in degrees: 0 to 360, where 360 closes the ring. */
+        val sweep: Float = RING_DEFAULT_SWEEP,
+        /** Share of the half-thickness held at full density: 0 = soft, near 1 = a hard edge. */
+        val plateau: Float = RING_DEFAULT_PLATEAU,
+    ) : ShapePrimitive
+
+    /**
+     * A filled rectangle, dense inside and thinning out toward its rim. Sizes are fractions of the
+     * surface's longer side, so a square stays square. A [cornerRadius] of half the shorter side looks like a [Pill].
+     */
+    public data class Rect(
+        override val weight: Float = 1f,
+        val x: Float = 0.5f,
+        val y: Float = 0.5f,
+        val width: Float = RECT_DEFAULT_SIZE,
+        val height: Float = RECT_DEFAULT_SIZE,
+        /** Clockwise turn around the center, in degrees. */
+        val rotation: Float = 0f,
+        /** Held to half the shorter side; 0 is a hard corner. */
+        val cornerRadius: Float = RECT_DEFAULT_CORNER_RADIUS,
+        /** Share of the inradius held at full density: 0 = fades up to the center, near 1 = a hard edge. */
+        val plateau: Float = SOLID_DEFAULT_PLATEAU,
+    ) : ShapePrimitive
+
+    /**
+     * A filled isosceles triangle, dense inside and thinning out toward its rim. At rotation 0 the
+     * [width] is the base and the apex points up; an equilateral one has a height of about 0.866 times
+     * the width. Sizes are fractions of the surface's longer side, and [x] and [y] are the centroid.
+     */
+    public data class Triangle(
+        override val weight: Float = 1f,
+        val x: Float = 0.5f,
+        val y: Float = 0.5f,
+        val width: Float = TRIANGLE_DEFAULT_WIDTH,
+        /** Base to apex. */
+        val height: Float = TRIANGLE_DEFAULT_HEIGHT,
+        /** Clockwise turn around the centroid, in degrees. */
+        val rotation: Float = 0f,
+        /** Held to the triangle's inradius. */
+        val cornerRadius: Float = TRIANGLE_DEFAULT_CORNER_RADIUS,
+        /** Share of the inradius held at full density: 0 = fades up to the center, near 1 = a hard edge. */
+        val plateau: Float = SOLID_DEFAULT_PLATEAU,
     ) : ShapePrimitive
 }
 
