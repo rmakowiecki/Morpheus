@@ -318,6 +318,40 @@ internal class LayerField(
      */
     internal var cachesMorphs = true
 
+    /** False only in tests and benchmarks, to run every frame as without the still-frame cache. */
+    internal var cachesStillFrames = true
+
+    /**
+     * What [presences], [hotWeights] and [switchFractions] were last computed for: while [shape], [spec], the surface,
+     * the pool and [cachesMorphs] stay the same, so do they. Null before the first frame and while [cachesStillFrames]
+     * is off. Fields rather than one key object, so a frame that computes them allocates nothing.
+     */
+    private var presenceShape: LayerShape? = null
+    private var presenceSpec: MorpheusGraphLayerSpec? = null
+    private var presenceWidth = Float.NaN
+    private var presenceHeight = Float.NaN
+    private var presenceCount = -1
+    private var presenceCachesMorphs = true
+
+    /** Each node's [borderFactor] on a [borderFactorsWidth] × [borderFactorsHeight] surface, for a pool of its size. */
+    private var borderFactors = FloatArray(0)
+    private var borderFactorsWidth = Float.NaN
+    private var borderFactorsHeight = Float.NaN
+
+    /** The nodes with a presence above 0, ascending, for a rule that settles its mesh from positions; listed with the presences. */
+    private var positiveNodes = IntArray(0)
+    private var positiveNodeCount = 0
+
+    /** Whether this frame kept the last frame's presences. */
+    private var presencesHeld = false
+
+    /** True when [positiveNodes] are positioned before the mesh: under a rule that settles its mesh from positions, with [cachesStillFrames]. */
+    private val positionsBeforeMesh: Boolean get() = cachesStillFrames && spec.edgeRule != EdgeRule.FixedTriangulation
+
+    /** The surface the last [advance] positioned the nodes on. */
+    private var surfaceWidth = 0f
+    private var surfaceHeight = 0f
+
     /** The memory every settle of this layer reuses. */
     private val meshWorkspace = MeshWorkspace()
 
@@ -387,6 +421,9 @@ internal class LayerField(
     private var relevantNodes = IntArray(0)
     private var previousRelevantNodes = IntArray(0)
     private var previousRelevantCount = 0
+
+    /** The [drawnEdgesGeneration] [relevantNodes] were listed for; -1 once the presences change, so they are listed again. */
+    private var relevantNodesGeneration = -1
 
     /** Each relevant node's dot alpha with two healthy edges, and the second-brightest edge alpha it is full at, this frame. */
     private var dotBaseAlphas = FloatArray(0)
@@ -475,6 +512,23 @@ internal class LayerField(
     internal var liveEdgeCount = 0
         private set
 
+    /** The last [advance]'s shape work: shape densities evaluated, nodes whose presence it computed, and nodes it positioned. */
+    internal var shapeDensitiesEvaluated = 0
+        private set
+    internal var presencesComputed = 0
+        private set
+    internal var positionsComputed = 0
+        private set
+
+    /** Since the field was built, with [cachesStillFrames]: frames that kept the last frame's presences, and frames that computed them. */
+    internal var stillFrameCacheHits = 0
+        private set
+    internal var stillFrameCacheMisses = 0
+        private set
+
+    /** The [topology] [prunedNodeCount] was counted on. */
+    private var prunedTopology: MeshTopology? = null
+
     private var lastTimeSeconds = Float.NaN
 
     /**
@@ -529,8 +583,14 @@ internal class LayerField(
     /** Node [index]'s rest position, which never changes once the node exists. */
     internal fun nodeHome(index: Int): Offset = Offset(homeX[index], homeY[index])
 
-    /** Node [index]'s position this frame, drift and wave included, as of the last [advance]. */
+    /**
+     * Node [index]'s position this frame, drift and wave included, as of the last [advance]. With [cachesStillFrames],
+     * only a node in [relevantNodes] is positioned every frame; any other holds an older frame's position.
+     */
     internal fun nodePosition(index: Int): Offset = Offset(positionsX[index], positionsY[index])
+
+    /** The [position]th of the last [advance]'s [relevantNodes]. */
+    internal fun relevantNode(position: Int): Int = relevantNodes[position]
 
     /** Node [index]'s dot radius, before [PointBatches] draws it at its size bin's center, as of the last [advance]. */
     internal fun dotRadius(index: Int): Float {
@@ -563,9 +623,21 @@ internal class LayerField(
 
     /** Calls [action] with each node whose dot [draw] paints, and its alpha. */
     internal inline fun forEachVisibleDot(action: (node: Int, alpha: Float) -> Unit) {
-        for (node in 0 until nodeCount) {
+        forEachRelevantNode { node ->
             val alpha = nodeAlpha(node)
             if (alpha >= MIN_VISIBLE_ALPHA) action(node, alpha)
+        }
+    }
+
+    /**
+     * Calls [action] with every node [draw] may paint, ascending: the last [advance]'s [relevantNodes], outside which
+     * every dot alpha and glow factor is 0, or without [cachesStillFrames], the whole pool.
+     */
+    internal inline fun forEachRelevantNode(action: (node: Int) -> Unit) {
+        if (cachesStillFrames) {
+            for (position in 0 until relevantNodeCount) action(relevantNode(position))
+        } else {
+            for (node in 0 until nodeCount) action(node)
         }
     }
 
@@ -614,27 +686,115 @@ internal class LayerField(
         }
 
         ensureCoverage(width, height)
-        updatePositions(width, height)
         val morph = (shape as? LayerShape.Morph)?.takeIf { it.fraction > 0f && it.fraction < 1f }
-        val presenceChanged = updatePresences(morph, width, height)
+        val presenceChanged = updateShape(morph, width, height)
         val filtersChanged = updateSettledFilters()
         probe?.lap(FramePhase.Shape)
-        if (spec.edgeRule != EdgeRule.FixedTriangulation) {
-            topology = settleTopology(positionsX, positionsY, presentMask, presences, spec)
-        } else if (morph != null) {
-            topology = morphMeshFor(morph, width, height).union
-        } else if (isFirstFrame || presenceChanged || filtersChanged || wasMidMorph) {
-            // Triangulated over rest positions: drift stays under a cell, so the mesh never tangles.
-            topology = restingMorphEnd(width, height) ?: settleTopology(homeX, homeY, presentMask, presences, spec)
-        }
-        wasMidMorph = morph != null
-        prunedNodeCount = (0 until count).count { presentMask[it] && !topology.alive[it] }
+        updateTopology(morph, width, height, resettles = isFirstFrame || presenceChanged || filtersChanged || wasMidMorph)
         probe?.lap(FramePhase.Mesh)
         updateFadingEdges(stepSeconds, isFirstFrame, morphing = morph != null)
         morph?.let { applyMorphEdgeWeights(it.fraction) }
         probe?.lap(FramePhase.EdgeFades)
+        settleAlphas(probe)
+    }
+
+    /**
+     * This frame's presences and hot weights, kept from the last frame while nothing they're computed from changed (see
+     * [cachesStillFrames]), and the positions a rule that settles its mesh from positions reads. True if any node
+     * joined or left the mesh.
+     */
+    private fun updateShape(morph: LayerShape.Morph?, width: Float, height: Float): Boolean {
+        surfaceWidth = width
+        surfaceHeight = height
+        shapeDensitiesEvaluated = 0
+        presencesComputed = 0
+        positionsComputed = 0
+        if (!cachesStillFrames) updatePositions()
+        presencesHeld = cachesStillFrames && presencesStillHold(width, height)
+        val changed = when {
+            presencesHeld -> {
+                stillFrameCacheHits++
+                false
+            }
+            // Forgets the key, so turning the cache on misses: [positiveNodes] isn't listed meanwhile.
+            !cachesStillFrames -> updatePresences(morph, width, height).also { presenceShape = null }
+            else -> {
+                stillFrameCacheMisses++
+                updatePresences(morph, width, height).also { holdPresences(width, height) }
+            }
+        }
+        if (positionsBeforeMesh) {
+            if (!presencesHeld) listPositiveNodes()
+            for (position in 0 until positiveNodeCount) updatePosition(positiveNodes[position])
+        }
+        return changed
+    }
+
+    /** This frame's [topology]: settled again when the rule, [morph] or [resettles] needs it, and the nodes it pruned. */
+    private fun updateTopology(morph: LayerShape.Morph?, width: Float, height: Float, resettles: Boolean) {
+        if (spec.edgeRule != EdgeRule.FixedTriangulation) {
+            topology = settleTopology(positionsX, positionsY, presentMask, presences, spec)
+        } else if (morph != null) {
+            topology = morphMeshFor(morph, width, height).union
+        } else if (resettles) {
+            // Triangulated over rest positions: drift stays under a cell, so the mesh never tangles.
+            topology = restingMorphEnd(width, height) ?: settleTopology(homeX, homeY, presentMask, presences, spec)
+        }
+        wasMidMorph = morph != null
+        if (!presencesHeld || topology !== prunedTopology) {
+            prunedNodeCount = (0 until count).count { presentMask[it] && !topology.alive[it] }
+            prunedTopology = topology
+        }
+    }
+
+    /**
+     * The settle list, the positions of its nodes not positioned yet, which [probe] times as part of the shape, and the
+     * alpha settle over the list.
+     */
+    private fun settleAlphas(probe: LayerProbe?) {
+        updateDepthAlphas()
+        if (!cachesStillFrames || relevantNodesGeneration != drawnEdgesGeneration) updateRelevantNodes()
+        if (cachesStillFrames) {
+            probe?.lap(FramePhase.AlphaSettle)
+            // Positions every settle-list node not positioned before the mesh.
+            for (position in 0 until relevantNodeCount) {
+                val node = relevantNodes[position]
+                if (!positionsBeforeMesh || presences[node] <= 0f) updatePosition(node)
+            }
+            probe?.lap(FramePhase.Shape)
+        }
         updateAlphas()
         probe?.lap(FramePhase.AlphaSettle)
+    }
+
+    /** True if [presences], [hotWeights] and [switchFractions] still hold for this frame: nothing they're computed from changed. */
+    private fun presencesStillHold(width: Float, height: Float): Boolean {
+        val heldShape = presenceShape ?: return false
+        val heldSpec = presenceSpec ?: return false
+        return width == presenceWidth &&
+            height == presenceHeight &&
+            count == presenceCount &&
+            cachesMorphs == presenceCachesMorphs &&
+            (shape === heldShape || shape == heldShape) &&
+            (spec === heldSpec || spec == heldSpec)
+    }
+
+    /** Remembers what this frame's presences were computed for, and has the settle list listed again. */
+    private fun holdPresences(width: Float, height: Float) {
+        presenceShape = shape
+        presenceSpec = spec
+        presenceWidth = width
+        presenceHeight = height
+        presenceCount = count
+        presenceCachesMorphs = cachesMorphs
+        relevantNodesGeneration = -1
+    }
+
+    private fun listPositiveNodes() {
+        if (positiveNodes.size < count) positiveNodes = IntArray(count)
+        var positive = 0
+        for (index in 0 until count) if (presences[index] > 0f) positiveNodes[positive++] = index
+        positiveNodeCount = positive
     }
 
     /**
@@ -710,7 +870,8 @@ internal class LayerField(
         val colors = if (debug.pieces || debug.centroids) pieceColors(streams) else emptyList()
         if (debug.pieces) {
             streams.pieces.forEachIndexed { index, piece ->
-                val points = piece.nodes.map { node -> Offset(positionsX[node], positionsY[node]) }
+                // A piece's nodes can be outside the settle list, whose positions alone are kept current.
+                val points = piece.nodes.map { node -> positionOf(node) { x, y -> Offset(x, y) } }
                 val cap = if (piece.isSource) StrokeCap.Square else StrokeCap.Round
                 drawPoints(points, PointMode.Points, colors[index], strokeWidth = COMET_PIECE_MARKER_DP * pxPerDp, cap = cap)
                 drawCalls++
@@ -877,15 +1038,28 @@ internal class LayerField(
         finePhase = random.nextFloat() * TWO_PI,
     )
 
-    private fun updatePositions(width: Float, height: Float) {
-        for (index in 0 until count) {
-            val node = nodes[index]
-            val local = node.drift.offsetAt(driftClock)
-            val reach = node.driftScale * spec.driftAmplitude * cell
-            positionsX[index] = homeX[index] + (node.axisX * local.x - node.axisY * local.y) * reach
-            positionsY[index] = homeY[index] + (node.axisY * local.x + node.axisX * local.y) * reach +
-                envelope.waveOffsetY(spec, width, height, homeX[index], waveTravel)
+    private fun updatePositions() {
+        for (index in 0 until count) updatePosition(index)
+    }
+
+    private fun updatePosition(index: Int) {
+        positionOf(index) { x, y ->
+            positionsX[index] = x
+            positionsY[index] = y
         }
+        positionsComputed++
+    }
+
+    /** Node [index]'s position, drift and wave included, at the current clocks on the last [advance]'s surface, handed to [result]. */
+    private inline fun <T> positionOf(index: Int, result: (x: Float, y: Float) -> T): T {
+        val node = nodes[index]
+        val local = node.drift.offsetAt(driftClock)
+        val reach = node.driftScale * spec.driftAmplitude * cell
+        return result(
+            homeX[index] + (node.axisX * local.x - node.axisY * local.y) * reach,
+            homeY[index] + (node.axisY * local.x + node.axisX * local.y) * reach +
+                envelope.waveOffsetY(spec, surfaceWidth, surfaceHeight, homeX[index], waveTravel),
+        )
     }
 
     /**
@@ -899,10 +1073,12 @@ internal class LayerField(
         } else {
             evaluateShape(shape, level = 0, width = width, height = height, out = presences)
         }
+        presencesComputed += count
+        val borders = if (cachesStillFrames) borderFactorsOn(width, height) else null
         val joinThreshold = if (spec.edgeRule == EdgeRule.FixedTriangulation) PRESENT_THRESHOLD else PRESENT_JOIN_THRESHOLD
         var changed = false
         for (index in 0 until count) {
-            val presence = presences[index] * borderFactor(index, width, height)
+            val presence = presences[index] * if (borders != null) borders[index] else borderFactor(index, width, height)
             presences[index] = presence
             hotWeights[index] = hotWeight(index, morph, cache)
             val present = presence >= if (presentMask[index]) PRESENT_THRESHOLD else joinThreshold
@@ -981,12 +1157,25 @@ internal class LayerField(
         return 1f - smoothStep(BORDER_FADE_START_CELLS * cell, BORDER_FADE_END_CELLS * cell, outside)
     }
 
+    /** Every node's [borderFactor] on a [width] × [height] surface, computed again only when the surface or the pool changes. */
+    private fun borderFactorsOn(width: Float, height: Float): FloatArray {
+        if (borderFactors.size == count && width == borderFactorsWidth && height == borderFactorsHeight) return borderFactors
+        if (borderFactors.size != count) borderFactors = FloatArray(count)
+        for (index in 0 until count) borderFactors[index] = borderFactor(index, width, height)
+        borderFactorsWidth = width
+        borderFactorsHeight = height
+        return borderFactors
+    }
+
     /** Every node's presence under [shape] into [out], border fade aside; [level] is the morph nesting depth. */
     private fun evaluateShape(shape: LayerShape, level: Int, width: Float, height: Float, out: FloatArray) {
         when (shape) {
-            is LayerShape.Of -> for (index in 0 until count) {
-                val target = envelope.densityAt(shape.spec, width, height, homeX[index], homeY[index]) * shape.spec.fillChance
-                out[index] = rollWeight(nodes[index].presenceRoll, target)
+            is LayerShape.Of -> {
+                for (index in 0 until count) {
+                    val target = envelope.densityAt(shape.spec, width, height, homeX[index], homeY[index]) * shape.spec.fillChance
+                    out[index] = rollWeight(nodes[index].presenceRoll, target)
+                }
+                shapeDensitiesEvaluated += count
             }
             is LayerShape.Vanish -> out.fill(0f, 0, count)
             is LayerShape.Morph -> when {
@@ -1118,6 +1307,7 @@ internal class LayerField(
     /** Every node's presence under [vanish]'s guide, the other mesh's shape, with the other mesh's envelope. */
     private fun guidePresences(vanish: LayerShape.Vanish, width: Float, height: Float): FloatArray {
         val guideEnvelope = envelopes.of(vanish)
+        shapeDensitiesEvaluated += count
         return FloatArray(count) { index ->
             val target = guideEnvelope.densityAt(vanish.guide, width, height, homeX[index], homeY[index]) * vanish.guide.fillChance
             rollWeight(nodes[index].presenceRoll, target)
@@ -1374,8 +1564,6 @@ internal class LayerField(
      * tally ends exact.
      */
     private fun updateAlphas() {
-        updateDepthAlphas()
-        updateRelevantNodes()
         updateRawEdgeAlphas()
         if (incidentEdgesGeneration != drawnEdgesGeneration) {
             incidentEdges.build(count, edgeKeys, edgeCount)
@@ -1421,6 +1609,7 @@ internal class LayerField(
      * two ascending lists together, so it ends this frame where a sweep over every node would leave it.
      */
     private fun updateRelevantNodes() {
+        relevantNodesGeneration = drawnEdgesGeneration
         previousRelevantNodes = relevantNodes.also { relevantNodes = previousRelevantNodes }
         previousRelevantCount = relevantNodeCount
         val stamp = nextMarkStamp()
@@ -1633,8 +1822,8 @@ internal class LayerField(
     internal fun DrawScope.drawGlows(halos: HaloBrushCache): Int {
         if (spec.glowStrength <= 0f) return 0
         var drawn = 0
-        for (index in 0 until count) {
-            if (hotWeights[index] <= 0f) continue
+        forEachRelevantNode { index ->
+            if (hotWeights[index] <= 0f) return@forEachRelevantNode
             val radius = spec.glowRadiusDp * pxPerDp * sizeFactor(index)
             if (drawHalo(halos, positionsX[index], positionsY[index], radius, nodeHaloAlpha(index))) drawn++
         }

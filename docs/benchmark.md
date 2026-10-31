@@ -194,6 +194,12 @@ They print:
   loops, `baseline` at density 20, 48 and 96, and living Delaunay, the stills over 120 frames.
 - **`AlphaSettleReport`, showcase loop and playground loop:** the alpha settle's work per layer, still and
   morph frames apart: rounds, round cap hits, frontier nodes, relevant nodes and edges above alpha 0.
+- **`StillFrameBenchmark`:** the shape and alpha settle phases and the whole `advance` per frame, every
+  layer summed, with the still-frame cache off and on; the two sides' loops are interleaved, each side
+  first every other loop. On the showcase's and the playground's start held still, the showcase held at
+  fraction 0.5, `baseline` at density 20, 48 and 96, living Delaunay, and both loops, the stills over 120
+  frames. With the cache on, it also prints the share of the pool outside the settle list and the share
+  of layer frames that kept their presences, both over the first measured loop.
 
 Each run starts with a header line naming the benchmark, the platform and the timer's measured step.
 Without `MORPHEUS_BENCHMARK`, each benchmark class prints `<Class> skipped: MORPHEUS_BENCHMARK not set`
