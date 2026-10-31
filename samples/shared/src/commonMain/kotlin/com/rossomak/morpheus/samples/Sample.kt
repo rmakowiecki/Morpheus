@@ -50,8 +50,8 @@ class Sample(
     override fun toString(): String = "Sample($id)"
 }
 
-/** Showcases are the eye-catchers; the other categories cover one capability per sample: the shapes a spec draws, and how it is colored. */
-enum class SampleCategory { Showcase, BasicShapes, Fills }
+/** Showcases are eye-catchers; the rest cover one capability each: shapes, fills, morphs. */
+enum class SampleCategory { Showcase, BasicShapes, Fills, Morphs }
 
 /** A spec the gallery can tune, under the [name] its sample's content asks for it by. */
 @Immutable
