@@ -7,6 +7,7 @@ import com.rossomak.morpheus.samples.catalog.depthTintSample
 import com.rossomak.morpheus.samples.catalog.edgeRulesSample
 import com.rossomak.morpheus.samples.catalog.fillMorphSample
 import com.rossomak.morpheus.samples.catalog.fillsSample
+import com.rossomak.morpheus.samples.catalog.followMorphSample
 import com.rossomak.morpheus.samples.catalog.imageBrushSample
 import com.rossomak.morpheus.samples.catalog.layersSample
 import com.rossomak.morpheus.samples.catalog.morphFamiliesSample
@@ -38,6 +39,7 @@ object SampleRegistry {
         depthTintSample,
         imageBrushSample,
         morphFamiliesSample,
+        followMorphSample,
         cometsSample,
         fillMorphSample,
     )
