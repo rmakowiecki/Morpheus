@@ -70,4 +70,5 @@ private val SampleCategory.heading: String
         SampleCategory.Showcase -> "Showcase"
         SampleCategory.BasicShapes -> "Basic shapes"
         SampleCategory.Fills -> "Fills"
+        SampleCategory.Morphs -> "Morphs"
     }
