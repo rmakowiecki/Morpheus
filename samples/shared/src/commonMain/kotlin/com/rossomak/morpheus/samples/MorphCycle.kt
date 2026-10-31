@@ -31,21 +31,27 @@ internal fun MorphCycle(state: MorpheusGraphMorphState, specs: List<MorpheusGrap
         var seeking: Pair<MorpheusGraphSpec, MorpheusGraphSpec>? = null
         snapshotFlow { CycleInputs(currentSpecs, currentEasings, currentTiming, cycleTime.value) }.collect { inputs ->
             val legSpecs = inputs.specs
-            val legTiming = inputs.timing
-            val time = inputs.time
-            val leg = legTiming.leg
-            val index = (time / leg).toInt().coerceIn(0, legSpecs.size - 1)
-            val from = legSpecs[index]
-            val to = legSpecs[(index + 1) % legSpecs.size]
+            val leg = cycleLegAt(inputs.time, inputs.timing, inputs.easings)
+            val from = legSpecs[leg.index]
+            val to = legSpecs[(leg.index + 1) % legSpecs.size]
             // Each leg starts its seek from the spec it holds, so a new leg or a tuned spec restarts cleanly.
             if (seeking != (from to to)) {
                 state.snapTo(from)
                 seeking = from to to
             }
-            val linear = ((time - leg * index - legTiming.hold / 2) / legTiming.morph).toFloat().coerceIn(0f, 1f)
-            state.seekTo(to, inputs.easings[index].transform(linear))
+            state.seekTo(to, leg.fraction)
         }
     }
+}
+
+/** The [index] of a cycle's current leg and its eased morph [fraction]. */
+internal data class CycleLeg(val index: Int, val fraction: Float)
+
+/** The leg [time] falls in (clamped to the last) and its eased morph fraction; each leg holds half the hold, morphs, then holds half. */
+internal fun cycleLegAt(time: Duration, timing: MorphTiming, easings: List<Easing>): CycleLeg {
+    val index = (time / timing.leg).toInt().coerceIn(0, easings.size - 1)
+    val linear = ((time - timing.leg * index - timing.hold / 2) / timing.morph).toFloat().coerceIn(0f, 1f)
+    return CycleLeg(index, easings[index].transform(linear))
 }
 
 /** What [MorphCycle] re-seeks on, so a change to any of it moves the morph even while the cycle is paused. */

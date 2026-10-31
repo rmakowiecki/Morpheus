@@ -19,6 +19,11 @@ kotlin {
             api(libs.jetbrains.compose.material3)
             implementation(libs.jetbrains.compose.components.resources)
         }
+        // JVM only: the pure helpers have no platform in them, and samples run no wasm browser tests.
+        jvmTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.kotest.assertions.core)
+        }
     }
 }
 
