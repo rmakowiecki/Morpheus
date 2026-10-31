@@ -20,7 +20,7 @@ import kotlin.time.Duration.Companion.seconds
 
 private const val RIBBON = "Ribbon"
 private const val CORNER_BLOOM = "Corner bloom"
-private const val RIBBON_MESH = "Ribbon mesh"
+internal const val RIBBON_MESH = "Ribbon mesh"
 private const val LIVING_DELAUNAY = "Living Delaunay"
 private const val RIBBON_TO_CORNER_BLOOM = "$RIBBON → $CORNER_BLOOM"
 private const val CORNER_BLOOM_TO_RIBBON = "$CORNER_BLOOM → $RIBBON"
