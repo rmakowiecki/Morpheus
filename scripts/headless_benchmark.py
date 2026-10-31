@@ -61,21 +61,28 @@ def run(platform, test_class, test):
     # The trailing * is what the wasm test filter needs to match a method; on the JVM it matches the same one.
     command = [str(ROOT / "gradlew"), f":morpheus:{task}", "--tests", f"{PACKAGE}.{test_class}.{test}*", "-q"]
     completed = subprocess.run(command, cwd=ROOT, env={**os.environ, "MORPHEUS_BENCHMARK": "1"})
-    if completed.returncode != 0:
-        raise RunFailed(f"Gradle exited with code {completed.returncode}")
     lines = []
+    failures = []
     test_cases = 0
     for result in results.glob("TEST-*.xml"):
         suite = ElementTree.parse(result).getroot()
         test_cases += len(suite.findall("testcase"))
+        for case in suite.findall("testcase"):
+            for failure in case.findall("failure") + case.findall("error"):
+                failures.append((failure.get("message") or "").strip() or (failure.text or "").strip())
+                print(f"{case.get('name')}:\n{(failure.text or failure.get('message') or '').strip()}", file=sys.stderr)
         output = suite.findtext("system-out") or ""
         lines += [line.removeprefix("[log] ") for line in output.splitlines() if line.strip()]
-    if test_cases != 1:
+    # The next run on this platform deletes this XML, so a failed test's details are printed above, before they are lost.
+    if test_cases > 1 or (completed.returncode == 0 and test_cases != 1):
         # A headless Chrome left over from a killed run reconnects to Karma's port and runs the test as well, at the same time.
         raise Stop(
             f"{test_class}.{test} ran {test_cases} times on {platform}; on wasm, look for a leftover "
             "'Google Chrome for Testing --user-data-dir=.../karma-...' process and quit it",
         )
+    if completed.returncode != 0:
+        first_failure = failures[0].splitlines()[0] if failures and failures[0] else ""
+        raise RunFailed(f"Gradle exited with code {completed.returncode}" + (f": {first_failure}" if first_failure else ""))
     if not lines:
         raise RunFailed("it printed nothing")
     return lines

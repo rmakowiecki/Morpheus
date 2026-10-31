@@ -10,7 +10,9 @@ import kotlin.time.TimeSource
  * and [LayerField]'s own. Frames replay through [GalleryLoop] on the recipe's canvas; the references settle each frame's
  * fields after their `advance`, outside the field's own timing. Every bias favours the references: they time `settle`
  * alone, where the field's lap also rebuilds its incident edges and relevant nodes, and they read node depths from an
- * array. Printed, not asserted; runs on [benchmark], see `docs/benchmark.md`.
+ * array. The field's own settle always runs first, inside `advance`, then the two references in a fixed order; the
+ * order is not alternated; running first, the field's own step is the one a cold cache would penalize, if any is.
+ * Printed, not asserted; runs on [benchmark], see `docs/benchmark.md`.
  */
 class AlphaSettleBenchmark {
 
