@@ -1,16 +1,23 @@
 package com.rossomak.morpheus.samples
 
 import com.rossomak.morpheus.samples.catalog.animatedBrushSample
+import com.rossomak.morpheus.samples.catalog.cometsSample
 import com.rossomak.morpheus.samples.catalog.compoundShapesSample
 import com.rossomak.morpheus.samples.catalog.depthTintSample
 import com.rossomak.morpheus.samples.catalog.edgeRulesSample
+import com.rossomak.morpheus.samples.catalog.fillMorphSample
 import com.rossomak.morpheus.samples.catalog.fillsSample
+import com.rossomak.morpheus.samples.catalog.followMorphSample
 import com.rossomak.morpheus.samples.catalog.imageBrushSample
 import com.rossomak.morpheus.samples.catalog.layersSample
+import com.rossomak.morpheus.samples.catalog.morphFamiliesSample
 import com.rossomak.morpheus.samples.catalog.orbitingSweepSample
 import com.rossomak.morpheus.samples.catalog.presetTourSample
 import com.rossomak.morpheus.samples.catalog.radialFillSample
+import com.rossomak.morpheus.samples.catalog.retargetMorphSample
 import com.rossomak.morpheus.samples.catalog.ringAndArcsSample
+import com.rossomak.morpheus.samples.catalog.scaleInvarianceSample
+import com.rossomak.morpheus.samples.catalog.seedGridSample
 import com.rossomak.morpheus.samples.catalog.shapePrimitivesSample
 import com.rossomak.morpheus.samples.catalog.waveAndPulseSample
 import com.rossomak.morpheus.samples.showcase.cometPlaygroundSample
@@ -34,6 +41,13 @@ object SampleRegistry {
         orbitingSweepSample,
         depthTintSample,
         imageBrushSample,
+        morphFamiliesSample,
+        followMorphSample,
+        cometsSample,
+        fillMorphSample,
+        seedGridSample,
+        scaleInvarianceSample,
+        retargetMorphSample,
     )
 
     init {
