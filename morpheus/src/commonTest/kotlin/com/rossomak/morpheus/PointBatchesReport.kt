@@ -31,7 +31,7 @@ class PointBatchesReport {
         val tallies = LinkedHashMap<String, Tally>()
         replayLoopFields(frames, morphAt = morphAt) { time, morph, layers, fields ->
             val layerCount = (layers.maxOfOrNull { it.slotFromFront } ?: -1) + 1
-            val motion = if (morph.fraction > 0f && morph.fraction < 1f) "morph" else "still"
+            val motion = if (morph.isMidMorph) "morph" else "still"
             fields.forEachIndexed { index, field ->
                 val layer = layers[index]
                 val layerAlpha = layer.fill.toLayerFill(layerCount - 1 - layer.slotFromFront, layerCount, time, Size(canvas.width, canvas.height)).layerAlpha

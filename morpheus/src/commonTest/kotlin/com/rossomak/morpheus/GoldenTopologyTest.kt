@@ -41,8 +41,11 @@ class GoldenTopologyTest {
 
     @Test
     fun `every layer settles on the recorded mesh at every recorded frame`() {
-        assertRecorded(recordAll(stillCases() + morphCases()), goldenTopology, "goldenTopology")
+        assertRecorded(recordAll(cases()), goldenTopology, "goldenTopology")
     }
+
+    /** Every case [goldenTopology] records, still and morphing; [AlphaSettleTest] steps them too. */
+    internal fun cases(): List<GoldenCase> = stillCases() + morphCases()
 
     /** The showcase's comets must keep lighting nodes outside both ends, or the record stops covering the transit mesh. */
     @Test
@@ -121,23 +124,24 @@ class GoldenTopologyTest {
         StillCase("zero jitter/$edgeRule", MorpheusGraphLayerSpec(edgeRule = edgeRule, jitter = 0f), STANDARD_SURFACES)
     }
 
-    private interface GoldenCase {
+    internal interface GoldenCase {
         val name: String
         val surfaces: List<Pair<Float, Float>>
         val seeds: List<Int>
 
-        /** The records of one run on a fresh field, keyed by frame (and mesh, for a morph). */
-        fun record(seed: Int, width: Float, height: Float): List<Pair<String, TopologyRecord>>
+        /** The records of one run on a fresh field, keyed by frame (and mesh, for a morph); [eachFrame] sees every field after every `advance`. */
+        fun record(seed: Int, width: Float, height: Float, eachFrame: (mesh: String, field: LayerField) -> Unit = { _, _ -> }): List<Pair<String, TopologyRecord>>
     }
 
     private class StillCase(override val name: String, private val layer: MorpheusGraphLayerSpec, override val surfaces: List<Pair<Float, Float>>) : GoldenCase {
         override val seeds = if (layer.edgeRule == EdgeRule.FixedTriangulation && layer.density < DENSE_DENSITY) SEEDS else SEEDS.take(1)
 
-        override fun record(seed: Int, width: Float, height: Float): List<Pair<String, TopologyRecord>> {
+        override fun record(seed: Int, width: Float, height: Float, eachFrame: (mesh: String, field: LayerField) -> Unit): List<Pair<String, TopologyRecord>> {
             val field = LayerField(layer, seed, max(width, height), PX_PER_DP)
             val records = ArrayList<Pair<String, TopologyRecord>>()
             for (frame in 0..STILL_FRAMES.last()) {
                 field.advance(frame * FRAME_SECONDS, width, height)
+                eachFrame("still", field)
                 if (frame in STILL_FRAMES) records += "frame $frame" to TopologyRecord.of(field)
             }
             return records
@@ -153,7 +157,7 @@ class GoldenTopologyTest {
         override val seeds: List<Int> = SEEDS.take(1),
     ) : GoldenCase {
 
-        override fun record(seed: Int, width: Float, height: Float): List<Pair<String, TopologyRecord>> {
+        override fun record(seed: Int, width: Float, height: Float, eachFrame: (mesh: String, field: LayerField) -> Unit): List<Pair<String, TopologyRecord>> {
             val morph = MorpheusGraphMorph(from.copy(seed = seed), to.copy(seed = seed), fraction = 0f)
             // One field per mesh, kept across frames the way the modifier keeps them.
             val fields = HashMap<String, LayerField>()
@@ -166,6 +170,7 @@ class GoldenTopologyTest {
                     field.spec = layer.spec
                     field.shape = layer.shape
                     field.advance(frame * FRAME_SECONDS, width, height)
+                    eachFrame(mesh, field)
                     if (frame in MORPH_RECORDED_FRAMES) records += "${morphLabel(frame)}/$mesh" to TopologyRecord.of(field)
                 }
             }
