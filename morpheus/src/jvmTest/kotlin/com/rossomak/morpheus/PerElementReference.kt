@@ -10,10 +10,10 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 
 /**
  * [field] drawn per element, as [LayerField.draw] drew it before point batches: into one offscreen layer, each
- * edge through `drawLine`, then the halos, then each dot as a [BlendMode.DstOut] punch and a [BlendMode.Plus]
- * add at its own radius and alpha. In solid [color], at [timeSeconds]; [edgesOnly] skips halos and dots, and
- * [edgesInLevelOrder] draws the edges in alpha-level order, as point batches do. The reference
- * [PointBatchesCaptureTest] compares point batches against.
+ * edge through `drawLine`, then the halos, then each dot as a [BlendMode.DstOut] punch, for a dot at
+ * [PUNCH_MIN_ALPHA] or above, and a [BlendMode.SrcOver] add at its own radius and alpha. In solid [color], at
+ * [timeSeconds]; [edgesOnly] skips halos and dots, and [edgesInLevelOrder] draws the edges in alpha-level order, as
+ * point batches do. The reference [PointBatchesCaptureTest] compares point batches against.
  */
 internal fun DrawScope.drawPerElement(field: LayerField, color: Color, halos: HaloBrushCache, timeSeconds: Float, edgesOnly: Boolean = false, edgesInLevelOrder: Boolean = false) {
     drawIntoCanvas { it.saveLayer(Rect(Offset.Zero, size), Paint()) }
@@ -28,8 +28,8 @@ internal fun DrawScope.drawPerElement(field: LayerField, color: Color, halos: Ha
         field.forEachVisibleDot { node, alpha ->
             val radius = field.dotRadius(node)
             val center = field.nodePosition(node)
-            drawCircle(color = color, radius = radius, center = center, blendMode = BlendMode.DstOut)
-            drawCircle(color = color.copy(alpha = alpha), radius = radius, center = center, blendMode = BlendMode.Plus)
+            if (alpha >= PUNCH_MIN_ALPHA) drawCircle(color = color, radius = radius, center = center, blendMode = BlendMode.DstOut)
+            drawCircle(color = color.copy(alpha = alpha), radius = radius, center = center, blendMode = BlendMode.SrcOver)
         }
     }
     drawIntoCanvas { it.restore() }

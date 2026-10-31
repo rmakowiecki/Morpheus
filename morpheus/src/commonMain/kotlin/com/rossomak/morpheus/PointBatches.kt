@@ -20,6 +20,9 @@ internal const val DOT_ALPHA_STEP = 2
 /** The dot alpha buckets: 128, the last one capped at 255. */
 private const val DOT_ALPHA_BUCKETS = (ALPHA_LEVELS + DOT_ALPHA_STEP - 1) / DOT_ALPHA_STEP
 
+/** The faintest dot that still punches the edges and halo under it: a plain node's [NODE_ALPHA]. */
+internal const val PUNCH_MIN_ALPHA = NODE_ALPHA
+
 /** A radius range narrower than this, in pixels, is one size bin: every dot is the same size. */
 private const val SAME_RADIUS_EPSILON = 1e-3f
 
@@ -34,9 +37,9 @@ private const val INITIAL_FLOATS = 32
 
 /**
  * One layer's edges and dots as [LayerField.draw] paints them, refilled every frame: each
- * edge goes into the batch of its 8-bit alpha level, each dot into a punch batch per size bin and an add
- * batch per alpha bucket and size bin. Each non-empty batch is one draw call: up to 255 for the edges, 8
- * for the punches and 1,024 for the adds, though a frame uses a fraction of them.
+ * edge goes into the batch of its 8-bit alpha level, each dot into an add batch per alpha bucket and size bin
+ * and, at [PUNCH_MIN_ALPHA] or above, a punch batch per size bin. Each non-empty batch is one draw call: up to
+ * 255 for the edges, 8 for the punches and 1,024 for the adds, though a frame uses a fraction of them.
  *
  * Dot alphas round up to a multiple of [DOT_ALPHA_STEP] levels, so a dot is never drawn fainter than its own
  * 8-bit level and stays at least as opaque as every edge it anchors, which round to nearest. The buffers only
@@ -101,10 +104,13 @@ internal class PointBatches {
         sizeBinWidth = if (largestRadius - smallestRadius < SAME_RADIUS_EPSILON) 0f else (largestRadius - smallestRadius) / DOT_SIZE_BINS
     }
 
-    /** Adds the dot at ([x], [y]), drawn at its [sizeBin]'s [binRadius] and at [alpha]'s [dotLevel]. */
+    /**
+     * Adds the dot at ([x], [y]), drawn at its [sizeBin]'s [binRadius] and at [alpha]'s [dotLevel]. Only a dot at
+     * [PUNCH_MIN_ALPHA] or above punches; a fainter one is drawn over the edges and halo.
+     */
     fun addDot(x: Float, y: Float, radius: Float, alpha: Float) {
         val bin = sizeBin(radius)
-        punchBatches.bufferAt(bin).add(x, y)
+        if (alpha >= PUNCH_MIN_ALPHA) punchBatches.bufferAt(bin).add(x, y)
         addBatches.bufferAt(dotBucket(alpha) * DOT_SIZE_BINS + bin).add(x, y)
     }
 
@@ -123,7 +129,7 @@ internal class PointBatches {
 
     /**
      * Draws the dots as round points in [color]: every punch first, at alpha 1 with [BlendMode.DstOut], then
-     * every add at its bucket's alpha with [BlendMode.Plus]. One dot's punch and add share its bin's radius,
+     * every add at its bucket's alpha with [BlendMode.SrcOver]. One dot's punch and add share its bin's radius,
      * or a ring would show at its rim.
      */
     fun drawDots(canvas: Canvas, color: Color) {
@@ -136,7 +142,7 @@ internal class PointBatches {
             canvas.drawPointBatch(batch.floats, batch.size, paint)
             drawCalls++
         }
-        paint.blendMode = BlendMode.Plus
+        paint.blendMode = BlendMode.SrcOver
         for (addBatchIndex in addBatches.indices) {
             val batch = addBatches.nonEmptyAt(addBatchIndex) ?: continue
             paint.color = color.copy(alpha = bucketLevel(addBatchIndex / DOT_SIZE_BINS) / ALPHA_LEVELS.toFloat())
