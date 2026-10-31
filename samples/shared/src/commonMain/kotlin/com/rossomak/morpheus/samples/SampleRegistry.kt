@@ -14,7 +14,10 @@ import com.rossomak.morpheus.samples.catalog.morphFamiliesSample
 import com.rossomak.morpheus.samples.catalog.orbitingSweepSample
 import com.rossomak.morpheus.samples.catalog.presetTourSample
 import com.rossomak.morpheus.samples.catalog.radialFillSample
+import com.rossomak.morpheus.samples.catalog.retargetMorphSample
 import com.rossomak.morpheus.samples.catalog.ringAndArcsSample
+import com.rossomak.morpheus.samples.catalog.scaleInvarianceSample
+import com.rossomak.morpheus.samples.catalog.seedGridSample
 import com.rossomak.morpheus.samples.catalog.shapePrimitivesSample
 import com.rossomak.morpheus.samples.catalog.waveAndPulseSample
 import com.rossomak.morpheus.samples.showcase.cometPlaygroundSample
@@ -42,6 +45,9 @@ object SampleRegistry {
         followMorphSample,
         cometsSample,
         fillMorphSample,
+        seedGridSample,
+        scaleInvarianceSample,
+        retargetMorphSample,
     )
 
     init {
