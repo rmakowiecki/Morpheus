@@ -2,6 +2,7 @@
 
 package com.rossomak.morpheus
 
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import kotlin.math.min
 import kotlin.reflect.KClass
@@ -87,6 +88,8 @@ private fun timeBatch(calls: Int, call: () -> Unit): Long {
 
 /** The canvas a [GalleryLoop] draws on: its size in pixels, the window's longer side in pixels, which sets the grid's cell size, and the device scale. */
 internal data class BenchmarkCanvas(val width: Float, val height: Float, val referenceSize: Float, val pxPerDp: Float) {
+    val size: Size get() = Size(width, height)
+
     companion object {
         /** The benchmark recipe's canvas: 640×360 dp at device scale 2. The gallery gives a sample a window of its canvas's size, so the canvas sets the cell size. */
         val Recipe = BenchmarkCanvas(width = 1280f, height = 720f, referenceSize = 1280f, pxPerDp = 2f)
@@ -110,17 +113,14 @@ internal class GalleryLoop(private val canvas: BenchmarkCanvas = BenchmarkCanvas
     fun frame(morph: MorpheusGraphMorph, advanced: (fields: List<LayerField>) -> Unit = {}): LongArray {
         val stats = MorpheusGraphFrameStats()
         val time = frames++ / fps.toFloat()
-        val layers = holder.layersFor(morph, FILL)
-        val fields = holder.fieldsFor(layers, canvas.referenceSize, canvas.pxPerDp)
-        fields.forEachIndexed { index, field ->
+        holder.startFrame(morph, FILL, canvas.referenceSize, canvas.pxPerDp)
+        holder.fields.forEachIndexed { index, field ->
             field.cachesStillFrames = cachesStillFrames
-            stats.probe.startLayer(layers[index].slotFromFront, field)
-            field.advance(time, canvas.width, canvas.height, stats.probe)
+            holder.prepareLayer(index, time, canvas.size, stats.probe)
             stats.probe.endLayer(field)
         }
-        advanced(fields)
-        holder.endFrame()
-        val slots = layers.map { it.slotFromFront }.distinct()
+        advanced(holder.fields)
+        val slots = holder.layers.map { it.slotFromFront }.distinct()
         return LongArray(ADVANCE_PHASES.size) { phase -> slots.sumOf { stats.slotRecord(it).phaseNanos[ADVANCE_PHASES[phase].ordinal] } }
     }
 
@@ -154,11 +154,18 @@ internal inline fun replayLoopFields(
     for (frame in 0 until frames step stride) {
         val time = frame * SHOWCASE_FRAME_SECONDS
         val morph = morphAt(time)
-        val layers = holder.layersFor(morph, GalleryLoop.FILL)
-        val fields = holder.fieldsFor(layers, canvas.referenceSize, canvas.pxPerDp)
-        fields.forEach { it.advance(time, canvas.width, canvas.height) }
-        action(time, morph, layers, fields)
-        holder.endFrame()
+        holder.prepareFrame(morph, GalleryLoop.FILL, canvas, time)
+        action(time, morph, holder.layers, holder.fields)
+    }
+}
+
+/** Readies every layer of [morph] on [canvas] at [time] for drawing, as the modifier does one by one; [probe] times each layer. */
+internal fun MorpheusGraphHolder.prepareFrame(morph: MorpheusGraphMorph, fill: MorpheusGraphFill, canvas: BenchmarkCanvas, time: Float, probe: LayerProbe? = null) {
+    startFrame(morph, fill, canvas.referenceSize, canvas.pxPerDp)
+    // By index: the allocation test measures this.
+    for (index in fields.indices) {
+        prepareLayer(index, time, canvas.size, probe)
+        probe?.endLayer(fields[index])
     }
 }
 

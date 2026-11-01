@@ -304,13 +304,13 @@ internal class SlotRecord {
  * Times one field's frame phase by phase into its spec layer's [SlotRecord], from timestamps taken only at
  * phase boundaries, and carries the debug switches to [LayerField.draw].
  */
-internal class LayerProbe(val stats: MorpheusGraphFrameStats) {
+internal open class LayerProbe(val stats: MorpheusGraphFrameStats) {
     private var record = SlotRecord()
     private var mark = TimeSource.Monotonic.markNow()
     private var settlesBefore = 0
     private var morphMeshesBefore = 0
 
-    fun startLayer(slotFromFront: Int, field: LayerField) {
+    open fun startLayer(slotFromFront: Int, field: LayerField) {
         record = stats.slotRecord(slotFromFront)
         record.addMesh()
         settlesBefore = field.settleCount
@@ -319,20 +319,15 @@ internal class LayerProbe(val stats: MorpheusGraphFrameStats) {
     }
 
     /** Adds the time since the last lap, or since [startLayer], to [phase]. */
-    fun lap(phase: FramePhase) {
+    open fun lap(phase: FramePhase) {
         val now = TimeSource.Monotonic.markNow()
         record.phaseNanos[phase.ordinal] += (now - mark).inWholeNanoseconds
         mark = now
     }
 
     /** Restarts the clock without charging the time since the last lap to any phase. */
-    fun skipLap() {
+    open fun skipLap() {
         mark = TimeSource.Monotonic.markNow()
-    }
-
-    /** Like [lap], except that a [skip]ped step is charged nothing. */
-    fun lapUnlessSkipped(phase: FramePhase, skip: Boolean) {
-        if (skip) skipLap() else lap(phase)
     }
 
     fun recordDrawn(edges: Int, halos: Int, dots: Int, drawCalls: Int) {
@@ -342,7 +337,7 @@ internal class LayerProbe(val stats: MorpheusGraphFrameStats) {
         record.drawCalls += drawCalls
     }
 
-    fun endLayer(field: LayerField) {
+    open fun endLayer(field: LayerField) {
         record.nodes += field.nodeCount
         record.visibleNodes += field.visibleNodeCount
         record.settles += field.settleCount - settlesBefore

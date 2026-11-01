@@ -34,12 +34,9 @@ class PointBatchesCaptureTest {
         val height = canvas.height.toInt()
         val failures = ArrayList<String>()
         for ((name, morph) in cases()) {
-            val holder = MorpheusGraphHolder()
-            val layers = holder.layersFor(morph, GalleryLoop.FILL)
-            val fields = holder.fieldsFor(layers, canvas.referenceSize, canvas.pxPerDp)
-            for (step in 0..SETTLE_STEPS) fields.forEach { it.advance(step * STEP_SECONDS, canvas.width, canvas.height) }
-            fields.forEachIndexed { index, field ->
-                val case = "$name slot ${layers[index].slotFromFront}"
+            val holder = settled(morph)
+            holder.fields.forEachIndexed { index, field ->
+                val case = "$name slot ${holder.layers[index].slotFromFront}"
                 val edgesBatched = renderBatched(field, width, height, edgesOnly = true)
                 val edgesInLevelOrder = renderPerElement(field, width, height, edgesOnly = true, edgesInLevelOrder = true)
                 if (!edgesBatched.contentEquals(edgesInLevelOrder)) failures += "$case: edges differ from drawLine in level order"
@@ -58,20 +55,25 @@ class PointBatchesCaptureTest {
         val canvas = BenchmarkCanvas.Recipe
         val failures = ArrayList<String>()
         for ((name, morph) in cases()) {
-            val holder = MorpheusGraphHolder()
-            val layers = holder.layersFor(morph, GalleryLoop.FILL)
-            val fields = holder.fieldsFor(layers, canvas.referenceSize, canvas.pxPerDp)
-            for (step in 0..SETTLE_STEPS) fields.forEach { it.advance(step * STEP_SECONDS, canvas.width, canvas.height) }
-            fields.forEachIndexed { index, field ->
+            val holder = settled(morph)
+            holder.fields.forEachIndexed { index, field ->
                 val withoutStats = draw(canvas.width.toInt(), canvas.height.toInt()) {
                     field.draw(this, LayerFill.Solid(Color.White), HaloBrushCache(Color.White), SETTLE_STEPS * STEP_SECONDS, showViolations = false)
                 }
                 if (!withoutStats.contentEquals(renderBatched(field, canvas.width.toInt(), canvas.height.toInt()))) {
-                    failures += "$name slot ${layers[index].slotFromFront}"
+                    failures += "$name slot ${holder.layers[index].slotFromFront}"
                 }
             }
         }
         withClue("differ without frame stats: ${failures.joinToString()}") { failures.size shouldBe 0 }
+    }
+
+    /** A holder whose fields have drawn [morph] on the recipe canvas for [SETTLE_STEPS] steps. */
+    private fun settled(morph: MorpheusGraphMorph): MorpheusGraphHolder {
+        val canvas = BenchmarkCanvas.Recipe
+        val holder = MorpheusGraphHolder()
+        for (step in 0..SETTLE_STEPS) holder.prepareFrame(morph, GalleryLoop.FILL, canvas, step * STEP_SECONDS)
+        return holder
     }
 
     private fun cases(): List<Pair<String, MorpheusGraphMorph>> =

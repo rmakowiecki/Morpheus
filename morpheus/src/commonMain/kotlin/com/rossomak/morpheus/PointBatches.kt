@@ -40,8 +40,8 @@ private const val INITIAL_FLOATS = 32
  *
  * Dot alphas round up to a multiple of [DOT_ALPHA_STEP] levels, so a dot is never drawn fainter than its own
  * 8-bit level and stays at least as opaque as every edge it anchors, which round to nearest. The buffers only
- * grow, to the largest batch seen; on Android a frame allocates nothing, while Skia on desktop and the web
- * takes each batch as an array copy of its own length.
+ * grow, to the largest batch seen; on Android a frame allocates nothing. Skia on desktop and the web takes
+ * whole arrays, so each buffer keeps one of its batch's exact length, rebuilt only when that length changes.
  */
 internal class PointBatches {
     private val edgeBatches = arrayOfNulls<PointBuffer>(ALPHA_LEVELS + 1)
@@ -85,7 +85,7 @@ internal class PointBatches {
         for (level in 1..ALPHA_LEVELS) {
             val batch = edgeBatches.nonEmptyAt(level) ?: continue
             paint.color = color.copy(alpha = level / ALPHA_LEVELS.toFloat())
-            canvas.drawLineBatch(batch.floats, batch.size, paint)
+            canvas.drawLineBatch(batch, paint)
             drawCalls++
         }
     }
@@ -133,7 +133,7 @@ internal class PointBatches {
         for (bin in punchBatches.indices) {
             val batch = punchBatches.nonEmptyAt(bin) ?: continue
             paint.strokeWidth = 2f * binRadius(bin)
-            canvas.drawPointBatch(batch.floats, batch.size, paint)
+            canvas.drawPointBatch(batch, paint)
             drawCalls++
         }
         paint.blendMode = BlendMode.Plus
@@ -141,10 +141,13 @@ internal class PointBatches {
             val batch = addBatches.nonEmptyAt(addBatchIndex) ?: continue
             paint.color = color.copy(alpha = bucketLevel(addBatchIndex / DOT_SIZE_BINS) / ALPHA_LEVELS.toFloat())
             paint.strokeWidth = 2f * binRadius(addBatchIndex % DOT_SIZE_BINS)
-            canvas.drawPointBatch(batch.floats, batch.size, paint)
+            canvas.drawPointBatch(batch, paint)
             drawCalls++
         }
     }
+
+    /** For tests: every non-empty batch, in the order [drawEdges] and [drawDots] draw them. */
+    fun nonEmptyBatches(): List<PointBuffer> = (edgeBatches.toList() + punchBatches + addBatches).filterNotNull().filter { it.size > 0 }
 
     private fun Array<PointBuffer?>.bufferAt(index: Int): PointBuffer = this[index] ?: PointBuffer().also { this[index] = it }
 
@@ -167,6 +170,10 @@ internal class PointBuffer {
     var size = 0
         private set
 
+    /** What [exactFloats] last returned. */
+    var lastExactFloats = FloatArray(0)
+        private set
+
     fun add(x: Float, y: Float) {
         if (size + 2 > floats.size) floats = floats.copyOf(floats.size * 2)
         floats[size] = x
@@ -182,6 +189,13 @@ internal class PointBuffer {
     fun clear() {
         size = 0
     }
+
+    /** The first [size] values in an array of exactly that length, reused while [size] holds. */
+    fun exactFloats(): FloatArray {
+        if (lastExactFloats.size != size) lastExactFloats = FloatArray(size)
+        floats.copyInto(lastExactFloats, endIndex = size)
+        return lastExactFloats
+    }
 }
 
 /*
@@ -189,8 +203,8 @@ internal class PointBuffer {
  * canvas directly: Skia's drawLines and drawPoints on desktop and the web, android.graphics.Canvas's on Android.
  */
 
-/** Draws the first [count] values of [points], each four a line from one point to the next, in one call. */
-internal expect fun Canvas.drawLineBatch(points: FloatArray, count: Int, paint: Paint)
+/** Draws [batch]'s values, each four a line from one point to the next, in one call. */
+internal expect fun Canvas.drawLineBatch(batch: PointBuffer, paint: Paint)
 
-/** Draws the first [count] values of [points], each two a point, in one call. */
-internal expect fun Canvas.drawPointBatch(points: FloatArray, count: Int, paint: Paint)
+/** Draws [batch]'s values, each two a point, in one call. */
+internal expect fun Canvas.drawPointBatch(batch: PointBuffer, paint: Paint)
