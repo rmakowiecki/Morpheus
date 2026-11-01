@@ -56,7 +56,8 @@ fun FollowMorphSample(
 ) {
     val state = rememberMorpheusGraphMorphState(specs.first())
     val position = rememberWalkPosition(Walk, easings, timing)
-    state.Follow(specs, minMorphDuration = timing.morph / SPEED_LIMIT) { position.value }
+    // No jump threshold: a scrub that leaps a whole spec or more trails behind like any other fast one.
+    state.Follow(specs, jumpThreshold = Float.POSITIVE_INFINITY, minMorphDuration = timing.morph / SPEED_LIMIT) { position.value }
     Box(modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().morpheusGraphBackground(state))
         SampleLabel(text = "${position.value.toTenths()} · ${names[position.value.roundToInt()]}", modifier = Modifier.align(Alignment.TopStart).padding(12.dp))
