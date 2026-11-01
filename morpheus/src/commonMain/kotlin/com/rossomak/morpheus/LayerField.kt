@@ -799,10 +799,8 @@ internal class LayerField(
 
     /**
      * Paints the layer into its own offscreen layer, composited onto the canvas once. Edges and halos
-     * blend with each other there, but every dot is punched out with [BlendMode.DstOut] before any is added
-     * with [BlendMode.Plus], so dots replace the edges and halos under them instead of summing with the edges
-     * they anchor. Where dots overlap, their alphas add up. Everything drawn into the offscreen must be in the
-     * fill's mask color, because [BlendMode.Plus] adds color too.
+     * blend with each other there. A dot at [PUNCH_MIN_ALPHA] or above is punched out with [BlendMode.DstOut]
+     * before any dot is added with [BlendMode.SrcOver]; see [drawDotBatches].
      *
      * A [LayerFill.Masked] layer is drawn in white first, then recolored as a whole while still
      * offscreen: [BlendMode.SrcIn] takes the base brush's color and keeps each pixel's alpha, and
@@ -1860,14 +1858,12 @@ internal class LayerField(
     }
 
     /**
-     * Drawn last, so a dot replaces the edges and halo under it rather than summing with them. Each dot is two
-     * fixed-function blends: a [BlendMode.DstOut] punch at alpha 1 leaves `d·(1−c)` at coverage `c`, then the
-     * dot at its alpha `a` with [BlendMode.Plus] adds `a·c`. That is the antialiased [BlendMode.Src] result,
-     * `c·a + (1−c)·d`, without Src itself: on WebGL, which has no dual-source blending, Skia draws an
-     * antialiased Src by copying the layer once per dot. [BlendMode.Plus] adds color as well as alpha, so it is
-     * exact only because everything in the layer's offscreen is in the one mask [color]. Every punch goes in one
-     * batch per size bin and every add in one per size bin and alpha bucket; see [PointBatches]. Returns how
-     * many dots it drew.
+     * Drawn last. A dot at [PUNCH_MIN_ALPHA] or above replaces the edges and halo under it: a [BlendMode.DstOut]
+     * punch at alpha 1 leaves `d·(1−c)` at coverage `c` over what lies under it `d`, then a [BlendMode.SrcOver] add
+     * at the dot's alpha `a` adds `a·c`. That is the antialiased [BlendMode.Src] result `c·a + (1−c)·d` without
+     * Src, which Skia draws on WebGL by copying the layer once per dot. A fainter dot skips the punch, since
+     * replacing would leave a dark dot. [BlendMode.SrcOver] keeps overlapping dots in the mask's color. Batches:
+     * see [PointBatches]. Returns how many dots it drew.
      */
     private fun DrawScope.drawDotBatches(color: Color): Int {
         val drawn = fillDotBatches(pointBatches)

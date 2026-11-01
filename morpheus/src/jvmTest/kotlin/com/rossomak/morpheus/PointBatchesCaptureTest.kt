@@ -2,14 +2,7 @@
 
 package com.rossomak.morpheus
 
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
-import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.LayoutDirection
 import io.kotest.assertions.withClue
 import io.kotest.matchers.shouldBe
 import kotlin.math.abs
@@ -63,7 +56,7 @@ class PointBatchesCaptureTest {
             val fields = holder.fieldsFor(layers, canvas.referenceSize, canvas.pxPerDp)
             for (step in 0..SETTLE_STEPS) fields.forEach { it.advance(step * STEP_SECONDS, canvas.width, canvas.height) }
             fields.forEachIndexed { index, field ->
-                val withoutStats = draw(canvas.width.toInt(), canvas.height.toInt()) {
+                val withoutStats = drawOverBlack(canvas.width.toInt(), canvas.height.toInt()) {
                     field.draw(this, LayerFill.Solid(Color.White), HaloBrushCache(Color.White), SETTLE_STEPS * STEP_SECONDS, showViolations = false)
                 }
                 if (!withoutStats.contentEquals(renderBatched(field, canvas.width.toInt(), canvas.height.toInt()))) {
@@ -87,7 +80,13 @@ class PointBatchesCaptureTest {
             playgroundLegs.flatMap { (leg, morph) -> COMET_FRACTIONS.map { fraction -> "playground $leg at $fraction" to morph.copy(fraction = fraction) } }
 
     /** [field] drawn per element in white over black, as ARGB pixels; [edgesOnly] and [edgesInLevelOrder] as in [drawPerElement]. */
-    private fun renderPerElement(field: LayerField, width: Int, height: Int, edgesOnly: Boolean = false, edgesInLevelOrder: Boolean = false): IntArray = draw(width, height) {
+    private fun renderPerElement(
+        field: LayerField,
+        width: Int,
+        height: Int,
+        edgesOnly: Boolean = false,
+        edgesInLevelOrder: Boolean = false,
+    ): IntArray = drawOverBlack(width, height) {
         drawPerElement(field, Color.White, HaloBrushCache(Color.White), SETTLE_STEPS * STEP_SECONDS, edgesOnly, edgesInLevelOrder)
     }
 
@@ -98,19 +97,9 @@ class PointBatchesCaptureTest {
             skipDots = edgesOnly
         }
         stats.probe.startLayer(0, field)
-        return draw(width, height) {
+        return drawOverBlack(width, height) {
             field.draw(this, LayerFill.Solid(Color.White), HaloBrushCache(Color.White), SETTLE_STEPS * STEP_SECONDS, showViolations = false, probe = stats.probe)
         }
-    }
-
-    /** What [content] draws over black onto a [width] by [height] image, as ARGB pixels. */
-    private fun draw(width: Int, height: Int, content: DrawScope.() -> Unit): IntArray {
-        val bitmap = ImageBitmap(width, height)
-        CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, Canvas(bitmap), Size(width.toFloat(), height.toFloat())) {
-            drawRect(Color.Black)
-            content()
-        }
-        return IntArray(width * height).also { bitmap.readPixels(it) }
     }
 
     /** How many pixels differ between two images, and the largest difference in any channel, in levels out of 255. */
@@ -225,8 +214,8 @@ class PointBatchesCaptureTest {
         /** A pixel, plus half a pixel's diagonal: a pixel whose square comes within a pixel of a rim is near it. */
         const val RIM_REACH = 1f + 0.7072f
 
-        /** How far a dot's alpha may round up, in levels out of 255. */
-        const val DOT_LEVEL_TOLERANCE = 2
+        /** How far a dot's alpha may round up, in levels out of 255, plus one for a faint dot's blend. */
+        const val DOT_LEVEL_TOLERANCE = 3
         const val MID_FRACTION = 0.5f
 
         /** Where each playground morph's comets are on their way, half way, and nearly arrived. */

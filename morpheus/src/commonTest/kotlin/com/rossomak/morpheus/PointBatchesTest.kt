@@ -58,17 +58,30 @@ class PointBatchesTest {
     fun `dots punch once per size bin and add once per alpha bucket and size bin`() {
         val batches = PointBatches()
         batches.clearDots(smallestRadius = 2f, largestRadius = 10f)
-        batches.addDot(0f, 0f, radius = 2.1f, alpha = 0.5f)
-        batches.addDot(5f, 5f, radius = 2.2f, alpha = 0.5f)
-        batches.addDot(9f, 9f, radius = 9f, alpha = 0.5f)
+        batches.addDot(0f, 0f, radius = 2.1f, alpha = PUNCH_MIN_ALPHA)
+        batches.addDot(5f, 5f, radius = 2.2f, alpha = PUNCH_MIN_ALPHA)
+        batches.addDot(9f, 9f, radius = 9f, alpha = PUNCH_MIN_ALPHA)
         batches.punchCalls shouldBe 2
         batches.addCalls shouldBe 2
-        batches.addDot(3f, 3f, radius = 2.1f, alpha = 0.9f)
+        batches.addDot(3f, 3f, radius = 2.1f, alpha = 1f)
         batches.punchCalls shouldBe 2
         batches.addCalls shouldBe 3
         batches.clearDots(smallestRadius = 2f, largestRadius = 10f)
         batches.punchCalls shouldBe 0
         batches.addCalls shouldBe 0
+    }
+
+    @Test
+    fun `a dot fainter than the punch threshold is added but never punches`() {
+        val batches = PointBatches()
+        batches.clearDots(smallestRadius = 2f, largestRadius = 10f)
+        val fainterThanPunch = PUNCH_MIN_ALPHA - 0.01f
+        batches.addDot(0f, 0f, radius = 2.1f, alpha = fainterThanPunch)
+        batches.addDot(9f, 9f, radius = 9f, alpha = 0.3f)
+        batches.punchCalls shouldBe 0
+        batches.addCalls shouldBe 2
+        batches.addDot(5f, 5f, radius = 2.2f, alpha = PUNCH_MIN_ALPHA)
+        batches.punchCalls shouldBe 1
     }
 
     @Test
