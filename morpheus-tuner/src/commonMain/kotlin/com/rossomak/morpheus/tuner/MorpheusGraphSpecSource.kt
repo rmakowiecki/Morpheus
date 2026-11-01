@@ -96,6 +96,8 @@ private fun MorpheusGraphComets.toSource(): String {
         "easing" to (easing.toSource() to CometDefaults.easing.toSource()),
         "sizeDeviation" to (sizeDeviation.toSource() to CometDefaults.sizeDeviation.toSource()),
         "pieceSize" to (pieceSize.toSource() to CometDefaults.pieceSize.toSource()),
+        "zone" to (zone.toSource() to CometDefaults.zone.toSource()),
+        "tail" to (tail.toSource() to CometDefaults.tail.toSource()),
     )
     return arguments.filter { (_, values) -> values.first != values.second }
         .joinToString(separator = ", ", prefix = "MorpheusGraphComets(", postfix = ")") { (name, values) -> "$name = ${values.first}" }

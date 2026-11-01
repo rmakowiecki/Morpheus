@@ -410,5 +410,7 @@ private val layerSliders = listOf(
     ),
     LayerSlider("Comet size deviation (× size)", 0f..1f, { it.comets.sizeDeviation }, { spec, value -> spec.copy(comets = spec.comets.copy(sizeDeviation = value)) }),
     LayerSlider("Comet piece size (node spacings)", 4f..60f, { it.comets.pieceSize }, { spec, value -> spec.copy(comets = spec.comets.copy(pieceSize = value)) }),
+    LayerSlider("Comet zone (share of the morph; wider launches earlier)", 0.02f..0.8f, { it.comets.zone }, { spec, value -> spec.copy(comets = spec.comets.copy(zone = value)) }),
+    LayerSlider("Comet tail (head radii)", 0f..8f, { it.comets.tail }, { spec, value -> spec.copy(comets = spec.comets.copy(tail = value)) }),
     LayerSlider("Layer alpha", 0f..1f, { it.alpha }, { spec, value -> spec.copy(alpha = value) }),
 )
