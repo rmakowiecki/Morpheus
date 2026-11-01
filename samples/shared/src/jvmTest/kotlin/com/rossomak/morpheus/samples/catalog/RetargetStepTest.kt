@@ -18,33 +18,33 @@ class RetargetStepTest {
     private fun stepAt(seconds: Double) = retargetStepAt(seconds.seconds, timing, LinearEasing)
 
     @Test
-    fun `the first leg morphs from the top right to the middle left`() {
-        stepAt(0.0).target shouldBe RetargetTarget.MiddleLeft
+    fun `the first leg morphs from the top right to the top left`() {
+        stepAt(0.0).target shouldBe RetargetTarget.TopLeft
         stepAt(0.0).fraction shouldBe 0f
         stepAt(1.0).fraction shouldBe (0.5f plusOrMinus TOLERANCE)
-        stepAt(1.0).phase shouldBe RetargetPhase.ToMiddleLeft
+        stepAt(1.0).phase shouldBe RetargetPhase.ToTopLeft
         stepAt(1.9).fraction shouldBe 1f
     }
 
     @Test
-    fun `the second leg heads back to the top right, then is cut and heads for the bottom right`() {
-        // The leg's morph runs from 2.5 s to 3.5 s and is cut 40% in, at 2.9 s.
+    fun `the second leg heads back to the top right, then is cut and heads for the bottom centre`() {
+        // The leg's morph runs from 2.5 s to 3.5 s and is cut half way, at 3.0 s.
         stepAt(2.7).target shouldBe RetargetTarget.TopRight
         stepAt(2.7).fraction shouldBe (0.2f plusOrMinus TOLERANCE)
         stepAt(2.7).phase shouldBe RetargetPhase.BackToTopRight
-        stepAt(3.0).target shouldBe RetargetTarget.BottomRight
+        stepAt(3.0).target shouldBe RetargetTarget.BottomCentre
         stepAt(3.0).phase shouldBe RetargetPhase.Interrupted
     }
 
     @Test
-    fun `the morph toward the bottom right starts from nothing and arrives within the leg`() {
-        stepAt(2.9).fraction shouldBe (0f plusOrMinus TOLERANCE)
-        stepAt(3.2).fraction shouldBe (0.5f plusOrMinus TOLERANCE)
+    fun `the morph toward the bottom centre starts from nothing and arrives within the leg`() {
+        stepAt(3.0).fraction shouldBe (0f plusOrMinus TOLERANCE)
+        stepAt(3.25).fraction shouldBe (0.5f plusOrMinus TOLERANCE)
         stepAt(3.9).fraction shouldBe 1f
     }
 
     @Test
-    fun `the last leg closes the loop from the bottom right to the top right`() {
+    fun `the last leg closes the loop from the bottom centre to the top right`() {
         stepAt(4.5).target shouldBe RetargetTarget.TopRight
         stepAt(4.5).fraction shouldBe 0f
         stepAt(4.7).phase shouldBe RetargetPhase.Closing
@@ -54,7 +54,7 @@ class RetargetStepTest {
     @Test
     fun `a phase starts with its morph, so the hold before a morph still belongs to the phase before`() {
         stepAt(0.0).phase shouldBe RetargetPhase.Closing
-        stepAt(2.0).phase shouldBe RetargetPhase.ToMiddleLeft
+        stepAt(2.0).phase shouldBe RetargetPhase.ToTopLeft
         stepAt(4.0).phase shouldBe RetargetPhase.Interrupted
         stepAt(LOOP_END).phase shouldBe RetargetPhase.Closing
     }

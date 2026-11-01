@@ -21,6 +21,7 @@ import com.rossomak.morpheus.samples.catalog.seedGridSample
 import com.rossomak.morpheus.samples.catalog.shapePrimitivesSample
 import com.rossomak.morpheus.samples.catalog.waveAndPulseSample
 import com.rossomak.morpheus.samples.showcase.cometPlaygroundSample
+import com.rossomak.morpheus.samples.showcase.facingArcsSample
 import com.rossomak.morpheus.samples.showcase.heroSample
 
 /** Every sample, in order: the one list the gallery and the capture tool both read. New samples go at the end. */
@@ -48,6 +49,7 @@ object SampleRegistry {
         seedGridSample,
         scaleInvarianceSample,
         retargetMorphSample,
+        facingArcsSample,
     )
 
     init {

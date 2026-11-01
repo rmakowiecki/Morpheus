@@ -41,7 +41,7 @@ private val Red = Color(0xFFFF2A3D)
 private val NearBlack = Color(0xFF050807)
 
 /** The very dense front mesh all three specs share, so they stay one morph family and the nodes stay put. */
-private val playgroundFront = MorpheusGraphLayerSpec(
+internal val playgroundFront = MorpheusGraphLayerSpec(
     density = 100f,
     jitter = 0.4f,
     driftAmplitude = 0.3f,
@@ -59,7 +59,7 @@ private val playgroundFront = MorpheusGraphLayerSpec(
     comets = MorpheusGraphComets(size = 1.25f, spark = 0.6f),
 )
 
-private val playgroundGhost = MorpheusGraphPresets.defaultBackLayer.copy(density = 16f, alpha = 0.3f)
+internal val playgroundGhost = MorpheusGraphPresets.defaultBackLayer.copy(density = 16f, alpha = 0.3f)
 
 private const val PLAYGROUND_SEED = 41
 

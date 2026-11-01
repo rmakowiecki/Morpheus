@@ -3,7 +3,7 @@
 package com.rossomak.morpheus.samples.catalog
 
 import androidx.compose.animation.core.Easing
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -40,16 +40,23 @@ import kotlin.time.Duration.Companion.milliseconds
 private const val BLOOM_REACH = 0.14f
 private const val BLOOM_PLATEAU = 0.4f
 
+/** Wider than the default comet zone, so more of each bloom pours into the comets. */
+private const val RETARGET_COMET_ZONE = 0.3f
+
 /** One bloom in a morph family of its own, so any two of them morph into each other on one mesh, comets and all. */
 private fun bloomSpec(x: Float, y: Float): MorpheusGraphSpec = MorphFamily.cornerBloom.withSampleComets().let { spec ->
-    spec.copy(layers = spec.layers.map { it.copy(shapes = listOf(Bloom(x = x, y = y, reach = BLOOM_REACH, plateau = BLOOM_PLATEAU))) })
+    spec.copy(
+        layers = spec.layers.map {
+            it.copy(shapes = listOf(Bloom(x = x, y = y, reach = BLOOM_REACH, plateau = BLOOM_PLATEAU)), comets = it.comets.copy(zone = RETARGET_COMET_ZONE))
+        },
+    )
 }
 
 /** A bloom's centre, which is also its ring's, as fractions of the surface. */
 internal enum class RetargetTarget(val label: String, val x: Float, val y: Float) {
     TopRight("Top right", x = 0.85f, y = 0.2f),
-    MiddleLeft("Middle left", x = 0.15f, y = 0.5f),
-    BottomRight("Bottom right", x = 0.85f, y = 0.8f),
+    TopLeft("Top left", x = 0.15f, y = 0.2f),
+    BottomCentre("Bottom centre", x = 0.5f, y = 0.85f),
     ;
 
     val spec: MorpheusGraphSpec = bloomSpec(x, y)
@@ -57,25 +64,25 @@ internal enum class RetargetTarget(val label: String, val x: Float, val y: Float
 
 /** A stretch of the script, under its caption, with the target whose ring is drawn bold. */
 internal enum class RetargetPhase(val caption: String, val ring: RetargetTarget) {
-    ToMiddleLeft("1 · Top right → Middle left", RetargetTarget.MiddleLeft),
+    ToTopLeft("1 · Top right → Top left", RetargetTarget.TopLeft),
     BackToTopRight("2 · Back to top right…", RetargetTarget.TopRight),
-    Interrupted("3 · Interrupted: now → Bottom right", RetargetTarget.BottomRight),
-    Closing("4 · Bottom right → Top right", RetargetTarget.TopRight),
+    Interrupted("3 · Interrupted: now → Bottom centre", RetargetTarget.BottomCentre),
+    Closing("4 · Bottom centre → Top right", RetargetTarget.TopRight),
 }
 
-/** The morph toward the top right is cut this far into its morph time. */
-private const val INTERRUPT_AT = 0.4f
+/** The morph toward the top right is cut this far into its morph time, with its comets half way across. */
+private const val INTERRUPT_AT = 0.5f
 
 private const val RETARGET_LEGS = 3
 
-private val RetargetMorphTiming = MorphTiming(hold = 500.milliseconds, morph = 1500.milliseconds)
+private val RetargetMorphTiming = MorphTiming(hold = 750.milliseconds, morph = 3000.milliseconds)
 
 /** A moment of the script: the target the morph heads for, its eased fraction, and the phase shown. */
 internal data class RetargetStep(val target: RetargetTarget, val fraction: Float, val phase: RetargetPhase)
 
 /**
- * Where the script is at [time]. Leg 0 morphs from the top right to the middle left. Leg 1 starts back toward
- * the top right and is cut at [INTERRUPT_AT] of its morph: the rest of the morph goes to the bottom right
+ * Where the script is at [time]. Leg 0 morphs from the top right to the top left. Leg 1 starts back toward
+ * the top right and is cut at [INTERRUPT_AT] of its morph: the rest of the morph goes to the bottom centre
  * instead, from wherever the screen is. Leg 2 closes the loop. Legs hold and ease as in a `MorphCycle`.
  * A phase starts with its morph, so the first half of a hold still belongs to the phase before.
  */
@@ -84,16 +91,16 @@ internal fun retargetStepAt(time: Duration, timing: MorphTiming, easing: Easing)
     val waiting = progress == 0f
     fun step(target: RetargetTarget, linear: Float, phase: RetargetPhase) = RetargetStep(target, easing.transform(linear), phase)
     return when {
-        leg == 0 -> step(RetargetTarget.MiddleLeft, progress, if (waiting) RetargetPhase.Closing else RetargetPhase.ToMiddleLeft)
+        leg == 0 -> step(RetargetTarget.TopLeft, progress, if (waiting) RetargetPhase.Closing else RetargetPhase.ToTopLeft)
         leg == 2 -> step(RetargetTarget.TopRight, progress, if (waiting) RetargetPhase.Interrupted else RetargetPhase.Closing)
-        progress < INTERRUPT_AT -> step(RetargetTarget.TopRight, progress, if (waiting) RetargetPhase.ToMiddleLeft else RetargetPhase.BackToTopRight)
-        else -> step(RetargetTarget.BottomRight, (progress - INTERRUPT_AT) / (1f - INTERRUPT_AT), RetargetPhase.Interrupted)
+        progress < INTERRUPT_AT -> step(RetargetTarget.TopRight, progress, if (waiting) RetargetPhase.ToTopLeft else RetargetPhase.BackToTopRight)
+        else -> step(RetargetTarget.BottomCentre, (progress - INTERRUPT_AT) / (1f - INTERRUPT_AT), RetargetPhase.Interrupted)
     }
 }
 
 /**
- * A bloom morphs from the top right to the middle left, then sets out back toward the top right, and 40% of the
- * way there is sent to the bottom right instead, from the screen as it is. Driven with `seekTo` from the cycle
+ * A bloom morphs from the top right to the top left, then sets out back toward the top right, and half way
+ * there is sent down to the bottom centre instead, from the screen as it is. Driven with `seekTo` from the cycle
  * time. The interruption makes each frame depend on the ones before, so the sample can pause but not scrub,
  * and its timing and easing are fixed.
  */
@@ -105,7 +112,7 @@ fun RetargetMorphSample(
 ) {
     val state = rememberMorpheusGraphMorphState(specs.first())
     val cycleTime = rememberCycleTime(period = timing.cyclePeriod(legs = RETARGET_LEGS))
-    val step by remember(timing) { derivedStateOf { retargetStepAt(cycleTime.value, timing, FastOutSlowInEasing) } }
+    val step by remember(timing) { derivedStateOf { retargetStepAt(cycleTime.value, timing, LinearEasing) } }
     LaunchedEffect(state, specs) {
         snapshotFlow { step }.collect { state.seekTo(specs[it.target.ordinal], it.fraction) }
     }
