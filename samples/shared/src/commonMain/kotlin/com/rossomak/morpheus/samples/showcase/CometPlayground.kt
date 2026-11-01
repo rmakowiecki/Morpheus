@@ -145,7 +145,8 @@ private const val CROSS_TO_FRAME = "Cross → Frame"
 internal val cometPlaygroundSample = Sample(
     id = "comet-playground",
     title = "Comet playground",
-    description = "Four framing pills, five blooms and a cross morph into each other in turn, to watch the comets.",
+    description = "Four framing pills, five blooms and a cross morph into each other in turn, to watch the comets; " +
+        "the Comets sample shows them on a simpler pair.",
     category = SampleCategory.Showcase,
     // The whole three-leg loop, crossfaded over the half of the frame's hold it starts with; 24 fps, as
     // 12.75 s isn't whole frames at 30.
