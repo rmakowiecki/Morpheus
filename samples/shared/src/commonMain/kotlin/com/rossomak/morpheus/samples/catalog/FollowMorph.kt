@@ -16,12 +16,14 @@ import com.rossomak.morpheus.MorpheusGraphPresets.MorphFamily
 import com.rossomak.morpheus.MorpheusGraphSpec
 import com.rossomak.morpheus.morpheusGraphBackground
 import com.rossomak.morpheus.rememberMorpheusGraphMorphState
+import com.rossomak.morpheus.samples.CaptureRecipe
 import com.rossomak.morpheus.samples.MorphTiming
 import com.rossomak.morpheus.samples.Sample
 import com.rossomak.morpheus.samples.SampleCategory
 import com.rossomak.morpheus.samples.SampleLabel
 import com.rossomak.morpheus.samples.TunableMorph
 import com.rossomak.morpheus.samples.TunableSpec
+import com.rossomak.morpheus.samples.cyclePeriod
 import com.rossomak.morpheus.samples.rememberWalkPosition
 import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.milliseconds
@@ -68,6 +70,8 @@ internal val followMorphSample = Sample(
     title = "Follow morph",
     description = "A morph that follows a position across four specs, out to the last and back; scrub fast and the background trails behind.",
     category = SampleCategory.Morphs,
+    // The capture covers the whole walk, out and back.
+    recipe = CaptureRecipe(duration = FollowMorphTiming.cyclePeriod(legs = WalkMorphNames.size)),
     specs = SpecNames.zip(followSpecs) { name, spec ->
         TunableSpec(name, spec)
     },

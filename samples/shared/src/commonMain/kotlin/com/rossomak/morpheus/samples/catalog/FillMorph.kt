@@ -9,11 +9,13 @@ import androidx.compose.ui.Modifier
 import com.rossomak.morpheus.MorpheusGraphFill
 import com.rossomak.morpheus.MorpheusGraphSpec
 import com.rossomak.morpheus.ShapePrimitive.Rect
+import com.rossomak.morpheus.samples.CaptureRecipe
 import com.rossomak.morpheus.samples.MorphTiming
 import com.rossomak.morpheus.samples.Sample
 import com.rossomak.morpheus.samples.SampleCategory
 import com.rossomak.morpheus.samples.TunableMorph
 import com.rossomak.morpheus.samples.TunableSpec
+import com.rossomak.morpheus.samples.cyclePeriod
 import kotlin.time.Duration.Companion.seconds
 
 private const val LEFT = "Left"
@@ -61,6 +63,8 @@ internal val fillMorphSample = Sample(
     title = "Fill morph",
     description = "A solid blue rectangle on the left and a linear orange one on the right swap shape and fill on the same mesh.",
     category = SampleCategory.Morphs,
+    // The capture covers both morphs, there and back.
+    recipe = CaptureRecipe(duration = FillMorphTiming.cyclePeriod(legs = 2)),
     specs = listOf(TunableSpec(LEFT, leftSpec), TunableSpec(RIGHT, rightSpec)),
     morphs = listOf(TunableMorph(LEFT_TO_RIGHT), TunableMorph(RIGHT_TO_LEFT)),
     timing = FillMorphTiming,
