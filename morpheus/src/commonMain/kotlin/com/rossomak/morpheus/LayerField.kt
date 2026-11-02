@@ -87,11 +87,14 @@ private const val PRESENT_JOIN_THRESHOLD = 0.15f
 internal const val MORPH_FADE_WINDOW = 0.2f
 
 /**
- * The switch fraction a relay morph hands over at: its leaving nodes switch below it and its arriving nodes above it
- * (see [SwitchOrder.relayed]). Half way, the fade centres run 0.1 to 0.5 for the leaving nodes and 0.5 to 0.9 for the
- * arriving ones, and the comets fly around 0.5.
+ * The switch fraction a relay morph centres its hand-over on: at a [MorpheusGraphLayerSpec.morphGap] of 0 its leaving
+ * nodes switch below it and its arriving nodes above it (see [SwitchOrder.relayed]), and free-running comets fly
+ * around it.
  */
 internal const val MORPH_RELAY_SPLIT = 0.5f
+
+/** The widest [MorpheusGraphLayerSpec.morphGap]: a longer pause leaves the two sweeps too short to read as fronts. */
+private const val MAX_MORPH_GAP = 0.8f
 
 /**
  * How far a smooth noise over the surface moves a node's switch fraction either way, so a morph's front
@@ -475,6 +478,9 @@ internal class LayerField(
 
     /** The brightest presence the current morph's comets give node [index], 0 when not morphing. */
     internal fun nodeCometPeak(index: Int): Float = if (shape is LayerShape.Morph) cometTracks.topLevel?.peaks?.get(index) ?: 0f else 0f
+
+    /** How much of the morph node [index]'s comet light takes to fade behind the last head to pass it, 0 when not morphing. */
+    internal fun nodeCometDarkFade(index: Int): Float = if (shape is LayerShape.Morph) cometTracks.topLevel?.darkFadeOf(index) ?: 0f else 0f
 
     /** How many nodes only a comet lights that the current morph's mesh joins, 0 when not morphing. */
     internal val cometOnlyNodeCount: Int get() = if (shape is LayerShape.Morph && wasMidMorph) morphMesh?.cometOnlyNodeCount ?: 0 else 0
@@ -1228,9 +1234,9 @@ internal class LayerField(
      * same way; where neither shape ranks anything, every node switches by the shared sweep instead
      * of its roll (see [sweepAt]). [arrivals], when given, takes whether each switching node arrives.
      *
-     * When both groups rank, the morph is a relay and returns true: the leaving nodes switch over the first
-     * [MORPH_RELAY_SPLIT] of the switch fractions and the arriving ones over the rest, each in its own order, so
-     * the start shape is swept away before the end shape is swept in, and the comets fly the gap between.
+     * When both groups rank, the morph is a relay and returns true: the leaving nodes and the arriving ones switch
+     * each in their own order, [MorpheusGraphLayerSpec.morphGap] apart, so at a gap of 0 or more the start shape is
+     * swept away before the end shape is swept in, and the comets fly the gap between.
      */
     private fun rankSwitches(
         morph: LayerShape.Morph,
@@ -1248,6 +1254,7 @@ internal class LayerField(
         val intoEnvelope = envelopes.of(morph.to)
         val outOfEnvelope = envelopes.of(morph.from)
         val order = SwitchOrder(dissolve = morph.to as? LayerShape.Vanish ?: morph.from as? LayerShape.Vanish)
+        val gap = morphGapOf(morph)
         for (index in 0 until count) {
             val change = end[index] - start[index]
             if (abs(change) <= MORPH_CHANGE_EPSILON) continue
@@ -1270,7 +1277,7 @@ internal class LayerField(
                 jitter = nodes[index].frontNoise * MORPH_FRONT_JITTER,
                 sweep = order.sweepReversal(arriving)?.let { reversed -> sweepAt(homeX[index], homeY[index], sweepCell, reversed) } ?: 0f,
             )
-            switches[index] = order.relayed(arriving, switchAt.coerceIn(0f, 1f))
+            switches[index] = order.relayed(arriving, switchAt.coerceIn(0f, 1f), gap)
             arrivals?.set(index, arriving)
         }
         return order.relays
@@ -1295,7 +1302,9 @@ internal class LayerField(
      */
     private fun cometTrackFor(morph: LayerShape.Morph, level: Int, width: Float, height: Float, switches: FloatArray, relays: Boolean): CometTrack {
         cometTracks.at(level)?.takeIf { it.isFor(morph, width, height, count) }?.let { return it }
-        val comets = lerp(morph.from.nearestSpec.comets, morph.to.nearestSpec.comets, 0.5f)
+        val blended = lerp(morph.from.nearestSpec.comets, morph.to.nearestSpec.comets, 0.5f)
+        val gap = morphGapOf(morph)
+        val comets = blended.copy(zone = (blended.zone * relaySweepStretch(gap)).coerceAtMost(1f))
         val streams = if (comets.strength > 0f && sendsComets(morph)) {
             val start = (morph.from as? LayerShape.Vanish)?.let { guidePresences(it, width, height) } ?: scratch(level, 0)
             val end = (morph.to as? LayerShape.Vanish)?.let { guidePresences(it, width, height) } ?: scratch(level, 1)
@@ -1312,6 +1321,7 @@ internal class LayerField(
                 comets = comets,
                 seed = seed,
                 switches = switches.takeIf { relays },
+                handsOver = gap >= 0f,
             )
         } else {
             CometStreams.None
@@ -1337,10 +1347,15 @@ internal class LayerField(
         morphMeshFor(morph, width, height)
     }
 
-    /** Rebuilds the comets of [morph], the drawn top-level morph, bypassing the cache. For the settle benchmark. */
+    /**
+     * Rebuilds the comets of [morph], the drawn top-level morph, bypassing the cache, from its ranked switches as a
+     * frame does, then hands them over. For the settle benchmark.
+     */
     internal fun rebuildCometTrack(morph: LayerShape.Morph, width: Float, height: Float) {
+        val ranked = switchFractions.copyOf(count)
+        cometTracks.at(0)?.streams?.restoreRanked(ranked)
         cometTracks.forget(level = 0)
-        cometTrackFor(morph, level = 0, width = width, height = height, switches = switchFractions, relays = topLevelRelays)
+        cometTrackFor(morph, level = 0, width = width, height = height, switches = ranked, relays = topLevelRelays).streams.handOver(ranked)
     }
 
     /**
@@ -1375,7 +1390,6 @@ internal class LayerField(
         } else {
             null
         }
-        // Synced comets also hang on the zones they leave and land on, so no gap shows at either end of a flight.
         val emitters = comets.streams.emitters
         val receivers = comets.streams.receivers
         val shapeEdges = if (transit != null && comets.streams.isSynced && emitters != null && receivers != null) {
@@ -2080,13 +2094,18 @@ private class SwitchOrder(private val dissolve: LayerShape.Vanish?) {
     val relays: Boolean get() = (leavingInto.ranks || leavingOutOf.ranks) && (arrivingOutOf.ranks || arrivingInto.ranks)
 
     /**
-     * [switchAt] fitted to the relay, when the morph [relays]: the leaving nodes into the first [MORPH_RELAY_SPLIT]
-     * of the switch fractions, the arriving ones into the rest, each in its own order and with its own jitter.
+     * [switchAt] fitted to the relay, when the morph [relays], each group in its own order and with its own jitter:
+     * the leaving nodes into the switch fractions up to [gap] / 2 before [MORPH_RELAY_SPLIT], the arriving ones into
+     * those from [gap] / 2 after it. The two ranges mirror each other, so the reverse morph still retraces the front.
      */
-    fun relayed(arriving: Boolean, switchAt: Float): Float = when {
-        !relays -> switchAt
-        arriving -> MORPH_RELAY_SPLIT + (1f - MORPH_RELAY_SPLIT) * switchAt
-        else -> MORPH_RELAY_SPLIT * switchAt
+    fun relayed(arriving: Boolean, switchAt: Float, gap: Float): Float {
+        val leavingEnd = MORPH_RELAY_SPLIT - gap / 2f
+        val arrivingStart = MORPH_RELAY_SPLIT + gap / 2f
+        return when {
+            !relays -> switchAt
+            arriving -> arrivingStart + (1f - arrivingStart) * switchAt
+            else -> leavingEnd * switchAt
+        }
     }
 
     /** Whether nodes moving the [arriving] way switch by the dissolve's sweep, mirrored or not; null when they don't. */
@@ -2287,14 +2306,7 @@ private class MorphMesh(
      * with its edges, which can leave a neighbour short in turn, so this repeats until nothing changes.
      */
     @Suppress("LongParameterList") // The transit mesh, the two ends' edges, the alive flags, the switches and the shape edges.
-    private fun connectTransit(
-        transit: TransitMesh,
-        startEdges: LongArray,
-        endEdges: LongArray,
-        alive: BooleanArray,
-        switches: NodeSwitches,
-        shapeEdges: LongArray,
-    ): LongArray {
+    private fun connectTransit(transit: TransitMesh, startEdges: LongArray, endEdges: LongArray, alive: BooleanArray, switches: NodeSwitches, shapeEdges: LongArray): LongArray {
         val tied = BooleanArray(nodeCount)
         for (key in shapeEdges) tied[cometEnd(key, transit)] = true
         val candidates = BooleanArray(nodeCount) { transit.nodes[it] && (transit.topology.alive[it] || tied[it]) }
@@ -2404,13 +2416,10 @@ private class TransitMesh(val topology: MeshTopology, val nodes: BooleanArray)
  * One morph's comet [heads], and when they light each node, worked out once at the morph's start. A head's
  * disc moves along a straight line and its radius changes with its progress along it, so where it reaches
  * a fixed node and leaves it are the two roots of one quadratic in that progress, which maps back to the
- * morph's fraction exactly through the head's window and easing (see [CometHead.fractionAt]): no sampling. [presenceAt] is a node's
- * presence under the heads at a fraction, rising over [COMET_LEAD_RADII] of travel where the first head reaches it
- * and falling over the [MorpheusGraphComets.tail] behind the last one as it leaves, each head's distances turned into
- * fractions through its own speed and easing, so where two heads pass a node in turn it lights once for both and a
- * comet's length on screen doesn't change with its speed. Both windows stay inside the morph, so a node is dark at
- * either end. [peaks] are each node's
- * brightest presence; a node no head reaches has a peak of 0.
+ * morph's fraction exactly through the head's window and easing (see [CometHead.fractionAt]): no sampling.
+ * [presenceAt] is a node's presence under the heads at a fraction, lit once for all the heads that pass it (see
+ * [light]) and dark at either end of the morph. [peaks] are each node's brightest presence; a node no head reaches
+ * has a peak of 0.
  *
  * A node under a head lights by its own roll against a share: [fillChance] times [strength] for free-running
  * heads, so at a strength of 1 the nodes the fill chance leaves out of every shape stay out of every comet too,
@@ -2460,6 +2469,8 @@ private class CometTrack(
         return rollWeight(hotRoll, COMET_SPARK_SHARE * spark.coerceIn(0f, 1f)) * heat
     }
 
+    fun darkFadeOf(node: Int): Float = if (peaks[node] > 0f) darkFades[node] else 0f
+
     fun presenceAt(node: Int, fraction: Float): Float {
         if (peaks[node] <= 0f) return 0f
         return peaks[node] * cometLight(lightsAt[node], darkensAt[node], fraction, lightFades[node], darkFades[node])
@@ -2470,7 +2481,8 @@ private class CometTrack(
     /**
      * Each head visits the nodes along its swept path only, and widens the span each one is lit over to the
      * fractions it covers the node between; the head that passes a node closest sets its peak fraction, and the
-     * heads that set its first and last fractions set its fades, [COMET_LEAD_RADII] and [tail] head radii long.
+     * heads that set its first and last fractions set its fades, [COMET_LEAD_RADII] and [tail] middle radii long,
+     * turned into fractions through each head's own speed and easing, so a comet's length doesn't change with it.
      * A node's radius is the head's, its middle radius moved by its front noise (see [COMET_RADIUS_JITTER]),
      * so the ends keep within their slices. The radius changes linearly over each half of the line, so each
      * half is one quadratic.
@@ -2532,6 +2544,9 @@ private class CometTrack(
             peaks[node] = rollWeight(nodes[node].presenceRoll, nodeShare)
             lightsAt[node] = max(lightsAt[node], lightFades[node] / 2f)
             darkensAt[node] = min(darkensAt[node], max(lightsAt[node], 1f - darkFades[node]))
+            // A head setting off at the morph's start, or landing at its end, would otherwise heat a node it passes
+            // there in a single frame.
+            peakFractions[node] = peakFractions[node].coerceIn(lightsAt[node], max(lightsAt[node], 1f - darkFades[node]))
         }
     }
 
@@ -2584,14 +2599,21 @@ private class CometTrack(
 /** [CometTrack] sorts the nodes into square buckets this many node spacings wide. */
 private const val COMET_BUCKET_CELLS = 2f
 
+/** [morph]'s [MorpheusGraphLayerSpec.morphGap], averaged over its two ends and kept within -1..[MAX_MORPH_GAP]. */
+private fun morphGapOf(morph: LayerShape.Morph): Float =
+    ((morph.from.nearestSpec.morphGap + morph.to.nearestSpec.morphGap) / 2f).coerceIn(-1f, MAX_MORPH_GAP)
+
+/**
+ * How many times longer each sweep of a relay [gap] apart runs than at a gap of 0, so a [MorpheusGraphComets.zone]
+ * covers the same share of each shape's cells whatever the gap.
+ */
+private fun relaySweepStretch(gap: Float): Float = (MORPH_RELAY_SPLIT - gap / 2f) / MORPH_RELAY_SPLIT
+
 /** The morph fraction a node with switch fraction [switchAt] is half switched at: its fade runs [MORPH_FADE_WINDOW] wide around it. */
 internal fun switchCentre(switchAt: Float): Float = MORPH_FADE_WINDOW / 2f + switchAt.coerceIn(0f, 1f) * (1f - MORPH_FADE_WINDOW)
 
 /** The switch fraction whose fade is centred on [centre], the nearest one for a centre no switch reaches; the inverse of [switchCentre]. */
 internal fun switchAtCentre(centre: Float): Float = ((centre - MORPH_FADE_WINDOW / 2f) / (1f - MORPH_FADE_WINDOW)).coerceIn(0f, 1f)
-
-/** The switch fraction a node is half switched at [centre] with: [switchCentre]'s inverse, for a centre the fade fits around. */
-internal fun switchFor(centre: Float): Float = ((centre - MORPH_FADE_WINDOW / 2f) / (1f - MORPH_FADE_WINDOW)).coerceIn(0f, 1f)
 
 /**
  * A comet-lit node's light at [fraction], from 0 to 1: rising over [lightFade] centred on [lightsAt] and falling

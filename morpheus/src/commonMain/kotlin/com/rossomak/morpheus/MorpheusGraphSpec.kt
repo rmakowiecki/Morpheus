@@ -241,6 +241,13 @@ public data class MorpheusGraphLayerSpec(
      * over the morph's two ends. See [MorpheusGraphComets].
      */
     val comets: MorpheusGraphComets = MorpheusGraphComets(),
+    /**
+     * How far apart a same-family morph runs its leaving and its arriving nodes, as a share of the morph, averaged
+     * over its two ends and kept within -1..0.8: at -1 both sweep the whole morph together, at 0 the leaving nodes
+     * switch over its first half and the arriving ones over its second, and above 0 a pause this long opens between
+     * them, where only the comets fly.
+     */
+    val morphGap: Float = 0f,
     /** Multiplies every alpha in the layer. */
     val alpha: Float = 1f,
     /** What this layer alone is painted with; null = its spec's fill, else the inherited one (see [MorpheusGraphFill]). */

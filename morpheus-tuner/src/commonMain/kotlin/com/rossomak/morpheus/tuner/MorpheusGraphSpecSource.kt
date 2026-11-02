@@ -80,6 +80,7 @@ private fun MorpheusGraphLayerSpec.sourceArguments(): Map<String, String> = link
     "glowStrength" to glowStrength.toSource(),
     "depthDimming" to depthDimming.toSource(),
     "comets" to comets.toSource(),
+    "morphGap" to morphGap.toSource(),
     "alpha" to alpha.toSource(),
     "fill" to (fill?.toSource() ?: "null"),
 )
@@ -98,6 +99,7 @@ private fun MorpheusGraphComets.toSource(): String {
         "pieceSize" to (pieceSize.toSource() to CometDefaults.pieceSize.toSource()),
         "zone" to (zone.toSource() to CometDefaults.zone.toSource()),
         "tail" to (tail.toSource() to CometDefaults.tail.toSource()),
+        "lead" to (lead.toSource() to CometDefaults.lead.toSource()),
     )
     return arguments.filter { (_, values) -> values.first != values.second }
         .joinToString(separator = ", ", prefix = "MorpheusGraphComets(", postfix = ")") { (name, values) -> "$name = ${values.first}" }

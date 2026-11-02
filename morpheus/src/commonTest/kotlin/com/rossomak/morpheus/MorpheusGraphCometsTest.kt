@@ -20,8 +20,10 @@ import io.kotest.matchers.floats.shouldBeLessThan
 import io.kotest.matchers.floats.shouldBeLessThanOrEqual
 import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.ints.shouldBeGreaterThanOrEqual
+import io.kotest.matchers.ints.shouldBeLessThan
 import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
+import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
 
@@ -36,9 +38,12 @@ class MorpheusGraphCometsTest {
 
     private val canvas = BenchmarkCanvas.Recipe
 
+    /** At a gap of -1 both sweeps span the whole morph, so the comets still fly at [LATE_FRACTION]. */
     @Test
     fun `late in the showcase's morph, both ways, the comets' light sits on the shape the morph ends on`() {
-        for ((from, to) in listOf(heroPills to heroRibbons, heroRibbons to heroPills)) {
+        val pills = heroPills.withDefaultTiming().withMorphGap(-1f)
+        val ribbons = heroRibbons.withDefaultTiming().withMorphGap(-1f)
+        for ((from, to) in listOf(pills to ribbons, ribbons to pills)) {
             val endShown = frontField(from, to, 1f).shownHomes()
             val late = frontField(from, to, LATE_FRACTION)
             val start = frontField(from, to, 0f)
@@ -90,15 +95,162 @@ class MorpheusGraphCometsTest {
         }
     }
 
+    /** At the default gap of 0 the leaving sweep ends and the arriving one starts half way, the hand-over. */
     @Test
-    fun `at full stagger the heads travel in windows spread over the morph, each at least a fifth of it`() {
-        val heads = frontField(heroPills.withCometKnobs(stagger = 1f), heroRibbons.withCometKnobs(stagger = 1f), 0.5f).cometHeads
+    fun `at full stagger the heads travel in windows spread over the comet zones either side of the hand-over, each a fifth of them`() {
+        val heads = frontField(heroPills.withDefaultTiming().withCometKnobs(stagger = 1f), heroRibbons.withDefaultTiming().withCometKnobs(stagger = 1f), 0.5f).cometHeads
+        val zone = MorpheusGraphComets().zone
+        val window = 2f * zone
         val starts = heads.map { it.startsAt }
 
-        heads.forEach { head -> head.endsAt - head.startsAt shouldBeGreaterThanOrEqual MIN_FULL_STAGGER_WINDOW }
-        heads.forEach { head -> head.endsAt shouldBeLessThanOrEqual 1f }
-        starts.min() shouldBeGreaterThanOrEqual 0f
-        starts.max() - starts.min() shouldBeGreaterThan MIN_FULL_STAGGER_SPREAD
+        heads.forEach { head -> head.endsAt - head.startsAt shouldBeGreaterThanOrEqual FULL_STAGGER_WINDOW_SHARE * window - FLOAT_STEP }
+        heads.forEach { head -> head.startsAt shouldBeGreaterThanOrEqual 0.5f - zone - FLOAT_STEP }
+        heads.forEach { head -> head.endsAt shouldBeLessThanOrEqual 0.5f + zone + FLOAT_STEP }
+        starts.max() - starts.min() shouldBeGreaterThan MIN_FULL_STAGGER_SPREAD * (1f - FULL_STAGGER_WINDOW_SHARE) * window
+    }
+
+    @Test
+    fun `a larger comet lead sets each synced head off that much earlier and lands it that much later`() {
+        val onTime = frontField(heroPills.withCometLead(0f), heroRibbons.withCometLead(0f), 0.5f).cometHeads
+        val early = frontField(heroPills.withCometLead(TEST_LEAD), heroRibbons.withCometLead(TEST_LEAD), 0.5f).cometHeads
+
+        onTime.size shouldBeGreaterThan 0
+        early.map { it.anchors } shouldBe onTime.map { it.anchors }
+        early.zip(onTime).forEach { (head, onTimeHead) ->
+            head.startsAt shouldBe ((onTimeHead.startsAt - TEST_LEAD).coerceAtLeast(0f) plusOrMinus FLOAT_STEP)
+            head.endsAt shouldBe ((onTimeHead.endsAt + TEST_LEAD).coerceAtMost(1f) plusOrMinus FLOAT_STEP)
+        }
+    }
+
+    /** The zone stretches with the sweeps, so it picks the same cells of each shape at any gap. */
+    @Test
+    fun `a relay's comets leave from and land on the same places whatever its gap`() {
+        val anchors = listOf(-1f, -0.5f, 0f, 0.2f).map { gap ->
+            frontField(heroPills.withMorphGap(gap), heroRibbons.withMorphGap(gap), 0.5f).cometHeads.map { it.anchors }
+        }
+
+        anchors.first().size shouldBeGreaterThan 0
+        anchors.forEach { it shouldBe anchors.first() }
+    }
+
+    /** At a gap of -1 the sweeps and the zone's window last twice as long as at 0, so every head flies at half the pace. */
+    @Test
+    fun `a comet's tail is as long on screen whatever its head's pace`() {
+        val from = heroPills.withDefaultTiming().withCometKnobs(stagger = 0.5f, easing = 0f)
+        val to = heroRibbons.withDefaultTiming().withCometKnobs(stagger = 0.5f, easing = 0f)
+        val brisk = frontField(from.withMorphGap(0f), to.withMorphGap(0f), 0.5f)
+        val slow = frontField(from.withMorphGap(-1f), to.withMorphGap(-1f), 0.5f)
+        val lit = (0 until brisk.nodeCount).filter { brisk.nodeCometDarkFade(it) > 0f }
+
+        lit.size shouldBeGreaterThan 0
+        slow.cometHeads.map { it.anchors } shouldBe brisk.cometHeads.map { it.anchors }
+        lit.forEach { node -> slow.nodeCometDarkFade(node) shouldBe (2f * brisk.nodeCometDarkFade(node) plusOrMinus FLOAT_STEP) }
+    }
+
+    @Test
+    fun `only a relay's comet zones, the cells of each shape nearest the other, send and take heads`() {
+        val blocks = RelayBlocks()
+        val streams = blocks.streams()
+        val emitters = streams.emitters!!
+        val receivers = streams.receivers!!
+
+        streams.heads.size shouldBeGreaterThan 0
+        emitters.count { it } shouldBeLessThan blocks.left.count { it } / 2
+        receivers.count { it } shouldBeLessThan blocks.right.count { it } / 2
+        streams.heads.forEach { head ->
+            emitters[blocks.nodeAt(head.sourceX, head.sourceY)] shouldBe true
+            receivers[blocks.nodeAt(head.targetX, head.targetY)] shouldBe true
+        }
+    }
+
+    @Test
+    fun `a hand-over centres each synced head's slices' fades half a fade and its lead inside its flight`() {
+        val blocks = RelayBlocks()
+        val streams = blocks.streams()
+        val handedOver = blocks.switches.copyOf().also(streams::handOver)
+        val reach = MORPH_FADE_WINDOW / 2f + MorpheusGraphComets().lead
+        val departures = streams.heads.map { it.startsAt + reach }
+        val landings = streams.heads.map { it.endsAt - reach }
+        val moved = (0 until blocks.count).filter { handedOver[it] != blocks.switches[it] }
+
+        streams.isSynced shouldBe true
+        moved.size shouldBeGreaterThan 0
+        moved.forEach { node ->
+            val centre = switchCentre(handedOver[node])
+            if (blocks.left[node]) {
+                streams.emitters!![node] shouldBe true
+                departures.minOf { abs(it - centre) } shouldBeLessThan FLOAT_STEP
+            } else {
+                streams.receivers!![node] shouldBe true
+                landings.minOf { abs(it - centre) } shouldBeLessThan FLOAT_STEP
+            }
+        }
+    }
+
+    @Test
+    fun `staggered heads run free of their slices and hand nothing over`() {
+        val blocks = RelayBlocks()
+        val streams = blocks.streams(MorpheusGraphComets(stagger = 0.5f))
+
+        streams.heads.size shouldBeGreaterThan 0
+        streams.isSynced shouldBe false
+        blocks.switches.copyOf().also(streams::handOver).toList() shouldBe blocks.switches.toList()
+    }
+
+    @Test
+    fun `a relay played backwards sends each synced head back along its path, over the mirrored window`() {
+        val forward = RelayBlocks().streams().heads
+        val backward = RelayBlocks(reversed = true).streams().heads.map { head ->
+            head.copy(
+                sourceX = head.targetX,
+                sourceY = head.targetY,
+                targetX = head.sourceX,
+                targetY = head.sourceY,
+                sourceRadius = head.targetRadius,
+                targetRadius = head.sourceRadius,
+                startsAt = 1f - head.endsAt,
+                endsAt = 1f - head.startsAt,
+                sourceDensity = head.targetDensity,
+                targetDensity = head.sourceDensity,
+            )
+        }
+
+        forward.size shouldBeGreaterThan 0
+        backward.map { it.anchors }.sortedWith(anchorOrder) shouldBe forward.map { it.anchors }.sortedWith(anchorOrder)
+        val backwardByAnchors = backward.associateBy { it.anchors }
+        forward.forEach { head ->
+            val mirrored = backwardByAnchors.getValue(head.anchors)
+            mirrored.startsAt shouldBe (head.startsAt plusOrMinus FLOAT_STEP)
+            mirrored.endsAt shouldBe (head.endsAt plusOrMinus FLOAT_STEP)
+            mirrored.sourceRadius shouldBe (head.sourceRadius plusOrMinus FLOAT_STEP)
+            mirrored.targetRadius shouldBe (head.targetRadius plusOrMinus FLOAT_STEP)
+        }
+    }
+
+    /**
+     * Two square blocks of nodes a unit apart, with a block's width between them, in a relay at a gap of 0 that sweeps
+     * from the left block's far side to the right block's: the left block leaves and the right one arrives, or the
+     * other way round, and the switches mirrored, when [reversed].
+     */
+    private class RelayBlocks(reversed: Boolean = false) {
+        private val side = RELAY_BLOCK_SIDE
+        val count = side * side * 2
+        val homeX = FloatArray(count) { node -> (node % side + if (node < side * side) 0 else side * 2).toFloat() }
+        val homeY = FloatArray(count) { node -> (node / side % side).toFloat() }
+        val left = BooleanArray(count) { it < side * side }
+        val right = BooleanArray(count) { it >= side * side }
+        val switches = FloatArray(count) { node ->
+            val across = (node % side) / (side - 1f)
+            val forward = if (left[node]) across / 2f else 0.5f + across / 2f
+            if (reversed) 1f - forward else forward
+        }
+        private val leaving = if (reversed) right else left
+        private val arriving = if (reversed) left else right
+
+        fun streams(comets: MorpheusGraphComets = MorpheusGraphComets()): CometStreams =
+            cometStreams(leaving, arriving, BooleanArray(count), homeX, homeY, count, spacing = 1f, comets = comets, seed = 1, switches = switches)
+
+        fun nodeAt(x: Float, y: Float): Int = (0 until count).single { homeX[it] == x && homeY[it] == y }
     }
 
     @Test
@@ -139,6 +291,12 @@ class MorpheusGraphCometsTest {
         assertFailsWith<IllegalArgumentException> { MorpheusGraphComets(easing = 1.1f) }
         assertFailsWith<IllegalArgumentException> { MorpheusGraphComets(easing = -0.1f) }
         assertFailsWith<IllegalArgumentException> { MorpheusGraphComets(sizeDeviation = -0.1f) }
+        assertFailsWith<IllegalArgumentException> { MorpheusGraphComets(pieceSize = 0f) }
+        assertFailsWith<IllegalArgumentException> { MorpheusGraphComets(zone = 1.1f) }
+        assertFailsWith<IllegalArgumentException> { MorpheusGraphComets(zone = -0.1f) }
+        assertFailsWith<IllegalArgumentException> { MorpheusGraphComets(tail = -0.1f) }
+        assertFailsWith<IllegalArgumentException> { MorpheusGraphComets(lead = 1.1f) }
+        assertFailsWith<IllegalArgumentException> { MorpheusGraphComets(lead = -1.1f) }
     }
 
     @Test
@@ -147,12 +305,13 @@ class MorpheusGraphCometsTest {
         lerp(MorpheusGraphComets(headsPerStream = 2), MorpheusGraphComets(), 0.5f).headsPerStream shouldBe null
     }
 
+    /** The X is one connected piece, so its comet zone is the cells nearest the pills, which needn't reach all four arms. */
     @Test
-    fun `the way back from two crossing ribbons sends comets from each of the four arms of the X`() {
+    fun `the way back from two crossing ribbons sends comets from both ribbons`() {
         val heads = frontField(heroRibbons, heroPills, 0.5f).cometHeads
-        val quadrants = heads.groupingBy { head -> (head.sourceX < canvas.width / 2f) to (head.sourceY < canvas.height / 2f) }.eachCount()
+        val ribbons = heads.map { head -> (head.sourceX - canvas.width / 2f) * (head.sourceY - canvas.height / 2f) > 0f }.distinct()
 
-        quadrants.keys shouldHaveSize 4
+        ribbons shouldHaveSize 2
     }
 
     @Test
@@ -183,8 +342,8 @@ class MorpheusGraphCometsTest {
             val targetShares = heads.map { end.shownShareWithin(Offset(it.targetX, it.targetY), it.targetRadius) }.sorted()
 
             heads.size shouldBeGreaterThan 0
-            sourceShares[sourceShares.size / 2] shouldBe 1f
-            targetShares[targetShares.size / 2] shouldBe 1f
+            sourceShares[sourceShares.size / 2] shouldBeGreaterThanOrEqual MIN_MEDIAN_DISC_SHOWN_SHARE
+            targetShares[targetShares.size / 2] shouldBeGreaterThanOrEqual MIN_MEDIAN_DISC_SHOWN_SHARE
             sourceShares.first() shouldBeGreaterThanOrEqual MIN_DISC_SHOWN_SHARE
             targetShares.first() shouldBeGreaterThanOrEqual MIN_DISC_SHOWN_SHARE
         }
@@ -255,8 +414,12 @@ class MorpheusGraphCometsTest {
 
     private companion object {
         const val PRESENT = 0.05f
-        const val LATE_FRACTION = 0.85f
-        const val MIN_LATE_LIT = 20
+
+        /** Late enough that the heads are nearly home, early enough that, at the default gap, none has landed yet. */
+        const val LATE_FRACTION = 0.75f
+
+        /** Enough comet-only nodes to take a median gap over; near home a head mostly lights the end shape's own nodes. */
+        const val MIN_LATE_LIT = 10
 
         /** A showcase ribbon is about 8 cells thick; the stand-in comets this replaced lit patches some 16 cells off it. */
         const val MAX_MEDIAN_GAP_CELLS = 3f
@@ -264,17 +427,26 @@ class MorpheusGraphCometsTest {
         const val TALL_WIDTH = 1080f
         const val TALL_HEIGHT = 1900f
         const val PX_PER_DP = 2.75f
-        const val SHOWCASE_FINGERPRINT = "80943241079e2060"
+        const val SHOWCASE_FINGERPRINT = "c871eef0dd40b950"
 
-        /** At a stagger of 1 a window lasts 1 − 0.8 of the morph, give or take a float step. */
-        const val MIN_FULL_STAGGER_WINDOW = 0.199f
+        /** At a stagger of 1 a head's window lasts 1 − 0.8 of the zones' window. */
+        const val FULL_STAGGER_WINDOW_SHARE = 0.2f
+        const val FLOAT_STEP = 1e-3f
+        const val TEST_LEAD = 0.05f
+
+        /** The least spread of the heads' start fractions, as a share of the room they can start in. */
         const val MIN_FULL_STAGGER_SPREAD = 0.4f
         const val EASING_STEPS = 64
         const val EASING_TOLERANCE = 1e-5f
 
         /** A disc on a shape's soft edge can take in a few nodes the envelope just fades out. */
         const val MIN_DISC_SHOWN_SHARE = 0.7f
+
+        /** A comet zone sits at its shape's end, so even a middling disc there can take in a node or two past it. */
+        const val MIN_MEDIAN_DISC_SHOWN_SHARE = 0.95f
         const val CAP_BLOCK_SIDE = 120
+        const val RELAY_BLOCK_SIDE = 24
+        val anchorOrder: Comparator<List<Float>> = compareBy({ it[0] }, { it[1] }, { it[2] }, { it[3] })
 
         /** `COMET_MAX_HEADS` in MorpheusGraphComets.kt. */
         const val MAX_HEADS = 128
@@ -283,4 +455,22 @@ class MorpheusGraphCometsTest {
 
 /** Every layer's comets with staggered, eased heads of varied sizes, so tests cover the knobs as well as their defaults. */
 internal fun MorpheusGraphSpec.withCometKnobs(stagger: Float = 0.5f, easing: Float = 0.5f, sizeDeviation: Float = 0.25f) =
-    copy(layers = layers.map { layer -> layer.copy(comets = layer.comets.copy(stagger = stagger, easing = easing, sizeDeviation = sizeDeviation)) })
+    mapLayers { it.copy(comets = it.comets.copy(stagger = stagger, easing = easing, sizeDeviation = sizeDeviation)) }
+
+/** Every layer's comets with [lead]. */
+internal fun MorpheusGraphSpec.withCometLead(lead: Float) = mapLayers { it.copy(comets = it.comets.copy(lead = lead)) }
+
+/** Every layer with [gap] between its leaving and arriving sweeps. */
+internal fun MorpheusGraphSpec.withMorphGap(gap: Float) = mapLayers { it.copy(morphGap = gap) }
+
+/** Every layer with the library's default comet zone, tail and lead and morph gap, so a test reads the engine's timing, not a sample's. */
+internal fun MorpheusGraphSpec.withDefaultTiming() = mapLayers { layer ->
+    val defaults = MorpheusGraphComets()
+    layer.copy(comets = layer.comets.copy(zone = defaults.zone, tail = defaults.tail, lead = defaults.lead), morphGap = MorpheusGraphLayerSpec().morphGap)
+}
+
+/** A head's two anchors, where it leaves from and lands on. */
+private val CometHead.anchors get() = listOf(sourceX, sourceY, targetX, targetY)
+
+/** This spec with every layer put through [transform]. */
+internal fun MorpheusGraphSpec.mapLayers(transform: (MorpheusGraphLayerSpec) -> MorpheusGraphLayerSpec) = copy(layers = layers.map(transform))

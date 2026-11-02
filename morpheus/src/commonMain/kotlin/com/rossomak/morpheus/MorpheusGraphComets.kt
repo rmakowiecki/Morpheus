@@ -33,8 +33,9 @@ public data class MorpheusGraphComets(
     /** Share of a comet's nodes that heat up as a head reaches them and cool once it has passed. */
     val spark: Float = 0f,
     /**
-     * How far apart in time a stream's heads travel, 0 to 1: at 0 every head travels the whole morph, at 1
-     * each travels a pseudorandom fifth of it, in its own window, and shows only within it.
+     * How far apart in time a stream's heads travel, 0 to 1. At 0, with [easing] at 0 too, the heads are synced:
+     * they set off and land with their slices ([lead]). Any other value sets them free within the comet zones'
+     * window around the morph's middle ([zone]), at 1 each in a pseudorandom fifth of it, shown only within it.
      */
     val stagger: Float = 0f,
     /**
@@ -42,7 +43,7 @@ public data class MorpheusGraphComets(
      * moves at a constant pace through the morph's fraction, so on screen it follows whatever easing drives
      * that fraction; at 1 it speeds up from its start and slows down into its end. It still moves in a straight
      * line. Mostly matters with [stagger]: a short window in the middle of an eased morph otherwise starts and
-     * stops at full speed.
+     * stops at full speed. Above 0 it frees the heads from their slices, as [stagger] does.
      */
     val easing: Float = 0f,
     /**
@@ -57,17 +58,22 @@ public data class MorpheusGraphComets(
      */
     val pieceSize: Float = 15f,
     /**
-     * In a relay morph, how much of each shape's front sends and takes comets, as a share of the morph: the leaving
-     * cells switching off within this of their shape's last, and the arriving cells switching on within this of
-     * their shape's first. Wider launches the heads earlier and lands them later.
+     * In a relay morph, the share of each shape's front that sends or takes comets, measured in morph at a
+     * [MorpheusGraphLayerSpec.morphGap] of 0 and stretched with the sweeps at any other gap, so it picks the same
+     * cells. Wider launches the heads earlier and lands them later.
      */
     val zone: Float = 0.1f,
     /**
-     * How long the trail of lit nodes behind each head is, in head radii: a node a head has left fades out over
-     * this much of the head's travel, and a sparking node cools over it. A comet on screen is about its head's
+     * How long the trail of lit nodes behind each head is, in its middle radii: a node a head has left fades out
+     * over this much of the head's travel, and a sparking node cools over it. A comet on screen is about its head's
      * width plus this tail, whatever its speed. Never shorter than a quarter of a radius, so no node pops out.
      */
     val tail: Float = 1.5f,
+    /**
+     * In a relay morph, how long before the earlier of its two slices' fades a synced head sets off, and how long
+     * after the later one it lands, as a share of the morph; below 0 the flight overlaps the fades.
+     */
+    val lead: Float = 0.025f,
 ) {
     init {
         require(strength >= 0f) { "Comet strength must not be negative, was $strength" }
@@ -81,6 +87,7 @@ public data class MorpheusGraphComets(
         require(pieceSize > 0f) { "Comet piece size must be above 0, was $pieceSize" }
         require(zone in 0f..1f) { "Comet zone must be within 0..1, was $zone" }
         require(tail >= 0f) { "Comet tail must not be negative, was $tail" }
+        require(lead in -1f..1f) { "Comet lead must be within -1..1, was $lead" }
     }
 }
 
@@ -103,6 +110,7 @@ internal fun lerp(from: MorpheusGraphComets, to: MorpheusGraphComets, fraction: 
         pieceSize = lerp(from.pieceSize, to.pieceSize, fraction),
         zone = lerp(from.zone, to.zone, fraction),
         tail = lerp(from.tail, to.tail, fraction),
+        lead = lerp(from.lead, to.lead, fraction),
     )
 }
 
@@ -138,7 +146,7 @@ private const val MIN_END_RADIUS_SHARE = 2f / 3f
 /** Salts a head's draws, so its size and its window never share one: odd salts for its size draws, this even one for its window. */
 private const val STAGGER_SALT = 2
 
-/** A synced head's flight never spans less of the morph than this; a shorter one is widened around its midpoint. */
+/** A synced head's flight never spans less of the morph than this (see [syncedFlight]). */
 private const val COMET_MIN_FLIGHT = 0.1f
 
 /**
@@ -236,6 +244,8 @@ internal class CometStreams(
 ) {
     private val lazyDebugPlan = lazy(LazyThreadSafetyMode.NONE, debugPlan)
 
+    private val rankedSwitches = FloatArray(handOverNodes.size)
+
     val pieces: List<CometPiece> get() = lazyDebugPlan.value.pieces
 
     /** Each stream's source and target, as indices into [pieces]. */
@@ -250,7 +260,15 @@ internal class CometStreams(
      * [switches] each time the morph's switches are ranked; other nodes keep their ranked switch.
      */
     fun handOver(switches: FloatArray) {
-        for (position in handOverNodes.indices) switches[handOverNodes[position]] = handOverSwitches[position]
+        for (position in handOverNodes.indices) {
+            rankedSwitches[position] = switches[handOverNodes[position]]
+            switches[handOverNodes[position]] = handOverSwitches[position]
+        }
+    }
+
+    /** Puts back into [switches] the ranked switches the last [handOver] replaced. */
+    fun restoreRanked(switches: FloatArray) {
+        for (position in handOverNodes.indices) switches[handOverNodes[position]] = rankedSwitches[position]
     }
 
     companion object {
@@ -283,15 +301,11 @@ internal class CometPiece(val nodes: IntArray, val centerX: Float, val centerY: 
  * i of one sends a head to slice i of the other. Each head draws its size and window from [seed] and its
  * two pieces, so the same morph in the same direction draws the same heads every time.
  *
- * Given the [switches] of a relay morph (see [MORPH_RELAY_SPLIT]), only the emitter and receiver zones send and take
- * comets (see [MorpheusGraphComets.zone]): in each shape, the leaving cells switching off last and the arriving ones switching on
- * first, the parts nearest the other end, while the rest pours away and in with the front. With no
- * [MorpheusGraphComets.stagger] and no [MorpheusGraphComets.easing] the heads are synced: each leaves when its source
- * slice is half switched off and lands when its target slice is half switched on, and carries the density of the two
- * shapes there; otherwise they run free within [MorpheusGraphComets.zone] either side of the hand-over. A synced
- * head's slices then switch with it, not by their ranked switches (see [CometStreams.handOver]).
+ * Given the [switches] of a relay morph (see [MORPH_RELAY_SPLIT]), only the emitter and receiver zones exchange
+ * comets (see [MorpheusGraphComets.zone]), and synced heads carry the density of the two shapes there (see
+ * [MorpheusGraphComets.stagger]). When [handsOver], a synced head's slices switch with it (see [CometStreams.handOver]).
  */
-@Suppress("LongParameterList") // The three node sets, their homes, the settings, the layer's seed and the switches.
+@Suppress("LongParameterList") // The three node sets, their homes, the settings, the layer's seed, the switches and the hand-over.
 internal fun cometStreams(
     leaving: BooleanArray,
     arriving: BooleanArray,
@@ -303,6 +317,7 @@ internal fun cometStreams(
     comets: MorpheusGraphComets,
     seed: Int,
     switches: FloatArray? = null,
+    handsOver: Boolean = true,
 ): CometStreams {
     val grid = CellGrid(homeX, homeY, count, spacing * COMET_CLUSTER_CELLS)
     val pieceCells = max(1, (comets.pieceSize / COMET_CLUSTER_CELLS).let { side -> ceil(side * side).toInt() })
@@ -316,12 +331,14 @@ internal fun cometStreams(
     val keptShape = BooleanArray(count)
     clustersOf(kept, grid, homeX, homeY, count).filter { it.size >= COMET_MIN_CLUSTER }.forEach { cluster -> cluster.nodes.forEach { keptShape[it] = true } }
     val pairs = matchPieces(sources, targets, grid, grid.stepsFrom(keptShape, count))
-    val startClearance = Clearance(BooleanArray(count) { leaving[it] || kept[it] }, homeX, homeY, count, spacing)
-    val endClearance = Clearance(BooleanArray(count) { arriving[it] || kept[it] }, homeX, homeY, count, spacing)
-    val timing = headTiming(switches, comets, grid, BooleanArray(count) { leaving[it] || kept[it] }, BooleanArray(count) { arriving[it] || kept[it] }, count)
+    val shownAtStart = BooleanArray(count) { leaving[it] || kept[it] }
+    val shownAtEnd = BooleanArray(count) { arriving[it] || kept[it] }
+    val startClearance = Clearance(shownAtStart, homeX, homeY, count, spacing)
+    val endClearance = Clearance(shownAtEnd, homeX, homeY, count, spacing)
+    val timing = headTiming(switches, comets, grid, shownAtStart, shownAtEnd, count)
     val streams = pairs.map { (source, target) -> StreamPlan(sources[source], targets[target], spacing, comets) }
     val wanted = streams.sumOf { it.headCount }
-    val handOverCentres = if (timing is HeadTiming.Synced) FloatArray(count) { Float.NaN } else null
+    val handOverCentres = if (handsOver && timing is HeadTiming.Synced) FloatArray(count) { Float.NaN } else null
     val heads = streams.flatMap { stream ->
         val headCount = if (wanted <= COMET_MAX_HEADS) stream.headCount else max(1, stream.headCount * COMET_MAX_HEADS / wanted)
         stream.heads(headCount, spacing, comets, seed, startClearance, endClearance, timing, handOverCentres)
@@ -355,14 +372,7 @@ private fun handOverNodesOf(centres: FloatArray?): IntArray = centres?.let { cen
  * the nodes each end shows, by [shownAtStart] and [shownAtEnd], with no stagger and no easing; free otherwise.
  */
 @Suppress("LongParameterList") // The switches, the settings, the grid, what each end shows and the node count.
-private fun headTiming(
-    switches: FloatArray?,
-    comets: MorpheusGraphComets,
-    grid: CellGrid,
-    shownAtStart: BooleanArray,
-    shownAtEnd: BooleanArray,
-    count: Int,
-): HeadTiming = when {
+private fun headTiming(switches: FloatArray?, comets: MorpheusGraphComets, grid: CellGrid, shownAtStart: BooleanArray, shownAtEnd: BooleanArray, count: Int): HeadTiming = when {
     switches == null -> HeadTiming.Whole
     comets.stagger == 0f && comets.easing == 0f -> HeadTiming.Synced(switches, CellShares(grid, shownAtStart, count), CellShares(grid, shownAtEnd, count))
     else -> HeadTiming.Flight
@@ -442,6 +452,7 @@ private class StreamPlan(val source: Cluster, val target: Cluster, spacing: Floa
         val windowStart = if (timing is HeadTiming.Whole) 0f else (MORPH_RELAY_SPLIT - comets.zone).coerceAtLeast(0f)
         val window = if (timing is HeadTiming.Whole) 1f else (MORPH_RELAY_SPLIT + comets.zone).coerceAtMost(1f) - windowStart
         val duration = window * (1f - MAX_STAGGER * comets.stagger)
+        val reach = MORPH_FADE_WINDOW / 2f + comets.lead
         return List(headCount) { slice ->
             val from = sourceSlices[slice]
             val to = targetSlices[slice]
@@ -450,17 +461,9 @@ private class StreamPlan(val source: Cluster, val target: Cluster, spacing: Floa
             val deviate = (draws - SIZE_DRAWS / 2f) * sqrt(12f / SIZE_DRAWS)
             val headSize = max(comets.size + comets.sizeDeviation * deviate, MIN_HEAD_SIZE_SHARE * comets.size)
             val opens = windowStart + (window - duration) * headRandom(source.firstNode, target.firstNode, slice, STAGGER_SALT, seed)
-            var startsAt = opens
-            var endsAt = opens + duration
-            if (synced != null) {
-                startsAt = from.meanCentre
-                endsAt = to.meanCentre
-                if (endsAt - startsAt < COMET_MIN_FLIGHT) {
-                    val middle = (startsAt + endsAt) / 2f
-                    startsAt = middle - COMET_MIN_FLIGHT / 2f
-                    endsAt = middle + COMET_MIN_FLIGHT / 2f
-                }
-            }
+            val flight = if (synced != null) syncedFlight(from.meanCentre, to.meanCentre, reach) else opens..opens + duration
+            val startsAt = flight.start
+            val endsAt = flight.endInclusive
             val sourceRadius = min(from.spread * headSize, from.depth)
             val targetRadius = min(to.spread * headSize, to.depth)
             val middleRadius = min((from.spread + to.spread) / 2f * headSize, min(sourceRadius, targetRadius) / MIN_END_RADIUS_SHARE)
@@ -471,24 +474,43 @@ private class StreamPlan(val source: Cluster, val target: Cluster, spacing: Floa
                 targetY = to.anchorY,
                 sourceRadius = sourceRadius,
                 targetRadius = targetRadius,
-                startsAt = startsAt.coerceIn(0f, 1f),
-                endsAt = endsAt.coerceIn(0f, 1f),
+                startsAt = startsAt,
+                endsAt = endsAt,
                 easing = comets.easing,
                 middleRadius = middleRadius,
                 sourceDensity = from.density,
                 targetDensity = to.density,
-            ).also { head -> if (handOverCentres != null) handOver(head, from, to, handOverCentres) }
+            ).also { if (handOverCentres != null) handOver(from, min(from.meanCentre, startsAt + reach), to, max(to.meanCentre, endsAt - reach), handOverCentres) }
         }
     }
 }
 
 /**
- * Into [centres], the fade centre each node of [head]'s two slices takes: the head's departure for its [from] nodes, the
- * latest of them where several heads leave one node, and its landing for its [to] nodes, the earliest of them.
+ * A synced head's flight: from [reach] before the earlier of its slices' fade centres, [fromCentre] and [toCentre], to
+ * [reach] after the later, which is its source's then its target's unless the morph's gap overlaps the sweeps so far
+ * that the target fades in first. A flight shorter than [COMET_MIN_FLIGHT] is widened around its middle, and one
+ * crossing the morph's ends is cut to them, then shifted back to that length. Both ends mirror, so the reverse morph
+ * retraces the head.
  */
-private fun handOver(head: CometHead, from: Slice, to: Slice, centres: FloatArray) {
-    for (node in from.nodes) centres[node] = if (centres[node].isNaN()) head.startsAt else max(centres[node], head.startsAt)
-    for (node in to.nodes) centres[node] = if (centres[node].isNaN()) head.endsAt else min(centres[node], head.endsAt)
+private fun syncedFlight(fromCentre: Float, toCentre: Float, reach: Float): ClosedFloatingPointRange<Float> {
+    val middle = (fromCentre + toCentre) / 2f
+    val half = max(abs(toCentre - fromCentre) / 2f + reach, COMET_MIN_FLIGHT / 2f)
+    val startsAt = (middle - half).coerceAtLeast(0f)
+    val endsAt = (middle + half).coerceAtMost(1f)
+    return when {
+        endsAt - startsAt >= COMET_MIN_FLIGHT -> startsAt..endsAt
+        startsAt == 0f -> 0f..COMET_MIN_FLIGHT
+        else -> 1f - COMET_MIN_FLIGHT..1f
+    }
+}
+
+/**
+ * Into [centres], the fade centre each node of a head's two slices takes: [departureCentre] for its [from] nodes, the
+ * latest of them where several heads leave one node, and [landingCentre] for its [to] nodes, the earliest of them.
+ */
+private fun handOver(from: Slice, departureCentre: Float, to: Slice, landingCentre: Float, centres: FloatArray) {
+    for (node in from.nodes) centres[node] = if (centres[node].isNaN()) departureCentre else max(centres[node], departureCentre)
+    for (node in to.nodes) centres[node] = if (centres[node].isNaN()) landingCentre else min(centres[node], landingCentre)
 }
 
 /**
@@ -527,13 +549,13 @@ private class CellShares(grid: CellGrid, shown: BooleanArray, count: Int) {
 
     init {
         for (node in 0 until count) {
-            total[grid.cellOf[node]]++
-            if (shown[node]) shownCount[grid.cellOf[node]]++
+            total[cellOf[node]]++
+            if (shown[node]) shownCount[cellOf[node]]++
         }
     }
 
     /** The share of the shown nodes over the cells the [nodes] lie in. */
-    fun shareOver(nodes: List<Int>): Float {
+    fun shareOver(nodes: IntArray): Float {
         var all = 0
         var lit = 0
         for (cell in nodes.mapTo(HashSet()) { cellOf[it] }) {
@@ -764,15 +786,7 @@ private class Cluster(val nodes: IntArray, val cells: IntArray, private val home
      * by [clearance]. Given [switches] and [shares], each also takes its nodes' mean fade centre and its cells' share.
      */
     @Suppress("LongParameterList") // The axis, the count, the spacing, the clearance, and the switches and shares a synced head needs.
-    fun slices(
-        axisX: Float,
-        axisY: Float,
-        count: Int,
-        spacing: Float,
-        clearance: Clearance,
-        switches: FloatArray? = null,
-        shares: CellShares? = null,
-    ): List<Slice> {
+    fun slices(axisX: Float, axisY: Float, count: Int, spacing: Float, clearance: Clearance, switches: FloatArray? = null, shares: CellShares? = null): List<Slice> {
         // Stable, so nodes level along the axis stay in index order on every platform.
         val sorted = nodes.sortedBy { homeX[it] * axisX + homeY[it] * axisY }.toIntArray()
         return List(count) { slice ->
@@ -803,10 +817,10 @@ private class Cluster(val nodes: IntArray, val cells: IntArray, private val home
             }
             val spread = max(sqrt(members / PI_FLOAT), COMET_MIN_SPREAD_SPACINGS) * spacing
             if (switches == null || shares == null) return@List Slice(homeX[anchor], homeY[anchor], spread, clearance.depthOf(anchor))
+            val sliceNodes = sorted.copyOfRange(start, end)
             var centres = 0f
-            for (position in start until end) centres += switchCentre(switches[sorted[position]])
-            val sliceNodes = (start until end).map { sorted[it] }
-            Slice(homeX[anchor], homeY[anchor], spread, clearance.depthOf(anchor), centres / members, shares.shareOver(sliceNodes), sliceNodes.toIntArray())
+            for (node in sliceNodes) centres += switchCentre(switches[node])
+            Slice(homeX[anchor], homeY[anchor], spread, clearance.depthOf(anchor), centres / members, shares.shareOver(sliceNodes), sliceNodes)
         }
     }
 
@@ -905,10 +919,12 @@ private fun centroidDistanceSquared(first: Cluster, second: Cluster): Float {
 
 /**
  * The zone of each cluster of [members] that sends or takes comets: the cells whose nodes, on average, switch within
- * [width] of the cluster's [last] (or first) cell. Each shape picks its own, so a piece the front reaches late still
- * takes part, and whole cells keep the front's jitter from speckling the zone into stray fragments.
+ * [width] of the cluster's [last] (or first) cell, and further cells in that order while the zone holds fewer than
+ * [COMET_MIN_CLUSTER] nodes, so a small piece still sends or takes a head. Each shape picks its own, so a piece the
+ * front reaches late still takes part, and whole cells keep the front's jitter from speckling the zone into stray
+ * fragments.
  */
-@Suppress("LongParameterList") // The members, their switches, the grid and the homes.
+@Suppress("LongParameterList") // The members, their switches, the grid, the homes and their count, the zone's width and its end.
 private fun zoneOf(members: BooleanArray, switches: FloatArray, grid: CellGrid, homeX: FloatArray, homeY: FloatArray, count: Int, width: Float, last: Boolean): BooleanArray {
     val zone = BooleanArray(count)
     for (cluster in clustersOf(members, grid, homeX, homeY, count)) {
@@ -919,12 +935,28 @@ private fun zoneOf(members: BooleanArray, switches: FloatArray, grid: CellGrid, 
             sums[cell] = (sums[cell] ?: 0f) + switchCentre(switches[node])
             counts[cell] = (counts[cell] ?: 0) + 1
         }
-        val means = sums.mapValues { (cell, sum) -> sum / counts.getValue(cell) }
-        val edge = if (last) means.values.max() else means.values.min()
-        val inZone = means.filterValues { mean -> if (last) mean >= edge - width else mean <= edge + width }.keys
+        val inZone = zoneCells(sums.mapValues { (cell, sum) -> sum / counts.getValue(cell) }, counts, width, last)
         for (node in cluster.nodes) zone[node] = zone[node] || grid.cellOf[node] in inZone
     }
     return zone
+}
+
+/**
+ * The cells of one cluster in its zone, by their [means] switch fade centres and node [counts]: those within [width]
+ * of its [last] (or first) cell, and further cells in that order while they hold fewer than [COMET_MIN_CLUSTER] nodes.
+ */
+private fun zoneCells(means: Map<Int, Float>, counts: Map<Int, Int>, width: Float, last: Boolean): Set<Int> {
+    val ordered = means.entries.sortedWith(compareBy({ (_, mean) -> if (last) -mean else mean }, { (cell, _) -> cell }))
+    val edge = ordered.first().value
+    val inZone = HashSet<Int>()
+    var zoneNodes = 0
+    for ((cell, mean) in ordered) {
+        val outside = if (last) mean < edge - width else mean > edge + width
+        if (outside && zoneNodes >= COMET_MIN_CLUSTER) break
+        inZone += cell
+        zoneNodes += counts.getValue(cell)
+    }
+    return inZone
 }
 
 /**
