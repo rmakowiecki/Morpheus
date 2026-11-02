@@ -818,9 +818,7 @@ private class Cluster(val nodes: IntArray, val cells: IntArray, private val home
             val spread = max(sqrt(members / PI_FLOAT), COMET_MIN_SPREAD_SPACINGS) * spacing
             if (switches == null || shares == null) return@List Slice(homeX[anchor], homeY[anchor], spread, clearance.depthOf(anchor))
             val sliceNodes = sorted.copyOfRange(start, end)
-            var centres = 0f
-            for (node in sliceNodes) centres += switchCentre(switches[node])
-            Slice(homeX[anchor], homeY[anchor], spread, clearance.depthOf(anchor), centres / members, shares.shareOver(sliceNodes), sliceNodes)
+            Slice(homeX[anchor], homeY[anchor], spread, clearance.depthOf(anchor), meanSwitchCentre(sliceNodes, switches), shares.shareOver(sliceNodes), sliceNodes)
         }
     }
 
@@ -928,17 +926,28 @@ private fun centroidDistanceSquared(first: Cluster, second: Cluster): Float {
 private fun zoneOf(members: BooleanArray, switches: FloatArray, grid: CellGrid, homeX: FloatArray, homeY: FloatArray, count: Int, width: Float, last: Boolean): BooleanArray {
     val zone = BooleanArray(count)
     for (cluster in clustersOf(members, grid, homeX, homeY, count)) {
-        val sums = HashMap<Int, Float>()
-        val counts = HashMap<Int, Int>()
-        for (node in cluster.nodes) {
-            val cell = grid.cellOf[node]
-            sums[cell] = (sums[cell] ?: 0f) + switchCentre(switches[node])
-            counts[cell] = (counts[cell] ?: 0) + 1
-        }
-        val inZone = zoneCells(sums.mapValues { (cell, sum) -> sum / counts.getValue(cell) }, counts, width, last)
+        val cellNodes = cluster.nodes.groupBy { grid.cellOf[it] }
+        val means = cellNodes.mapValues { (_, nodes) -> meanSwitchCentre(nodes.toIntArray(), switches) }
+        val inZone = zoneCells(means, cellNodes.mapValues { (_, nodes) -> nodes.size }, width, last)
         for (node in cluster.nodes) zone[node] = zone[node] || grid.cellOf[node] in inZone
     }
     return zone
+}
+
+/**
+ * The mean switch fade centre of [nodes] by [switches], skipping a node with no switch: one the same at both ends,
+ * though its presence crosses the threshold that puts it in a comet mask. 0.5 when none of them switches.
+ */
+private fun meanSwitchCentre(nodes: IntArray, switches: FloatArray): Float {
+    var centres = 0f
+    var switched = 0
+    for (node in nodes) {
+        val switchAt = switches[node]
+        if (switchAt.isNaN()) continue
+        centres += switchCentre(switchAt)
+        switched++
+    }
+    return if (switched > 0) centres / switched else 0.5f
 }
 
 /**

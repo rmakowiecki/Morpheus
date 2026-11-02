@@ -242,6 +242,16 @@ class MorpheusGraphCometsTest {
         }
     }
 
+    @Test
+    fun `nodes in a comet mask that have no switch leave the relay's zones and heads where they were`() {
+        val blocks = RelayBlocks()
+        for (row in 0 until RELAY_BLOCK_SIDE) blocks.switches[blocks.nodeAt(RELAY_BLOCK_SIDE - 1f, row.toFloat())] = Float.NaN
+
+        val anchors = blocks.streams().heads.map { it.anchors }
+
+        anchors.sortedWith(anchorOrder) shouldBe RelayBlocks().streams().heads.map { it.anchors }.sortedWith(anchorOrder)
+    }
+
     /**
      * Two square blocks of nodes a unit apart, with a block's width between them, in a relay at a gap of 0 that sweeps
      * from the left block's far side to the right block's: the left block leaves and the right one arrives, or the
