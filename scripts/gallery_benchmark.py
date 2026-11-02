@@ -4,14 +4,14 @@
 Builds the gallery's production bundle, serves it, and opens it in a separate Chrome with the recipe's
 flags and `?benchmark`, which opens "Pills to ribbons" on the 16:9 preview with scale to fit off and prints
 each half-second reading to the console; `--sample comet-playground` opens the heavier comet playground
-instead, through `&sample=`. Chrome writes the console to stderr; this collects the readings over whole
+instead, through `&sample=`, and `comets`, `retarget-morph` and `facing-arcs` the other samples with comets. Chrome writes the console to stderr; this collects the readings over whole
 loops of the sample and prints, per loop and as the median of the loops, the frame, graphs
 and phase-table totals in milliseconds per frame. `--skip` turns skip switches on through `&skip=`, for the
 recipe's skip rows: one row per run.
 
 A Chrome window opens for the run. Leave it in front and the machine otherwise idle.
 
-    python3 scripts/gallery_benchmark.py [--chrome PATH] [--sample hero|comet-playground] [--loops 3] [--skip edges,halos,dots,fill|all] [--skip-build]
+    python3 scripts/gallery_benchmark.py [--chrome PATH] [--sample hero|comet-playground|comets|retarget-morph|facing-arcs] [--loops 3] [--skip edges,halos,dots,fill|all] [--skip-build]
 """
 
 import argparse
@@ -31,8 +31,9 @@ import time
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 BUNDLE = ROOT / "samples/gallery/build/dist/wasmJs/productionExecutable"
 PREFIX = "morpheus-benchmark "
-# Each benchmark sample's loop: the hero's pills to ribbons and back, the playground's three morphs.
-LOOP_SECONDS = {"hero": 8.0, "comet-playground": 6.75}
+# Each benchmark sample's loop: the hero's pills to ribbons and back, the playground's three morphs, the comets
+# sample's two, the retarget sample's three legs and the facing arcs' two.
+LOOP_SECONDS = {"hero": 8.0, "comet-playground": 6.75, "comets": 6.0, "retarget-morph": 3.75, "facing-arcs": 3.5}
 WARM_UP_SECONDS = 6.0
 # Long enough for Chrome to start, and the bundle to load and compile; then a reading every half second.
 FIRST_READING_SECONDS = 60.0
@@ -184,7 +185,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--chrome", default=os.environ.get("CHROME_BIN", MAC_CHROME), help="Chrome or Chrome for Testing binary (default: $CHROME_BIN, else Google Chrome)")
     parser.add_argument("--sample", choices=list(LOOP_SECONDS), default="hero", help="the sample to measure (default: hero)")
-    parser.add_argument("--loops", type=positive_int, default=3, help="whole loops of the sample to measure, 8 s for the hero and 6.75 s for the playground (default: 3)")
+    parser.add_argument("--loops", type=positive_int, default=3, help="whole loops of the sample to measure, as long as LOOP_SECONDS gives (default: 3)")
     parser.add_argument("--skip", type=skip_list, default=[], help=f"skip switches to turn on, comma-separated from {', '.join(SKIPS)}, or all (default: none)")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--skip-build", action="store_true", help="serve the bundle as last built")

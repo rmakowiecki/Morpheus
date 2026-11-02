@@ -92,7 +92,7 @@ Phases under the timer's resolution read 0.00 until enough frames add up: in the
 ### Browser, scripted
 
 ```sh
-python3 scripts/gallery_benchmark.py [--sample hero|comet-playground] [--loops 3] [--skip edges,halos,dots,fill|all] [--skip-build] [--chrome PATH]
+python3 scripts/gallery_benchmark.py [--sample hero|comet-playground|comets|retarget-morph|facing-arcs] [--loops 3] [--skip edges,halos,dots,fill|all] [--skip-build] [--chrome PATH]
 ```
 
 It builds the production bundle, serves it, and opens it in a separate Chrome with the flags above and
@@ -100,7 +100,8 @@ It builds the production bundle, serves it, and opens it in a separate Chrome wi
 prints each half-second reading to the console as a `morpheus-benchmark` line. The script reads them
 from Chrome's log, skips a 6 s warm-up, and prints the frame, graphs and phase-table totals per frame,
 per loop and as the median of the loops. `--sample comet-playground` opens the playground instead,
-through `&sample=comet-playground`, and measures over its 6.75 s loops. It warns about readings
+through `&sample=comet-playground`, and measures over its 6.75 s loops. `comets` (6 s loops),
+`retarget-morph` (3.75 s) and `facing-arcs` (3.5 s) measure the other samples with comets the same way. It warns about readings
 flagged capped, canvas scaled or debug switches on. A Chrome window opens for the run: leave it in
 front and the machine otherwise idle, or Chrome slows it down. It uses `$CHROME_BIN` when set, else
 Google Chrome.
@@ -187,6 +188,11 @@ They print:
 - **`SettleBenchmark`, playground loop, playground morph meshes and playground comet track build:** the
   same three for "Comet playground", per morph: frame to blooms, blooms to cross and cross to frame. The
   loop prints a start and an end row for each morph.
+- **`MorphPhaseBenchmark`:** every leg of each sample with comets, the showcase, the playground, facing arcs,
+  comets and retarget morph, its interrupted leg included, played frame by frame at 60 fps on fresh fields:
+  the first frame, where the meshes and comets are built, the mean frame over the morph, the slowest frame after
+  the first with its fraction and the phase that dominates it, and the mean frame in each fifth of the morph.
+  Each split by `advance` phase, every layer summed, medians over 7 runs.
 - **`LivingDelaunayBenchmark`:** that preset's phases per frame, still. It settles its mesh every frame.
 - **`AlphaSettleBenchmark`:** the alpha settle per frame, every layer summed, in three steps: `reference`,
   the old sweep over every node and edge every round; `per-node constants`, the same with each node's

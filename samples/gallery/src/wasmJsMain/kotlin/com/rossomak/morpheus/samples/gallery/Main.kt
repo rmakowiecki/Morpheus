@@ -8,7 +8,8 @@ import org.w3c.dom.url.URLSearchParams
 
 /**
  * Fills the browser window with the gallery. `?benchmark` in the address opens it in benchmark mode on "Pills
- * to ribbons", `&sample=comet-playground` on the comet playground instead, and `&skip=halos,dots` or
+ * to ribbons", `&sample=comet-playground` on the comet playground instead (or `comets`, `retarget-morph`,
+ * `facing-arcs`), and `&skip=halos,dots` or
  * `&skip=all` with those skip switches on (see [Gallery] and [GalleryBenchmark.fromQuery]).
  */
 @OptIn(ExperimentalComposeUiApi::class)
