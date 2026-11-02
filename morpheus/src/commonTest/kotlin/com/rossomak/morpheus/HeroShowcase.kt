@@ -55,6 +55,8 @@ internal val heroPills = MorpheusGraphSpec(
                 Pill(x = 0.25f, y = 0.5f, length = 0.42f, thickness = 0.13f, rotation = 55f),
                 Pill(x = 0.75f, y = 0.5f, length = 0.42f, thickness = 0.13f, rotation = -55f),
             ),
+            comets = heroFront.comets.copy(zone = 0.45f, tail = 5f),
+            morphGap = -0.5f,
         ),
     ),
 )
@@ -69,15 +71,17 @@ internal val heroRibbons = heroPills.copy(
             ),
             waveAmplitude = 0.06f,
             waveSpeed = 0.45f,
+            comets = heroFront.comets.copy(zone = 0.45f, tail = 5f),
+            morphGap = -0.5f,
         ),
     ),
 )
 
 /** The showcase sample's loop at 60 fps: hold the pills, morph to the ribbons, hold them; then the same way back. */
 internal const val SHOWCASE_FRAME_SECONDS = 1f / 60f
-internal const val SHOWCASE_LOOP_FRAMES = 600
+internal const val SHOWCASE_LOOP_FRAMES = 480
 private const val SHOWCASE_HOLD_SECONDS = 0.75f
-private const val SHOWCASE_MORPH_SECONDS = 3.5f
+private const val SHOWCASE_MORPH_SECONDS = 2.5f
 private const val SHOWCASE_LEG_SECONDS = SHOWCASE_HOLD_SECONDS + SHOWCASE_MORPH_SECONDS + SHOWCASE_HOLD_SECONDS
 
 /**

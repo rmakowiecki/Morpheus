@@ -31,7 +31,7 @@ links here rather than repeating the steps.
 - **No frame-rate cap:** with vsync on, the frame interval stops at the display's refresh interval
   once a frame costs less than that, and hides the cost. The flags below turn it off, so the frame
   interval is the real cost per frame.
-- **Over a full loop:** the hero's loop is 10 s, pills to ribbons and back; the playground's is 12.75 s,
+- **Over a full loop:** the hero's loop is 8 s, pills to ribbons and back; the playground's is 6.75 s,
   frame to blooms to cross and back to frame. Read the numbers as they settle over a loop, not from a
   single half-second window.
 
@@ -100,7 +100,7 @@ It builds the production bundle, serves it, and opens it in a separate Chrome wi
 prints each half-second reading to the console as a `morpheus-benchmark` line. The script reads them
 from Chrome's log, skips a 6 s warm-up, and prints the frame, graphs and phase-table totals per frame,
 per loop and as the median of the loops. `--sample comet-playground` opens the playground instead,
-through `&sample=comet-playground`, and measures over its 12.75 s loops. It warns about readings
+through `&sample=comet-playground`, and measures over its 6.75 s loops. It warns about readings
 flagged capped, canvas scaled or debug switches on. A Chrome window opens for the run: leave it in
 front and the machine otherwise idle, or Chrome slows it down. It uses `$CHROME_BIN` when set, else
 Google Chrome.

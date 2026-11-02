@@ -56,7 +56,9 @@ internal val playgroundFront = MorpheusGraphLayerSpec(
     hotNodeShare = 0.12f,
     glowRadiusDp = 10f,
     glowStrength = 0.4f,
-    comets = MorpheusGraphComets(size = 1.25f, spark = 0.6f),
+    comets = MorpheusGraphComets(size = 1.25f, spark = 0.6f, zone = 0.75f, tail = 4f, lead = 0.25f),
+    // Each spec's sweep runs the whole morph together with the next one's.
+    morphGap = -1f,
 )
 
 internal val playgroundGhost = MorpheusGraphPresets.defaultBackLayer.copy(density = 16f, alpha = 0.3f)
@@ -80,10 +82,10 @@ val playgroundFrame = MorpheusGraphSpec(
     fill = MorpheusGraphFill.linear(listOf(Teal, Blue)),
 )
 
-/** Five round blooms, one near each corner and one in the middle, on a strongly waving, drifting mesh. */
+/** Five round blooms, one near each corner and one in the middle. */
 val playgroundBlooms = playgroundFrame.copy(
     layers = listOf(
-        playgroundGhost.copy(waveAmplitude = 0.06f, waveSpeed = 0.55f),
+        playgroundGhost,
         playgroundFront.copy(
             shapes = listOf(
                 Bloom(x = 0.2f, y = 0.2f, reach = 0.15f, plateau = 0.6f),
@@ -92,10 +94,7 @@ val playgroundBlooms = playgroundFrame.copy(
                 Bloom(x = 0.8f, y = 0.8f, reach = 0.15f, plateau = 0.6f),
                 Bloom(x = 0.5f, y = 0.5f, reach = 0.17f, plateau = 0.6f),
             ),
-            driftAmplitude = 0.8f,
-            driftSpeed = 2.2f,
-            waveAmplitude = 0.05f,
-            waveSpeed = 0.7f,
+            comets = playgroundFront.comets.copy(zone = 0.4f, tail = 2f, lead = -0.2f),
         ),
     ),
     fill = MorpheusGraphFill.linear(listOf(Purple, Amber)),
@@ -115,7 +114,7 @@ val playgroundCross = playgroundFrame.copy(
     fill = MorpheusGraphFill.linear(listOf(Red, Purple)),
 )
 
-private val PlaygroundTiming = MorphTiming(hold = 750.milliseconds, morph = 3500.milliseconds)
+private val PlaygroundTiming = MorphTiming(hold = 750.milliseconds, morph = 1500.milliseconds)
 
 /**
  * Frame, blooms and cross morph into each other in turn, on a loop: each leg holds a spec, then morphs to the

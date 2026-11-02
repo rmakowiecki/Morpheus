@@ -427,7 +427,7 @@ class MorpheusGraphCometsTest {
         const val TALL_WIDTH = 1080f
         const val TALL_HEIGHT = 1900f
         const val PX_PER_DP = 2.75f
-        const val SHOWCASE_FINGERPRINT = "c871eef0dd40b950"
+        const val SHOWCASE_FINGERPRINT = "80943241079e2060"
 
         /** At a stagger of 1 a head's window lasts 1 − 0.8 of the zones' window. */
         const val FULL_STAGGER_WINDOW_SHARE = 0.2f

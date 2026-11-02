@@ -43,12 +43,21 @@ private const val BLOOM_PLATEAU = 0.4f
 /** Wider than the default comet zone, so more of each bloom pours into the comets. */
 private const val RETARGET_COMET_ZONE = 0.3f
 
+/** Comets set off this long before their slices fade, so they're under way as the bloom starts to go. */
+private const val RETARGET_COMET_LEAD = 0.5f
+
+/**
+ * A relay with a pause, so each bloom hands its slices over to its comets, only the comets fly between the two
+ * sweeps, and an interrupted morph shows one source, not three.
+ */
+private const val RETARGET_MORPH_GAP = 0.3f
+
 /** One bloom in a morph family of its own, so any two of them morph into each other on one mesh, comets and all. */
-private fun bloomSpec(x: Float, y: Float): MorpheusGraphSpec = MorphFamily.cornerBloom.withSampleComets().let { spec ->
-    spec.copy(
-        layers = spec.layers.map {
-            it.copy(shapes = listOf(Bloom(x = x, y = y, reach = BLOOM_REACH, plateau = BLOOM_PLATEAU)), comets = it.comets.copy(zone = RETARGET_COMET_ZONE))
-        },
+private fun bloomSpec(x: Float, y: Float): MorpheusGraphSpec = MorphFamily.cornerBloom.withSampleComets().mapLayers {
+    it.copy(
+        shapes = listOf(Bloom(x = x, y = y, reach = BLOOM_REACH, plateau = BLOOM_PLATEAU)),
+        comets = it.comets.copy(zone = RETARGET_COMET_ZONE, lead = RETARGET_COMET_LEAD),
+        morphGap = RETARGET_MORPH_GAP,
     )
 }
 
@@ -75,7 +84,7 @@ private const val INTERRUPT_AT = 0.5f
 
 private const val RETARGET_LEGS = 3
 
-private val RetargetMorphTiming = MorphTiming(hold = 750.milliseconds, morph = 3000.milliseconds)
+private val RetargetMorphTiming = MorphTiming(hold = 750.milliseconds, morph = 500.milliseconds)
 
 /** A moment of the script: the target the morph heads for, its eased fraction, and the phase shown. */
 internal data class RetargetStep(val target: RetargetTarget, val fraction: Float, val phase: RetargetPhase)

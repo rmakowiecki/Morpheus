@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.ui.Modifier
 import com.rossomak.morpheus.MorpheusGraphComets
+import com.rossomak.morpheus.MorpheusGraphLayerSpec
 import com.rossomak.morpheus.MorpheusGraphSpec
 import com.rossomak.morpheus.ShapePrimitive.Bloom
 import com.rossomak.morpheus.morpheusGraphBackground
@@ -33,7 +34,10 @@ internal fun MorpheusGraphSpec.forMorphSample(density: Float = MORPH_DENSITY) = 
     },
 )
 
-internal fun MorpheusGraphSpec.withoutComets() = copy(layers = layers.map { it.copy(comets = MorpheusGraphComets(strength = 0f)) })
+internal fun MorpheusGraphSpec.withoutComets() = mapLayers { it.copy(comets = MorpheusGraphComets(strength = 0f)) }
+
+/** This spec with every layer put through [transform]. */
+internal fun MorpheusGraphSpec.mapLayers(transform: (MorpheusGraphLayerSpec) -> MorpheusGraphLayerSpec) = copy(layers = layers.map(transform))
 
 /** The easings of the morphs called [morphNames], in that order. */
 internal fun SampleSpecs.easings(vararg morphNames: String): List<Easing> = morphNames.map { easing(it) }
