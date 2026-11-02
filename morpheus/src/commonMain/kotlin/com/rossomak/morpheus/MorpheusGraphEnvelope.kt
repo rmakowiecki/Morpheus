@@ -53,7 +53,8 @@ internal class MorpheusGraphEnvelope(private val seed: Int) {
     fun densityAt(spec: MorpheusGraphLayerSpec, width: Float, height: Float, x: Float, y: Float): Float {
         var density = 0f
         var ribbonOrdinal = 0
-        for (primitive in spec.shapes) {
+        for (shapeIndex in spec.shapes.indices) {
+            val primitive = spec.shapes[shapeIndex]
             val weight = primitive.weight.coerceIn(0f, 1f)
             val ordinal = if (primitive is Ribbon) ribbonOrdinal++ else 0
             if (weight <= density) continue
@@ -79,7 +80,8 @@ internal class MorpheusGraphEnvelope(private val seed: Int) {
     fun closenessAt(spec: MorpheusGraphLayerSpec, width: Float, height: Float, x: Float, y: Float): Float {
         var closeness = 0f
         var ribbonOrdinal = 0
-        for (primitive in spec.shapes) {
+        for (shapeIndex in spec.shapes.indices) {
+            val primitive = spec.shapes[shapeIndex]
             val weight = primitive.weight.coerceIn(0f, 1f)
             val ordinal = if (primitive is Ribbon) ribbonOrdinal++ else 0
             if (weight <= closeness) continue
