@@ -51,9 +51,18 @@ internal data class CycleLeg(val index: Int, val fraction: Float)
 
 /** The leg [time] falls in (clamped to the last) and its eased morph fraction; each leg holds half the hold, morphs, then holds half. */
 internal fun cycleLegAt(time: Duration, timing: MorphTiming, easings: List<Easing>): CycleLeg {
-    val index = (time / timing.leg).toInt().coerceIn(0, easings.size - 1)
+    val progress = legProgressAt(time, timing, legs = easings.size)
+    return CycleLeg(progress.index, easings[progress.index].transform(progress.linear))
+}
+
+/** A cycle's current leg and its morph's [linear] progress, 0 to 1, before any easing. */
+internal data class LegProgress(val index: Int, val linear: Float)
+
+/** Where [time] falls in a cycle of [legs]; the last leg takes any overrun. */
+internal fun legProgressAt(time: Duration, timing: MorphTiming, legs: Int): LegProgress {
+    val index = (time / timing.leg).toInt().coerceIn(0, legs - 1)
     val linear = ((time - timing.leg * index - timing.hold / 2) / timing.morph).toFloat().coerceIn(0f, 1f)
-    return CycleLeg(index, easings[index].transform(linear))
+    return LegProgress(index, linear)
 }
 
 /**

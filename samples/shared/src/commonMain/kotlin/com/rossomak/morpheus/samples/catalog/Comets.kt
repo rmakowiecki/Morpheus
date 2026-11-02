@@ -25,7 +25,8 @@ private const val COMETS_DENSITY = 70f
 /** Blooms shrink to this share of their reach, so the nodes have further to travel and the streams are easier to follow. */
 private const val BLOOM_REACH_SHARE = 0.65f
 
-private fun MorpheusGraphSpec.withSampleComets() = forMorphSample(COMETS_DENSITY).let { spec ->
+/** This spec at the comets sample's mesh density, with its blooms drawn in and its comets turned up. */
+internal fun MorpheusGraphSpec.withSampleComets() = forMorphSample(COMETS_DENSITY).let { spec ->
     spec.copy(
         layers = spec.layers.map { layer ->
             layer.copy(
