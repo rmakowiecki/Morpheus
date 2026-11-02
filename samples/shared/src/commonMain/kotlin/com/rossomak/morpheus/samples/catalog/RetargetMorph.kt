@@ -111,27 +111,32 @@ fun RetargetMorphSample(
     }
     Box(modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().morpheusGraphBackground(state))
-        TargetRings(current = step.phase.ring)
+        TargetRings(specs, current = step.phase.ring)
         SampleLabel(text = step.phase.caption, modifier = Modifier.align(Alignment.TopStart).padding(12.dp))
     }
 }
 
-/** A ring at each target, the one the morph is heading for drawn bold. */
+/** A ring at each target's bloom in [specs], the one the morph is heading for drawn bold. */
 @Composable
-private fun TargetRings(current: RetargetTarget) {
+private fun TargetRings(specs: List<MorpheusGraphSpec>, current: RetargetTarget) {
     val color = MaterialTheme.colorScheme.onSurface
     Canvas(Modifier.fillMaxSize()) {
         RetargetTarget.entries.forEach { target ->
             val isCurrent = target == current
+            val centre = specs[target.ordinal].bloomCentre() ?: Offset(target.x, target.y)
             drawCircle(
                 color = if (isCurrent) color else color.copy(alpha = 0.35f),
                 radius = 14.dp.toPx(),
-                center = Offset(size.width * target.x, size.height * target.y),
+                center = Offset(size.width * centre.x, size.height * centre.y),
                 style = Stroke(width = (if (isCurrent) 3.dp else 1.5.dp).toPx()),
             )
         }
     }
 }
+
+/** The centre of this spec's first bloom, so a ring follows a tuned bloom; null once tuning has removed every bloom. */
+private fun MorpheusGraphSpec.bloomCentre(): Offset? =
+    layers.firstNotNullOfOrNull { layer -> layer.shapes.firstNotNullOfOrNull { it as? Bloom } }?.let { Offset(it.x, it.y) }
 
 internal val retargetMorphSample = Sample(
     id = "retarget-morph",
