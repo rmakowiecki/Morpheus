@@ -55,11 +55,17 @@ public class MorpheusGraphMorphState(initial: MorpheusGraphSpec) {
     private var seekTarget: MorpheusGraphSpec? = null
     private val mutator = Mutator()
 
+    /** The last [morph], returned again while its inputs hold. */
+    private var lastMorph: MorpheusGraphMorph? = null
+
     /** What the background draws now. */
     public val morph: MorpheusGraphMorph
         get() {
             val fraction = progress.value
-            return MorpheusGraphMorph(from, to, fraction, origin.takeIf { fraction < 1f })
+            val shownOrigin = origin.takeIf { fraction < 1f }
+            val last = lastMorph
+            if (last != null && last.from === from && last.to === to && last.origin === shownOrigin && last.fraction == fraction) return last
+            return MorpheusGraphMorph(from, to, fraction, shownOrigin).also { lastMorph = it }
         }
 
     /** The spec the state is heading for, or shows once it has arrived. */

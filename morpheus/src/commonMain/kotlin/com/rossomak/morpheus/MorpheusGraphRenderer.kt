@@ -14,6 +14,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -142,25 +143,18 @@ private fun Modifier.drawMorpheusGraph(
         // No window in previews; the surface itself is the next best fixed reference.
         val windowLongSide = max(windowSize.width, windowSize.height).toFloat()
         val referenceSize = if (windowLongSide > 0f) windowLongSide else max(size.width, size.height)
-        val layers = holder.layersFor(morph(), fill)
-        val fields = holder.fieldsFor(layers, referenceSize, density)
-        // Two meshes dissolving into each other draw one spec layer, and a fill sees them as one.
-        val layerCount = (layers.maxOfOrNull { it.slotFromFront } ?: -1) + 1
+        holder.startFrame(morph(), fill, referenceSize, density)
+        val fields = holder.fields
         // Nodes deliberately sit past the surface's edges, and drawBehind is not clipped.
         clipRect {
-            fields.forEachIndexed { index, field ->
-                val layer = layers[index]
-                probe?.startLayer(layer.slotFromFront, field)
-                val layerFill = layer.fill.toLayerFill(layerCount - 1 - layer.slotFromFront, layerCount, timeSeconds, size)
-                probe?.lap(FramePhase.Fill)
-                field.advance(timeSeconds, size.width, size.height, probe)
-                val halos = holder.halosFor(layerFill.maskColor)
-                probe?.lapUnlessSkipped(FramePhase.Halos, skip = probe.stats.skipHalos)
-                field.draw(this, layerFill, halos, timeSeconds, showsViolations, probe, showsComets)
+            // By index: no iterator garbage.
+            for (index in fields.indices) {
+                val field = fields[index]
+                holder.prepareLayer(index, timeSeconds, size, probe)
+                field.draw(this, holder.layerFill(index), holder.halos(index), timeSeconds, showsViolations, probe, showsComets)
                 probe?.endLayer(field)
             }
         }
-        holder.endFrame()
         drawStart?.let { start -> stats?.recordDraw(start.elapsedNow().inWholeNanoseconds) }
         layerStats?.record(fields)
     }
@@ -221,11 +215,14 @@ public class MorpheusGraphLayerStats {
 }
 
 /**
- * Per-modifier state kept across frames: the morph's layers, one [LayerField] per mesh and the halo brushes.
+ * Per-modifier state kept across frames: the morph's layers, one [LayerField] per mesh, and each drawn
+ * layer's fill and halo brushes.
  *
  * A field is kept for as long as its layer stays in the same morph family and seed, whatever else
  * changes, so a morph, a tuning edit or a resize never rebuilds it; only a new window size, which
  * changes the grid's cell size, rebuilds them all.
+ *
+ * A still frame reuses the last frame's layers, fields and fills, so it allocates nothing.
  */
 internal class MorpheusGraphHolder {
     /** Tells the holder's background apart in [MorpheusGraphFrameStats], without the stats holding on to it. */
@@ -234,11 +231,23 @@ internal class MorpheusGraphHolder {
     private var builtReferenceSize = 0f
     private var builtPxPerDp = 0f
     private var fieldsByFamily = HashMap<LayerFamily, LayerField>()
-    private var halosByColor = HashMap<Color, HaloBrushCache>()
-    private var halosThisFrame = HashMap<Color, HaloBrushCache>()
     private var lastMorph: MorpheusGraphMorph? = null
     private var lastFill: MorpheusGraphFill? = null
     private var lastLayers: List<MorphLayer> = emptyList()
+
+    /** The layers [fields] and [layerCount] were built for. */
+    private var fieldsLayers: List<MorphLayer>? = null
+    private var layerCount = 0
+
+    /** One per drawn layer, by position; only ever added to. */
+    private val slots = ArrayList<LayerSlot>()
+
+    /** The last [startFrame]'s layers, back to front. */
+    val layers: List<MorphLayer> get() = lastLayers
+
+    /** The last [startFrame]'s field for each of [layers]. */
+    var fields: List<LayerField> = emptyList()
+        private set
 
     /** [morph]'s layers, worked out again only when the morph or the inherited fill changes. */
     fun layersFor(morph: MorpheusGraphMorph, fill: MorpheusGraphFill): List<MorphLayer> {
@@ -250,8 +259,11 @@ internal class MorpheusGraphHolder {
         return lastLayers
     }
 
+    /** One field per layer of [layers]; the same list again for the same [layers], window and density. */
     fun fieldsFor(layers: List<MorphLayer>, referenceSize: Float, pxPerDp: Float): List<LayerField> {
-        if (referenceSize != builtReferenceSize || pxPerDp != builtPxPerDp) {
+        val sameWindow = referenceSize == builtReferenceSize && pxPerDp == builtPxPerDp
+        if (layers === fieldsLayers && sameWindow) return fields
+        if (!sameWindow) {
             fieldsByFamily.clear()
             builtReferenceSize = referenceSize
             builtPxPerDp = pxPerDp
@@ -266,16 +278,70 @@ internal class MorpheusGraphHolder {
             field
         }
         fieldsByFamily = kept
+        fieldsLayers = layers
+        this.fields = fields
+        // Two meshes dissolving into each other draw one spec layer, and a fill sees them as one.
+        layerCount = (layers.maxOfOrNull { it.slotFromFront } ?: -1) + 1
+        while (slots.size < layers.size) slots += LayerSlot()
         return fields
     }
 
-    fun halosFor(color: Color): HaloBrushCache = halosThisFrame.getOrPut(color) { halosByColor[color] ?: HaloBrushCache(color) }
-
-    /** Drops every halo cache the frame just drawn didn't use: a crossfade or an animated fill passes a new color each frame. */
-    fun endFrame() {
-        halosByColor = halosThisFrame
-        halosThisFrame = HashMap()
+    /** Works out [morph]'s [layers] and their [fields]; then [prepareLayer] readies each one for drawing. */
+    fun startFrame(morph: MorpheusGraphMorph, fill: MorpheusGraphFill, referenceSize: Float, pxPerDp: Float) {
+        fieldsFor(layersFor(morph, fill), referenceSize, pxPerDp)
     }
+
+    /**
+     * Works out the [layerFill] at [index] on [size] and advances its field to [timeSeconds]. Called right before the
+     * layer draws, so it draws the nodes its advance just touched. [probe] starts timing the layer; the caller ends it.
+     */
+    fun prepareLayer(index: Int, timeSeconds: Float, size: Size, probe: LayerProbe? = null) {
+        val field = fields[index]
+        val layer = lastLayers[index]
+        probe?.startLayer(layer.slotFromFront, field)
+        updateFill(index, layer.fill, layerCount - 1 - layer.slotFromFront, timeSeconds, size)
+        probe?.lap(FramePhase.Fill)
+        field.advance(timeSeconds, size.width, size.height, probe)
+    }
+
+    /** The last [prepareLayer]'s fill for the layer at [index]. */
+    fun layerFill(index: Int): LayerFill = slots[index].fill ?: error("no fill prepared for layer $index")
+
+    /** The halo brushes in the mask color of [layerFill] at [index]. */
+    fun halos(index: Int): HaloBrushCache = slots[index].halos ?: error("no halos prepared for layer $index")
+
+    /**
+     * Works out the fill at [position] again only when its inputs change; a [MorpheusGraphFill.Custom] fill reads the
+     * time, so it is worked out every frame. Its halo brushes change only with the mask color.
+     */
+    private fun updateFill(position: Int, state: FillState, layerIndex: Int, timeSeconds: Float, size: Size) {
+        val slot = slots[position]
+        if (slot.state == state && slot.layerIndex == layerIndex && slot.layerCount == layerCount && slot.size == size) return
+        val layerFill = state.toLayerFill(layerIndex, layerCount, timeSeconds, size)
+        slot.fill = layerFill
+        slot.state = state.takeUnless { it.hasCustomFill() }
+        slot.layerIndex = layerIndex
+        slot.layerCount = layerCount
+        slot.size = size
+        val maskColor = layerFill.maskColor
+        if (slot.halos?.color != maskColor) slot.halos = HaloBrushCache(maskColor)
+    }
+}
+
+/** One drawn layer's fill, what it was worked out for, and its halo brushes. */
+private class LayerSlot {
+    var fill: LayerFill? = null
+    var state: FillState? = null
+    var layerIndex = -1
+    var layerCount = 0
+    var size = Size.Unspecified
+    var halos: HaloBrushCache? = null
+}
+
+/** True if this state paints with a [MorpheusGraphFill.Custom] fill anywhere, which is asked for its brush every frame. */
+private fun FillState.hasCustomFill(): Boolean = when (this) {
+    is FillState.Of -> fill is MorpheusGraphFill.Custom
+    is FillState.Crossfade -> from.hasCustomFill() || to.hasCustomFill()
 }
 
 /** What a [LayerField] can't change after it is built. */
@@ -287,18 +353,18 @@ private data class LayerFamily(val seed: Int, val density: Float, val jitter: Fl
  * One radial-gradient [Brush] per halo radius, built on first use and kept. Per-halo brightness goes
  * through `drawCircle`'s alpha rather than into the brush, so a handful of brushes cover a surface.
  */
-internal class HaloBrushCache(private val color: Color) {
-    private val brushesByRadius = HashMap<Int, Brush>()
+internal class HaloBrushCache(val color: Color) {
+    /** By whole radius in pixels, grown on demand: a map would box its keys. */
+    private var brushesByRadius = arrayOfNulls<Brush>(0)
 
     fun brushFor(radius: Float): Brush {
         val key = radius.toInt().coerceAtLeast(1)
-        return brushesByRadius.getOrPut(key) {
+        if (key >= brushesByRadius.size) brushesByRadius = brushesByRadius.copyOf(key + 1)
+        return brushesByRadius[key] ?: Brush.radialGradient(
             // Fading to the same color at zero alpha, not Color.Transparent, which would pass through black.
-            Brush.radialGradient(
-                colors = listOf(color.copy(alpha = 1f), color.copy(alpha = 0f)),
-                center = Offset.Zero,
-                radius = key.toFloat(),
-            )
-        }
+            colors = listOf(color.copy(alpha = 1f), color.copy(alpha = 0f)),
+            center = Offset.Zero,
+            radius = key.toFloat(),
+        ).also { brushesByRadius[key] = it }
     }
 }

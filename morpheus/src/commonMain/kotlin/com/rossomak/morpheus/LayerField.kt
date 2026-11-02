@@ -538,7 +538,10 @@ internal class LayerField(
     private val layerPaint by lazy(LazyThreadSafetyMode.NONE) { Paint() }
 
     /** The edges and dots [draw] paints, refilled every frame. */
-    private val pointBatches = PointBatches()
+    internal val pointBatches = PointBatches()
+
+    /** The offscreen layer's bounds, rebuilt only when the surface's size changes. */
+    private var layerBounds = Rect.Zero
 
     /** Edge alpha of node [index]'s brightest edge, as of the last [advance]. */
     internal fun brightestEdgeAlpha(index: Int): Float = brightestEdgeAlphas[index]
@@ -742,7 +745,9 @@ internal class LayerField(
         }
         wasMidMorph = morph != null
         if (!presencesHeld || topology !== prunedTopology) {
-            prunedNodeCount = (0 until count).count { presentMask[it] && !topology.alive[it] }
+            var pruned = 0
+            for (index in 0 until count) if (presentMask[index] && !topology.alive[index]) pruned++
+            prunedNodeCount = pruned
             prunedTopology = topology
         }
     }
@@ -821,7 +826,9 @@ internal class LayerField(
     ) = with(scope) {
         val color = fill.maskColor
         layerPaint.alpha = fill.layerAlpha
-        drawIntoCanvas { canvas -> canvas.saveLayer(Rect(Offset.Zero, size), layerPaint) }
+        if (layerBounds.width != size.width || layerBounds.height != size.height) layerBounds = Rect(Offset.Zero, size)
+        val bounds = layerBounds
+        drawIntoCanvas { canvas -> canvas.saveLayer(bounds, layerPaint) }
         // The save and its restore count as one draw call.
         var drawCalls = 1
         probe?.lap(FramePhase.Composite)
@@ -834,7 +841,10 @@ internal class LayerField(
         if (fill is LayerFill.Masked) {
             drawCalls += probe.timed(FramePhase.Fill, skip = probe?.stats?.skipFillRecolor == true) {
                 drawRect(brush = fill.base, blendMode = BlendMode.SrcIn)
-                fill.overlays.forEach { overlay -> drawRect(brush = overlay.brush, alpha = overlay.alpha, blendMode = BlendMode.SrcAtop) }
+                for (index in fill.overlays.indices) {
+                    val overlay = fill.overlays[index]
+                    drawRect(brush = overlay.brush, alpha = overlay.alpha, blendMode = BlendMode.SrcAtop)
+                }
                 1 + fill.overlays.size
             }
         }
@@ -1410,10 +1420,15 @@ internal class LayerField(
 
     /** True if any value the edge filters or [restEdgeAlpha] use changed since the last settle. */
     private fun updateSettledFilters(): Boolean {
-        val filters = spec.settledFilterValues()
-        if (filters.contentEquals(settledFilters)) return false
-        filters.copyInto(settledFilters)
-        return true
+        var changed = false
+        for (index in 0 until SETTLED_FILTER_COUNT) {
+            val value = spec.settledFilterValue(index)
+            if (!sameFilterValue(value, settledFilters[index])) {
+                settledFilters[index] = value
+                changed = true
+            }
+        }
+        return changed
     }
 
     /**
@@ -1939,21 +1954,30 @@ private fun rollWeight(roll: Float, share: Float): Float {
 }
 
 /** Whether a [EdgeRule.FixedTriangulation] settle under this spec and under [other] keeps the same edges: every value it reads matches. */
-private fun MorpheusGraphLayerSpec.settlesLike(other: MorpheusGraphLayerSpec): Boolean =
-    strictTriangles == other.strictTriangles && settledFilterValues().contentEquals(other.settledFilterValues())
+private fun MorpheusGraphLayerSpec.settlesLike(other: MorpheusGraphLayerSpec): Boolean {
+    if (strictTriangles != other.strictTriangles) return false
+    for (index in 0 until SETTLED_FILTER_COUNT) {
+        if (!sameFilterValue(settledFilterValue(index), other.settledFilterValue(index))) return false
+    }
+    return true
+}
 
-/** Every value the edge filters and [restEdgeAlpha] read, [MorpheusGraphLayerSpec.strictTriangles] aside, in a fixed order. */
-private fun MorpheusGraphLayerSpec.settledFilterValues(): FloatArray = floatArrayOf(
-    maxEdgeFactor,
-    minAngleDegrees,
-    edgeKeepChance,
-    repairReach,
+/** Value [index] of those the edge filters and [restEdgeAlpha] read, [MorpheusGraphLayerSpec.strictTriangles] aside. */
+private fun MorpheusGraphLayerSpec.settledFilterValue(index: Int): Float = when (index) {
+    0 -> maxEdgeFactor
+    1 -> minAngleDegrees
+    2 -> edgeKeepChance
+    3 -> repairReach
     // Which edges count as visible at rest, and so which ones the settle may lean on.
-    edgeAlpha,
-    alpha,
-    lengthFalloff,
-    depthDimming,
-)
+    4 -> edgeAlpha
+    5 -> alpha
+    6 -> lengthFalloff
+    7 -> depthDimming
+    else -> throw IndexOutOfBoundsException("settled filter $index of $SETTLED_FILTER_COUNT")
+}
+
+/** Equal by bits, as `contentEquals` compares: NaN equals NaN, 0 differs from -0. */
+private fun sameFilterValue(first: Float, second: Float): Boolean = first.toBits() == second.toBits()
 
 /** A stable seed for one grid cell, so a cell's node is the same whenever and in whatever order it is created. */
 private fun cellSeed(column: Int, row: Int, seed: Int): Int {
