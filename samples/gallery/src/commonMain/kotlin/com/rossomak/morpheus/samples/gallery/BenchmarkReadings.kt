@@ -11,8 +11,8 @@ import com.rossomak.morpheus.MorpheusGraphFrameStats
 /** The sample the gallery opens in benchmark mode unless asked for another: the benchmark recipe's "Pills to ribbons". */
 internal const val BENCHMARK_SAMPLE_ID = "hero"
 
-/** The samples the benchmark measures: "Pills to ribbons", the heavier "Comet playground", and the other samples with comets. */
-internal val BENCHMARK_SAMPLE_IDS = listOf(BENCHMARK_SAMPLE_ID, "comet-playground", "comets", "retarget-morph", "facing-arcs")
+/** The samples the benchmark measures: "Pills to ribbons", and the heavier "Comet playground". */
+internal val BENCHMARK_SAMPLE_IDS = listOf(BENCHMARK_SAMPLE_ID, "comet-playground")
 
 /** Starts every line [LogBenchmarkReadings] prints, so a script can pick them out of a browser's log. */
 internal const val BENCHMARK_LINE_PREFIX = "morpheus-benchmark"
