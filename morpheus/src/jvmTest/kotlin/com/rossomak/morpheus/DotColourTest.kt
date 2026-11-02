@@ -119,8 +119,11 @@ class DotColourTest {
         const val MIN_JUDGED_BLUE = 60
         const val HUE_TOLERANCE = 0.12f
 
-        /** A dot this much dimmer than what lies under it reads as a hole. */
-        const val HOLE_SHARE = 0.12f
+        /**
+         * A dot this much dimmer than what lies under it reads as a hole. A hub's dozen edges can saturate its centre
+         * a little past the dot's own alpha, some 12% at the most; a dot punched through by mistake is far dimmer.
+         */
+        const val HOLE_SHARE = 0.15f
 
         /** Each scenario's layer fields, settled; built once and drawn by every test. */
         val SETTLED: Map<String, Map<Int, LayerField>> by lazy { scenarios().mapValues { (_, morph) -> fieldsOf(morph) } }

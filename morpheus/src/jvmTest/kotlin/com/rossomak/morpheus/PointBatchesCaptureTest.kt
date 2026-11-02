@@ -35,7 +35,7 @@ class PointBatchesCaptureTest {
                 if (!edgesBatched.contentEquals(edgesInLevelOrder)) failures += "$case: edges differ from drawLine in level order"
                 val edgeOrder = Difference.of(renderPerElement(field, width, height, edgesOnly = true), edgesBatched)
                 if (edgeOrder.largest > EDGE_ORDER_TOLERANCE) failures += "$case: edges in level order differ by ${edgeOrder.largest}"
-                val comparison = DotAreas.of(field, width, height).compare(renderPerElement(field, width, height), renderBatched(field, width, height))
+                val comparison = DotAreas.of(field, width, height).compare(renderPerElement(field, width, height, edgesInLevelOrder = true), renderBatched(field, width, height))
                 println("$case: edges in level order $edgeOrder; $comparison")
                 if (comparison.elsewhere > DOT_LEVEL_TOLERANCE) failures += "$case: $comparison"
             }
