@@ -2,6 +2,7 @@ package com.rossomak.morpheus.tuner
 
 import androidx.compose.ui.graphics.Color
 import com.rossomak.morpheus.GradientStop
+import com.rossomak.morpheus.MorpheusGraphComets
 import com.rossomak.morpheus.MorpheusGraphFill
 import com.rossomak.morpheus.MorpheusGraphLayerSpec
 import com.rossomak.morpheus.MorpheusGraphPresets
@@ -107,6 +108,18 @@ class MorpheusGraphSpecSourceTest {
 
         MorpheusGraphSpec(seed = 1, layers = listOf(layer)).toKotlinSource() shouldContain
             "shapes = listOf(ShapePrimitive.Ring(), ShapePrimitive.Rect(), ShapePrimitive.Triangle())"
+    }
+
+    @Test
+    fun `the comet zone, tail and lead and the morph gap print only when they differ from their defaults`() {
+        val tuned = MorpheusGraphLayerSpec(comets = MorpheusGraphComets(zone = 0.3f, tail = 4f, lead = 0.5f), morphGap = 0.3f)
+        val tunedSource = MorpheusGraphSpec(seed = 1, layers = listOf(tuned)).toKotlinSource()
+        val untouchedSource = MorpheusGraphSpec(seed = 1, layers = listOf(MorpheusGraphLayerSpec(comets = MorpheusGraphComets(size = 2f)))).toKotlinSource()
+
+        tunedSource shouldContain "comets = MorpheusGraphComets(zone = 0.3f, tail = 4.0f, lead = 0.5f)"
+        tunedSource shouldContain "morphGap = 0.3f"
+        untouchedSource shouldContain "comets = MorpheusGraphComets(size = 2.0f)"
+        untouchedSource shouldNotContain "morphGap"
     }
 
     @Test

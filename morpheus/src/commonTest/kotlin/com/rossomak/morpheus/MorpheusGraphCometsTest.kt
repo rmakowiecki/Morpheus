@@ -12,6 +12,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import com.rossomak.morpheus.ShapePrimitive.Bloom
 import com.rossomak.morpheus.ShapePrimitive.Pill
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.floats.plusOrMinus
 import io.kotest.matchers.floats.shouldBeGreaterThan
@@ -37,6 +38,8 @@ import kotlin.test.assertFailsWith
 class MorpheusGraphCometsTest {
 
     private val canvas = BenchmarkCanvas.Recipe
+    private val longPill = frontSpec(Pill(x = 0.5f, y = 0.25f, length = 0.9f, thickness = 0.12f, rotation = 0f))
+    private val lowerBlooms = frontSpec(Bloom(x = 0.15f, y = 0.8f, reach = 0.12f, plateau = 0.6f), Bloom(x = 0.85f, y = 0.8f, reach = 0.12f, plateau = 0.6f))
 
     /** At a gap of -1 both sweeps span the whole morph, so the comets still fly at [LATE_FRACTION]. */
     @Test
@@ -197,6 +200,18 @@ class MorpheusGraphCometsTest {
         blocks.switches.copyOf().also(streams::handOver).toList() shouldBe blocks.switches.toList()
     }
 
+    /** Every other node of the left block shows at the start, and all of the right block at the end. */
+    @Test
+    fun `a synced head carries the share of the nodes the start shape shows at its source and the end shape at its target`() {
+        val heads = RelayBlocks(sparseStart = true).streams().heads
+
+        heads.size shouldBeGreaterThan 0
+        heads.forEach { head ->
+            head.sourceDensity shouldBe (0.5f plusOrMinus DENSITY_TOLERANCE)
+            head.targetDensity shouldBe 1f
+        }
+    }
+
     @Test
     fun `a relay played backwards sends each synced head back along its path, over the mirrored window`() {
         val forward = RelayBlocks().streams().heads
@@ -230,9 +245,10 @@ class MorpheusGraphCometsTest {
     /**
      * Two square blocks of nodes a unit apart, with a block's width between them, in a relay at a gap of 0 that sweeps
      * from the left block's far side to the right block's: the left block leaves and the right one arrives, or the
-     * other way round, and the switches mirrored, when [reversed].
+     * other way round, and the switches mirrored, when [reversed]. With [sparseStart], only every other node of the
+     * block that leaves shows at the start, like a checkerboard.
      */
-    private class RelayBlocks(reversed: Boolean = false) {
+    private class RelayBlocks(reversed: Boolean = false, sparseStart: Boolean = false) {
         private val side = RELAY_BLOCK_SIDE
         val count = side * side * 2
         val homeX = FloatArray(count) { node -> (node % side + if (node < side * side) 0 else side * 2).toFloat() }
@@ -244,7 +260,9 @@ class MorpheusGraphCometsTest {
             val forward = if (left[node]) across / 2f else 0.5f + across / 2f
             if (reversed) 1f - forward else forward
         }
-        private val leaving = if (reversed) right else left
+        private val leaving = (if (reversed) right else left).let { block ->
+            if (sparseStart) BooleanArray(count) { node -> block[node] && (homeX[node] + homeY[node]).toInt() % 2 == 0 } else block
+        }
         private val arriving = if (reversed) left else right
 
         fun streams(comets: MorpheusGraphComets = MorpheusGraphComets()): CometStreams =
@@ -316,11 +334,9 @@ class MorpheusGraphCometsTest {
 
     @Test
     fun `a long pill splits into pieces, so each end of it streams to the bloom below that end`() {
-        val pill = frontSpec(Pill(x = 0.5f, y = 0.25f, length = 0.9f, thickness = 0.12f, rotation = 0f))
-        val blooms = frontSpec(Bloom(x = 0.15f, y = 0.8f, reach = 0.12f, plateau = 0.6f), Bloom(x = 0.85f, y = 0.8f, reach = 0.12f, plateau = 0.6f))
         val middle = canvas.width / 2f
 
-        val heads = frontField(pill, blooms, 0.5f).cometHeads
+        val heads = frontField(longPill, lowerBlooms, 0.5f).cometHeads
         val toLeft = heads.filter { it.targetX < middle }
         val toRight = heads.filter { it.targetX >= middle }
 
@@ -332,9 +348,7 @@ class MorpheusGraphCometsTest {
 
     @Test
     fun `every head's disc leaves from inside the start shape and lands inside the end shape`() {
-        val pill = frontSpec(Pill(x = 0.5f, y = 0.25f, length = 0.9f, thickness = 0.12f, rotation = 0f))
-        val blooms = frontSpec(Bloom(x = 0.15f, y = 0.8f, reach = 0.12f, plateau = 0.6f), Bloom(x = 0.85f, y = 0.8f, reach = 0.12f, plateau = 0.6f))
-        for ((from, to) in listOf(heroPills to heroRibbons, heroRibbons to heroPills, pill to blooms)) {
+        for ((from, to) in listOf(heroPills to heroRibbons, heroRibbons to heroPills, longPill to lowerBlooms)) {
             val start = frontField(from, to, 0f)
             val end = frontField(from, to, 1f)
             val heads = frontField(from, to, 0.5f).cometHeads
@@ -347,6 +361,51 @@ class MorpheusGraphCometsTest {
             sourceShares.first() shouldBeGreaterThanOrEqual MIN_DISC_SHOWN_SHARE
             targetShares.first() shouldBeGreaterThanOrEqual MIN_DISC_SHOWN_SHARE
         }
+    }
+
+    @Test
+    fun `a synced comet's nodes stay joined to the start shape as its head leaves and to the end shape as it lands`() {
+        var checked = 0
+        val pairs = listOf(heroPills to heroRibbons, heroRibbons to heroPills, longPill to lowerBlooms).map { (from, to) -> from.withDefaultTiming() to to.withDefaultTiming() }
+        for ((from, to) in pairs) {
+            val start = frontField(from, to, 0f)
+            val end = frontField(from, to, 1f)
+            for (head in frontField(from, to, 0.5f).cometHeads) {
+                val leaving = frontField(from, to, head.startsAt + EDGE_CHECK_STEP)
+                val landing = frontField(from, to, head.endsAt - EDGE_CHECK_STEP)
+                val departing = leaving.cometOnlyShownNear(Offset(head.sourceX, head.sourceY), EDGE_CHECK_RADII * head.sourceRadius, start, end)
+                val arriving = landing.cometOnlyShownNear(Offset(head.targetX, head.targetY), EDGE_CHECK_RADII * head.targetRadius, start, end)
+                checked += departing.size + arriving.size
+
+                val joinedAtDeparture = leaving.joinedToShown(start)
+                val joinedAtLanding = landing.joinedToShown(end)
+                departing.filterNot { joinedAtDeparture[it] }.shouldBeEmpty()
+                arriving.filterNot { joinedAtLanding[it] }.shouldBeEmpty()
+            }
+        }
+        checked shouldBeGreaterThan 0
+    }
+
+    /** The sample's lead and gap put the end of one sweep and the start of the other either side of its cut, half way. */
+    @Test
+    fun `at the retarget sample's cut neither the source nor the original target shows, only the comets in flight, and the retarget starts from them`() {
+        val source = frontField(retargetTopLeft, retargetTopRight, 0f)
+        val target = frontField(retargetTopLeft, retargetTopRight, 1f)
+        val interrupted = MorpheusGraphMorph(retargetTopLeft, retargetTopRight, RETARGET_CUT)
+        val cut = frontField(interrupted)
+        val shown = (0 until cut.nodeCount).filter { cut.nodePresence(it) >= PRESENT }
+        val changing = shown.filterNot { source.nodePresence(it) >= PRESENT && target.nodePresence(it) >= PRESENT }
+        val retargeted = frontField(MorpheusGraphMorph(lerp(retargetTopLeft, retargetTopRight, RETARGET_CUT), retargetBottomCentre, 0f, origin = interrupted))
+
+        cut.cometHeads.size shouldBeGreaterThan 0
+        cut.cometHeads.forEach { head ->
+            head.startsAt shouldBeLessThan RETARGET_CUT
+            head.endsAt shouldBeGreaterThan RETARGET_CUT
+        }
+        changing.size shouldBeGreaterThan 0
+        changing.filter { source.nodePresence(it) >= PRESENT || target.nodePresence(it) >= PRESENT }.shouldBeEmpty()
+        changing.filter { cut.nodeCometPeak(it) == 0f }.shouldBeEmpty()
+        (0 until retargeted.nodeCount).filter { retargeted.nodePresence(it) >= PRESENT } shouldBe shown
     }
 
     @Test
@@ -397,9 +456,42 @@ class MorpheusGraphCometsTest {
         return if (inside.isEmpty()) 1f else inside.count { nodePresence(it) >= PRESENT }.toFloat() / inside.size
     }
 
+    /** The nodes within [radius] of [center] this field shows and neither [start] nor [end] does: the ones only a comet lights. */
+    private fun LayerField.cometOnlyShownNear(center: Offset, radius: Float, start: LayerField, end: LayerField): List<Int> = (0 until nodeCount).filter { node ->
+        (nodeHome(node) - center).getDistance() <= radius && nodePresence(node) >= PRESENT && start.nodePresence(node) < PRESENT && end.nodePresence(node) < PRESENT
+    }
+
+    /**
+     * Which of this field's nodes a path of its drawn edges, through nodes it shows, joins to a node it shows that
+     * [shape] shows too: a comet node joined only through other comet nodes still shows no gap.
+     */
+    private fun LayerField.joinedToShown(shape: LayerField): BooleanArray {
+        val shown = BooleanArray(nodeCount) { nodePresence(it) >= PRESENT }
+        val neighbours = Array(nodeCount) { ArrayList<Int>() }
+        for (edge in 0 until drawnEdgeCount) {
+            val key = drawnEdgeKey(edge)
+            if (settledEdgeAlpha(edge) <= 0f || !shown[edgeStart(key)] || !shown[edgeEnd(key)]) continue
+            neighbours[edgeStart(key)] += edgeEnd(key)
+            neighbours[edgeEnd(key)] += edgeStart(key)
+        }
+        val joined = BooleanArray(nodeCount) { shown[it] && shape.nodePresence(it) >= PRESENT }
+        val queue = ArrayDeque((0 until nodeCount).filter { joined[it] })
+        while (queue.isNotEmpty()) {
+            for (next in neighbours[queue.removeFirst()]) {
+                if (joined[next]) continue
+                joined[next] = true
+                queue += next
+            }
+        }
+        return joined
+    }
+
     /** The showcase's front layer at [fraction] of the morph from [from] to [to], on the recipe's canvas. */
-    private fun frontField(from: MorpheusGraphSpec, to: MorpheusGraphSpec, fraction: Float): LayerField {
-        val layer = GalleryLoop.morphLayers(MorpheusGraphMorph(from, to, fraction)).first { it.slotFromFront == 0 }
+    private fun frontField(from: MorpheusGraphSpec, to: MorpheusGraphSpec, fraction: Float): LayerField = frontField(MorpheusGraphMorph(from, to, fraction))
+
+    /** The front layer of [morph], on the recipe's canvas. */
+    private fun frontField(morph: MorpheusGraphMorph): LayerField {
+        val layer = GalleryLoop.morphLayers(morph).first { it.slotFromFront == 0 }
         return LayerField(layer.spec, layer.seed, canvas.referenceSize, canvas.pxPerDp).also { field ->
             field.shape = layer.shape
             field.advance(0f, canvas.width, canvas.height)
@@ -433,6 +525,16 @@ class MorpheusGraphCometsTest {
         const val FULL_STAGGER_WINDOW_SHARE = 0.2f
         const val FLOAT_STEP = 1e-3f
         const val TEST_LEAD = 0.05f
+
+        /** A checkerboard's share of its cells' nodes, give or take the cells its edges cut in two. */
+        const val DENSITY_TOLERANCE = 0.1f
+
+        /** How far inside a head's flight its departure and landing are checked, and how many of its end radii around them. */
+        const val EDGE_CHECK_STEP = 0.02f
+        const val EDGE_CHECK_RADII = 2f
+
+        /** `INTERRUPT_AT` in samples/shared's catalog/RetargetMorph.kt. */
+        const val RETARGET_CUT = 0.5f
 
         /** The least spread of the heads' start fractions, as a share of the room they can start in. */
         const val MIN_FULL_STAGGER_SPREAD = 0.4f
