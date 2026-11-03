@@ -32,8 +32,8 @@ private val cornerBloom = MorpheusGraphPresets.MorphFamily.cornerBloom.forMorphS
 private val ribbonMesh = MorpheusGraphPresets.ribbonMesh.forMorphSample().withoutComets()
 
 /** The preset's ribbon sits where the ribbon mesh's does, so move it to the other side to make the dissolve visible. */
-private val livingDelaunay = MorpheusGraphPresets.livingDelaunay.forMorphSample().withoutComets().let { spec ->
-    spec.copy(layers = spec.layers.map { it.copy(shapes = listOf(Ribbon(center = 0.25f, width = 0.32f, tilt = -10f))) })
+private val livingDelaunay = MorpheusGraphPresets.livingDelaunay.forMorphSample().withoutComets().mapLayers {
+    it.copy(shapes = listOf(Ribbon(center = 0.25f, width = 0.32f, tilt = -10f)))
 }
 
 private val MorphFamiliesTiming = MorphTiming(hold = 1.seconds, morph = 2.seconds)

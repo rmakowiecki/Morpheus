@@ -56,7 +56,9 @@ private val heroFront = MorpheusGraphLayerSpec(
     hotNodeShare = 0.12f,
     glowRadiusDp = 10f,
     glowStrength = 0.4f,
-    comets = MorpheusGraphComets(size = 1.25f, spark = 0.6f),
+    comets = MorpheusGraphComets(size = 1.25f, spark = 0.6f, zone = 0.45f, tail = 5f),
+    // The pills' and the ribbons' sweeps overlap by half the morph.
+    morphGap = -0.5f,
 )
 
 private val heroGhost = MorpheusGraphPresets.defaultBackLayer.copy(density = 16f, alpha = 0.3f)
@@ -99,7 +101,7 @@ val heroRibbons = heroPills.copy(
 )
 
 /** Each end rests 1.5 s between morphs; a leg, half a rest, the morph and half a rest, is what a boomerang capture records. */
-private val HeroTiming = MorphTiming(hold = 1500.milliseconds, morph = 3500.milliseconds)
+private val HeroTiming = MorphTiming(hold = 1500.milliseconds, morph = 2500.milliseconds)
 
 /**
  * Two pills morph in place into two crossing ribbons and back, on a loop. Both ends are one morph family,

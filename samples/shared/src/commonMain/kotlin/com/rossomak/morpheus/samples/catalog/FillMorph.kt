@@ -16,6 +16,7 @@ import com.rossomak.morpheus.samples.SampleCategory
 import com.rossomak.morpheus.samples.TunableMorph
 import com.rossomak.morpheus.samples.TunableSpec
 import com.rossomak.morpheus.samples.cyclePeriod
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 private const val LEFT = "Left"
@@ -30,6 +31,8 @@ private val fillMorphLayer = shapeSampleLayer.copy(
     edgeAlpha = 0.6f,
     nodeSizeDp = 2.4f,
     nodeSizeVariance = 0.4f,
+    // Both rects sweep the whole morph together, so the frontier widens across the overlap.
+    morphGap = -1f,
 )
 
 /** A tall rect hugging one side, tilted so the two mirror images overlap in a slanted band across the middle. */
@@ -42,7 +45,7 @@ private fun slantedRectSpec(x: Float, rotation: Float, fill: MorpheusGraphFill) 
 private val leftSpec = slantedRectSpec(x = 0f, rotation = -110f, fill = MorpheusGraphFill.Solid(SampleStyle.blue))
 private val rightSpec = slantedRectSpec(x = 1f, rotation = -70f, fill = MorpheusGraphFill.linear(listOf(SampleStyle.orange, SampleStyle.magenta)))
 
-private val FillMorphTiming = MorphTiming(hold = 1.seconds, morph = 4.seconds)
+private val FillMorphTiming = MorphTiming(hold = 1.seconds, morph = 2500.milliseconds)
 
 /**
  * A rectangle on the left in a solid fill and one on the right in a linear gradient morph into each other and

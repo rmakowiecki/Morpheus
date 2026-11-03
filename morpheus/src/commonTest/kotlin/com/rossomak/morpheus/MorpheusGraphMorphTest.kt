@@ -8,6 +8,8 @@ import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.doubles.plusOrMinus as plusOrMinusDouble
 import io.kotest.matchers.doubles.shouldBeLessThan
 import io.kotest.matchers.floats.plusOrMinus
+import io.kotest.matchers.floats.shouldBeGreaterThanOrEqual
+import io.kotest.matchers.floats.shouldBeLessThan
 import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
@@ -125,15 +127,14 @@ class MorpheusGraphMorphTest {
     }
 
     @Test
-    fun `a dissolve played backwards gives every node of both meshes the presence it had at the mirrored fraction`() {
+    fun `a dissolve played backwards gives every shape node of both meshes the presence it had at the mirrored fraction`() {
         val mismatches = presetPairs().flatMap { (from, to) ->
             fractions.flatMap { fraction ->
                 val forward = MorphRun(from, to, TALL_HERO_WIDTH, TALL_HERO_HEIGHT).also { it.advance(fraction) }
                 val backward = MorphRun(to, from, TALL_HERO_WIDTH, TALL_HERO_HEIGHT).also { it.advance(1f - fraction) }
                 forward.fields.filterKeys { it in backward.fields }.flatMap { (mesh, field) ->
                     val mirror = backward.fields.getValue(mesh)
-                    (0 until field.nodeCount).filter { abs(field.nodePresence(it) - mirror.nodePresence(it)) > PRESENCE_TOLERANCE }
-                        .map { node -> "${from.presetLabel} → ${to.presetLabel} at $fraction mesh $mesh node $node" }
+                    shapeNodeMismatches(field, mirror).map { node -> "${from.presetLabel} → ${to.presetLabel} at $fraction mesh $mesh node $node" }
                 }
             }
         }
@@ -256,7 +257,7 @@ class MorpheusGraphMorphTest {
     }
 
     /**
-     * Over every pair and surface — some 170 000 node morphs — this allows [CROSSING_FRONTS_BUDGET]
+     * Over every pair, at a gap of -1, and every surface — some 170 000 node morphs — this allows [CROSSING_FRONTS_BUDGET]
      * exceptions: where a pair's leaving and arriving fronts follow two different shapes, they can cross
      * so that a node that stays briefly has neither its old edges nor its replacements yet. A node shown
      * at neither end is one a comet lights, and may turn on and off once; [COMET_GLITCH_BUDGET] of them,
@@ -264,7 +265,7 @@ class MorpheusGraphMorphTest {
      */
     @Test
     fun `scrubbing any morph family pair end to end turns each node on or off at most once and each comet node on and off once`() {
-        val nodes = morphFamilyPairs().flatMap { (from, to) -> surfaces.flatMap { (width, height) -> scrubToggles(from, to, width, height) } }
+        val nodes = crossingFrontPairs().flatMap { (from, to) -> surfaces.flatMap { (width, height) -> scrubToggles(from, to, width, height) } }
         val flickering = nodes.filter { it.shownAtAnEnd && it.toggles > 1 }
         val cometGlitches = nodes.filter { !it.shownAtAnEnd && it.toggles > 2 }
 
@@ -275,7 +276,7 @@ class MorpheusGraphMorphTest {
     /** The test above with staggered, eased heads of varied sizes, within the same budgets. */
     @Test
     fun `scrubbing any morph family pair with every comet knob on turns each comet node on and off once`() {
-        val nodes = morphFamilyPairs().flatMap { (from, to) ->
+        val nodes = crossingFrontPairs().flatMap { (from, to) ->
             surfaces.flatMap { (width, height) -> scrubToggles(from.withCometKnobs(), to.withCometKnobs(), width, height) }
         }
         val flickering = nodes.filter { it.shownAtAnEnd && it.toggles > 1 }
@@ -288,20 +289,16 @@ class MorpheusGraphMorphTest {
     /** Allows [CROSSING_FRONTS_BUDGET] exceptions, for the reason the test above gives. */
     @Test
     fun `a node visible at both ends of a morph stays visible all the way through`() {
-        val dropped = morphFamilyPairs().flatMap { (from, to) ->
-            surfaces.flatMap { (width, height) ->
-                val run = MorphRun(from, to, width, height)
-                val visibility = scrubFrames().map { fraction -> run.visibility(fraction) }
-                visibility.first().keys.flatMap { layerSeed ->
-                    val layerVisibility = visibility.map { it.getValue(layerSeed) }
-                    layerVisibility.first().indices
-                        .filter { node -> layerVisibility.first()[node] && layerVisibility.last()[node] && layerVisibility.any { !it[node] } }
-                        .map { node -> "${from.label} → ${to.label} ${width.toInt()}x${height.toInt()} layer $layerSeed node $node" }
-                }
-            }
-        }
+        droppedNodes(crossingFrontPairs()).size shouldBeLessThanOrEqual CROSSING_FRONTS_BUDGET
+    }
 
-        dropped.size shouldBeLessThanOrEqual CROSSING_FRONTS_BUDGET
+    /**
+     * At a gap of 0 the start shape is swept away before the end shape is swept in, so a node kept between a leaving
+     * neighbour and an arriving one is left without edges for a moment at the hand-over; [HAND_OVER_BUDGET] allows it.
+     */
+    @Test
+    fun `at the default gap a node visible at both ends drops out only at the hand-over`() {
+        droppedNodes(morphFamilyPairs()).size shouldBeLessThanOrEqual HAND_OVER_BUDGET
     }
 
     @Test
@@ -347,6 +344,36 @@ class MorpheusGraphMorphTest {
 
         field.cometCount shouldBe 2
         field.cometHeads.map { head -> head.sourceY < TALL_HERO_HEIGHT / 2f }.distinct() shouldHaveSize 2
+    }
+
+    /**
+     * Each shape node's fade centres on the morph fraction it crosses half presence at; comet-lit nodes are left out,
+     * since a comet's light holds a node up past its fade.
+     */
+    @Test
+    fun `a relay at a gap of 0 or more sweeps the start shape away before it sweeps the end shape in, the gap apart, and below 0 overlaps them`() {
+        val pairs = with(MorpheusGraphPresets.MorphFamily) { listOf(centreDisc to cornerPair, doubleRibbon to centreDisc) }
+        for ((from, to) in pairs) {
+            for (gap in listOf(-1f, 0f, RELAY_PAUSE)) {
+                val run = MorphRun(from.withMorphGap(gap), to.withMorphGap(gap), TALL_HERO_WIDTH, TALL_HERO_HEIGHT)
+                val presences = (0..ORDER_STEPS).map { step ->
+                    val field = run.also { it.advance(step / ORDER_STEPS.toFloat()) }.singleField()
+                    FloatArray(field.nodeCount) { node -> if (field.nodeCometPeak(node) > 0f) Float.NaN else field.nodePresence(node) }
+                }
+                val nodes = presences.first().indices.filter { node -> presences.none { it[node].isNaN() } }
+                fun crossing(node: Int): Float = presences.indexOfFirst { (it[node] >= HALF_PRESENT) != (presences.first()[node] >= HALF_PRESENT) } / ORDER_STEPS.toFloat()
+                val leftAt = nodes.filter { presences.first()[it] >= HALF_PRESENT && presences.last()[it] < HALF_PRESENT }.map(::crossing)
+                val arrivedAt = nodes.filter { presences.first()[it] < HALF_PRESENT && presences.last()[it] >= HALF_PRESENT }.map(::crossing)
+
+                leftAt.size shouldBeGreaterThan 0
+                arrivedAt.size shouldBeGreaterThan 0
+                if (gap < 0f) {
+                    arrivedAt.min() shouldBeLessThan leftAt.max()
+                } else {
+                    arrivedAt.min() - leftAt.max() shouldBeGreaterThanOrEqual (1f - MORPH_FADE_WINDOW) * gap - 1f / ORDER_STEPS
+                }
+            }
+        }
     }
 
     @Test
@@ -395,15 +422,14 @@ class MorpheusGraphMorphTest {
     }
 
     @Test
-    fun `a morph played backwards gives every node the presence it had at the mirrored fraction`() {
+    fun `a morph played backwards gives every shape node the presence it had at the mirrored fraction`() {
         val mismatches = morphFamilyPairs().flatMap { (from, to) ->
             fractions.flatMap { fraction ->
                 val forward = MorphRun(from, to, TALL_HERO_WIDTH, TALL_HERO_HEIGHT).also { it.advance(fraction) }
                 val backward = MorphRun(to, from, TALL_HERO_WIDTH, TALL_HERO_HEIGHT).also { it.advance(1f - fraction) }
                 forward.fields.flatMap { (layerSeed, field) ->
                     val mirror = backward.fields.getValue(layerSeed)
-                    (0 until field.nodeCount).filter { abs(field.nodePresence(it) - mirror.nodePresence(it)) > PRESENCE_TOLERANCE }
-                        .map { node -> "${from.label} → ${to.label} at $fraction layer $layerSeed node $node" }
+                    shapeNodeMismatches(field, mirror).map { node -> "${from.label} → ${to.label} at $fraction layer $layerSeed node $node" }
                 }
             }
         }
@@ -496,6 +522,24 @@ class MorpheusGraphMorphTest {
     private fun morphFamilyPairs(): List<Pair<MorpheusGraphSpec, MorpheusGraphSpec>> =
         family.flatMap { from -> family.filter { it != from }.map { to -> Pair(from, to) } }
 
+    /** [morphFamilyPairs] at a gap of -1, where the leaving and arriving fronts sweep together and cross. */
+    private fun crossingFrontPairs(): List<Pair<MorpheusGraphSpec, MorpheusGraphSpec>> =
+        morphFamilyPairs().map { (from, to) -> Pair(from.withMorphGap(-1f), to.withMorphGap(-1f)) }
+
+    /** The nodes of [pairs]' scrubs, over every surface, shown at both ends of a morph but not all the way through. */
+    private fun droppedNodes(pairs: List<Pair<MorpheusGraphSpec, MorpheusGraphSpec>>): List<String> = pairs.flatMap { (from, to) ->
+        surfaces.flatMap { (width, height) ->
+            val run = MorphRun(from, to, width, height)
+            val visibility = scrubFrames().map { fraction -> run.visibility(fraction) }
+            visibility.first().keys.flatMap { layerSeed ->
+                val layerVisibility = visibility.map { it.getValue(layerSeed) }
+                layerVisibility.first().indices
+                    .filter { node -> layerVisibility.first()[node] && layerVisibility.last()[node] && layerVisibility.any { !it[node] } }
+                    .map { node -> "${from.label} → ${to.label} ${width.toInt()}x${height.toInt()} layer $layerSeed node $node" }
+            }
+        }
+    }
+
     /** A two-second swipe from end to end, then a second held at the end so every fade can finish. */
     private fun scrubFrames() = (0..SWIPE_FRAMES).map { it / SWIPE_FRAMES.toFloat() } + List(HOLD_FRAMES) { 1f }
 
@@ -516,6 +560,14 @@ class MorpheusGraphMorphTest {
     }
 
     /** One [LayerField] per morph layer, kept across frames the way the modifier keeps them. */
+    /**
+     * The shape nodes, those no comet lights either way, whose presence in [field] differs from [mirror]'s. A comet's
+     * light trails off over its tail behind the head, so the way back lights its nodes in the other order.
+     */
+    private fun shapeNodeMismatches(field: LayerField, mirror: LayerField): List<Int> = (0 until field.nodeCount)
+        .filter { field.nodeCometPeak(it) <= 0f && mirror.nodeCometPeak(it) <= 0f }
+        .filter { abs(field.nodePresence(it) - mirror.nodePresence(it)) > PRESENCE_TOLERANCE }
+
     private class MorphRun(private val morph: MorpheusGraphMorph, private val width: Float, private val height: Float) {
         constructor(from: MorpheusGraphSpec, to: MorpheusGraphSpec, width: Float, height: Float) : this(MorpheusGraphMorph(from, to, 0f), width, height)
 
@@ -576,14 +628,18 @@ class MorpheusGraphMorphTest {
         const val SCRUB_STEPS = 20
         const val RESIZE_STEPS = 12
         const val CROSSING_FRONTS_BUDGET = 32
+        const val HAND_OVER_BUDGET = 160
         const val COMET_GLITCH_BUDGET = 32
         const val COMET_TEST_REACH = 0.3f
-        const val MIN_COMET_NODES = 30
+
+        /** One head from the near edge of the bloom, a slice of its comet zone, lights a path some two heads wide. */
+        const val MIN_COMET_NODES = 10
         const val MIDDLE_RADIUS = 150f
         const val MIDDLE_LIT_TOLERANCE = 0.15
         const val SWIPE_FRAMES = 120
         const val HOLD_FRAMES = 60
         const val ORDER_STEPS = 200
+        const val RELAY_PAUSE = 0.2f
         const val HALF_PRESENT = 0.5f
         const val MIN_LEAVING_NODES = 100
         const val MIN_ORDER_CORRELATION = 0.9

@@ -14,20 +14,24 @@ class CometLightTest {
 
     @Test
     fun `a node lit just after the start still goes dark over a whole window`() {
-        cometLight(lightsAt = 0.03f, darkensAt = 0.5f, fraction = 0f) shouldBe 0f
-        largestStepBetween(LIGHT_STEADY_FROM, 1f) { cometLight(lightsAt = 0.03f, darkensAt = 0.5f, fraction = it) } shouldBeLessThanOrEqual MAX_STEP
+        cometLight(lightsAt = 0.03f, darkensAt = 0.5f, fraction = 0f, lightFade = FADE, darkFade = FADE) shouldBe 0f
+        largestStepBetween(LIGHT_STEADY_FROM, 1f) {
+            cometLight(lightsAt = 0.03f, darkensAt = 0.5f, fraction = it, lightFade = FADE, darkFade = FADE)
+        } shouldBeLessThanOrEqual MAX_STEP
     }
 
     @Test
     fun `a node going dark just before the end still lights over a whole window`() {
-        cometLight(lightsAt = 0.5f, darkensAt = 0.97f, fraction = 1f) shouldBe 0f
-        largestStepBetween(0f, 1f - LIGHT_STEADY_FROM) { cometLight(lightsAt = 0.5f, darkensAt = 0.97f, fraction = it) } shouldBeLessThanOrEqual MAX_STEP
+        cometLight(lightsAt = 0.5f, darkensAt = 0.97f, fraction = 1f, lightFade = FADE, darkFade = FADE) shouldBe 0f
+        largestStepBetween(0f, 1f - LIGHT_STEADY_FROM) {
+            cometLight(lightsAt = 0.5f, darkensAt = 0.97f, fraction = it, lightFade = FADE, darkFade = FADE)
+        } shouldBeLessThanOrEqual MAX_STEP
     }
 
     @Test
     fun `a node lit at both ends stays lit`() {
-        cometLight(lightsAt = -1f, darkensAt = 2f, fraction = 0f) shouldBe 1f
-        cometLight(lightsAt = -1f, darkensAt = 2f, fraction = 1f) shouldBe 1f
+        cometLight(lightsAt = -1f, darkensAt = 2f, fraction = 0f, lightFade = FADE, darkFade = FADE) shouldBe 1f
+        cometLight(lightsAt = -1f, darkensAt = 2f, fraction = 1f, lightFade = FADE, darkFade = FADE) shouldBe 1f
     }
 
     /** The largest change in [light] between two fractions [SHOWCASE_STEP] apart, from [from] to [to]. */
@@ -44,6 +48,9 @@ class CometLightTest {
     private companion object {
         /** The showcase's largest step of the fraction in one frame, at the middle of its eased morph. */
         const val SHOWCASE_STEP = 0.013f
+
+        /** Both fades, as fractions of the morph: what a head's lead and tail come to at the showcase's pace. */
+        const val FADE = 0.2f
 
         /** A smoothStep over the full 0.2 window moves at most 1.5 × 0.013 / 0.2 ≈ 0.098 in one such step. */
         const val MAX_STEP = 0.1f

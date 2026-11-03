@@ -25,20 +25,24 @@ private const val COMETS_DENSITY = 70f
 /** Blooms shrink to this share of their reach, so the nodes have further to travel and the streams are easier to follow. */
 private const val BLOOM_REACH_SHARE = 0.65f
 
+/** The comets sample's corner blooms shrink further, to this share of their reach, so more of the surface is left to the comets. */
+private const val CORNER_REACH_SHARE = 0.7f
+
 /** This spec at the comets sample's mesh density, with its blooms drawn in and its comets turned up. */
-internal fun MorpheusGraphSpec.withSampleComets() = forMorphSample(COMETS_DENSITY).let { spec ->
-    spec.copy(
-        layers = spec.layers.map { layer ->
-            layer.copy(
-                shapes = layer.shapes.map { if (it is Bloom) it.copy(reach = it.reach * BLOOM_REACH_SHARE) else it },
-                comets = sampleComets,
-            )
-        },
-    )
+internal fun MorpheusGraphSpec.withSampleComets() = forMorphSample(COMETS_DENSITY).mapLayers { layer ->
+    layer.copy(shapes = layer.shapes.map { if (it is Bloom) it.copy(reach = it.reach * BLOOM_REACH_SHARE) else it }, comets = sampleComets)
 }
 
-private val centreDisc = MorphFamily.centreDisc.withSampleComets()
-private val cornerPair = MorphFamily.cornerPair.withSampleComets()
+/** The comets sample's comet zone: most of each shape pours into the comets. */
+private const val COMETS_ZONE = 0.7f
+
+/** This spec relayed at a gap of 0, so each shape is gone before the next sweeps in, with the comets sample's wide comet zone. */
+private fun MorpheusGraphSpec.withCometsRelay() = mapLayers { it.copy(comets = it.comets.copy(zone = COMETS_ZONE), morphGap = 0f) }
+
+private val centreDisc = MorphFamily.centreDisc.withSampleComets().withCometsRelay()
+private val cornerPair = MorphFamily.cornerPair.withSampleComets().withCometsRelay().mapLayers { layer ->
+    layer.copy(shapes = layer.shapes.map { if (it is Bloom) it.copy(reach = it.reach * CORNER_REACH_SHARE) else it })
+}
 
 private const val CENTRE_DISC = "Centre disc"
 private const val CORNER_PAIR = "Corner pair"

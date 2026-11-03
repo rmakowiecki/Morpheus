@@ -32,7 +32,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 BUNDLE = ROOT / "samples/gallery/build/dist/wasmJs/productionExecutable"
 PREFIX = "morpheus-benchmark "
 # Each benchmark sample's loop: the hero's pills to ribbons and back, the playground's three morphs.
-LOOP_SECONDS = {"hero": 10.0, "comet-playground": 12.75}
+LOOP_SECONDS = {"hero": 8.0, "comet-playground": 6.75}
 WARM_UP_SECONDS = 6.0
 # Long enough for Chrome to start, and the bundle to load and compile; then a reading every half second.
 FIRST_READING_SECONDS = 60.0
@@ -184,7 +184,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--chrome", default=os.environ.get("CHROME_BIN", MAC_CHROME), help="Chrome or Chrome for Testing binary (default: $CHROME_BIN, else Google Chrome)")
     parser.add_argument("--sample", choices=list(LOOP_SECONDS), default="hero", help="the sample to measure (default: hero)")
-    parser.add_argument("--loops", type=positive_int, default=3, help="whole loops of the sample to measure, 10 s for the hero and 12.75 s for the playground (default: 3)")
+    parser.add_argument("--loops", type=positive_int, default=3, help="whole loops of the sample to measure, 8 s for the hero and 6.75 s for the playground (default: 3)")
     parser.add_argument("--skip", type=skip_list, default=[], help=f"skip switches to turn on, comma-separated from {', '.join(SKIPS)}, or all (default: none)")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--skip-build", action="store_true", help="serve the bundle as last built")

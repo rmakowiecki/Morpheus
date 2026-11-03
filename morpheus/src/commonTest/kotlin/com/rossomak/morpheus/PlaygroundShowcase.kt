@@ -8,7 +8,7 @@ import com.rossomak.morpheus.ShapePrimitive.Pill
 // library can't depend on the samples). Fills are left out: they never touch the mesh. Its ghost layer is the
 // hero's, spelled out in HeroShowcase.kt.
 
-internal val playgroundFront = heroFront.copy(density = 100f)
+internal val playgroundFront = heroFront.copy(density = 100f, comets = heroFront.comets.copy(zone = 0.75f, tail = 4f, lead = 0.25f), morphGap = -1f)
 
 internal val playgroundFrame = MorpheusGraphSpec(
     seed = 41,
@@ -27,7 +27,7 @@ internal val playgroundFrame = MorpheusGraphSpec(
 
 internal val playgroundBlooms = playgroundFrame.copy(
     layers = listOf(
-        heroGhost.copy(waveAmplitude = 0.06f, waveSpeed = 0.55f),
+        heroGhost,
         playgroundFront.copy(
             shapes = listOf(
                 Bloom(x = 0.2f, y = 0.2f, reach = 0.15f, plateau = 0.6f),
@@ -36,10 +36,7 @@ internal val playgroundBlooms = playgroundFrame.copy(
                 Bloom(x = 0.8f, y = 0.8f, reach = 0.15f, plateau = 0.6f),
                 Bloom(x = 0.5f, y = 0.5f, reach = 0.17f, plateau = 0.6f),
             ),
-            driftAmplitude = 0.8f,
-            driftSpeed = 2.2f,
-            waveAmplitude = 0.05f,
-            waveSpeed = 0.7f,
+            comets = playgroundFront.comets.copy(zone = 0.4f, tail = 2f, lead = -0.2f),
         ),
     ),
 )
@@ -64,9 +61,9 @@ internal val playgroundLegs = listOf(
 )
 
 /** The playground sample's loop at 60 fps: each spec held for half its hold, the morph to the next, half a hold. */
-internal const val PLAYGROUND_LOOP_FRAMES = 765
+internal const val PLAYGROUND_LOOP_FRAMES = 405
 private const val PLAYGROUND_HOLD_SECONDS = 0.75f
-private const val PLAYGROUND_MORPH_SECONDS = 3.5f
+private const val PLAYGROUND_MORPH_SECONDS = 1.5f
 private const val PLAYGROUND_LEG_SECONDS = PLAYGROUND_HOLD_SECONDS + PLAYGROUND_MORPH_SECONDS
 
 /** What the playground sample shows at [time] into its loop, at its default easings and timing. */

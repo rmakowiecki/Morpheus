@@ -401,14 +401,30 @@ private val layerSliders = listOf(
         { spec, value -> spec.copy(comets = spec.comets.copy(headsPerStream = value.roundToInt().takeIf { it >= 1 })) },
     ),
     LayerSlider("Comet spark (comet nodes heat up)", 0f..1f, { it.comets.spark }, { spec, value -> spec.copy(comets = spec.comets.copy(spark = value)) }),
-    LayerSlider("Comet stagger (heads travel apart in time)", 0f..1f, { it.comets.stagger }, { spec, value -> spec.copy(comets = spec.comets.copy(stagger = value)) }),
+    LayerSlider("Comet stagger (heads travel apart in time; above 0 unsyncs them)", 0f..1f, {
+        it.comets.stagger
+    }, { spec, value -> spec.copy(comets = spec.comets.copy(stagger = value)) }),
     LayerSlider(
-        "Comet easing (each head eases within its window, on top of the morph's)",
+        "Comet easing (each head eases within its window, on top of the morph's; above 0 unsyncs them)",
         0f..1f,
         { it.comets.easing },
         { spec, value -> spec.copy(comets = spec.comets.copy(easing = value)) },
     ),
     LayerSlider("Comet size deviation (× size)", 0f..1f, { it.comets.sizeDeviation }, { spec, value -> spec.copy(comets = spec.comets.copy(sizeDeviation = value)) }),
     LayerSlider("Comet piece size (node spacings)", 4f..60f, { it.comets.pieceSize }, { spec, value -> spec.copy(comets = spec.comets.copy(pieceSize = value)) }),
+    LayerSlider("Comet zone (share of the morph; wider launches earlier)", 0.02f..1f, { it.comets.zone }, { spec, value -> spec.copy(comets = spec.comets.copy(zone = value)) }),
+    LayerSlider("Comet tail (head radii)", 0f..8f, { it.comets.tail }, { spec, value -> spec.copy(comets = spec.comets.copy(tail = value)) }),
+    LayerSlider(
+        "Comet lead (share of the morph; above 0 sets off before the source fades)",
+        -0.5f..0.5f,
+        { it.comets.lead },
+        { spec, value -> spec.copy(comets = spec.comets.copy(lead = value)) },
+    ),
+    LayerSlider(
+        "Morph gap (-1 leaving and arriving overlap fully, 0 relay, above 0 a pause)",
+        -1f..0.8f,
+        { it.morphGap },
+        { spec, value -> spec.copy(morphGap = value) },
+    ),
     LayerSlider("Layer alpha", 0f..1f, { it.alpha }, { spec, value -> spec.copy(alpha = value) }),
 )
