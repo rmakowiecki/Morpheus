@@ -86,7 +86,7 @@ Flip `showBloom` from anywhere, such as a selected tab, and the graph morphs fro
 ## How it works
 
 - **A spec describes a graph.** A `MorpheusGraphSpec` is a seed, a list of layers and an optional fill that layers
-  can override. Each layer is an independent set of nodes and edges, drawn back to front, with its own mesh density,
+  can override. Each layer is an independent set of nodes and edges, drawn back to front, with its own cell density,
   edge rule, glow, node sizes, motion and shapes.
 - **A layer is a pool of potential nodes.** Each layer lays a seeded, pseudo-random grid of cells over the surface.
   Each cell is a potential node, with a fixed home, a small drift around it and a fixed random roll. A cell becomes a
@@ -96,7 +96,7 @@ Flip `showBloom` from anywhere, such as a selected tab, and the graph morphs fro
   own roll, so a density of 0.7 fills about 70% of the cells there, always the same ones. Nodes fade in and out rather
   than pop.
 - **Activity changes all the time.** These rules run every frame, not once when the spec is built. Beyond density, a
-  node joins the mesh only if it is present enough, and it needs two visible edges or it is repaired or pruned. During
+  node is drawn only if it is present enough, and it needs two visible edges or it is repaired or pruned. During
   a morph each cell switches between its state at the old shape and its state at the new one, so the old shape
   recedes and the new one grows as a front.
 - **Edges come from a rule.** `EdgeRule.Proximity` joins every pair within reach, `FixedTriangulation` triangulates
@@ -138,7 +138,7 @@ Guides for each module are coming. Until then:
 
 - [`CHANGELOG.md`](CHANGELOG.md) lists what changed.
 - [`docs/benchmark.md`](docs/benchmark.md) measures what a frame costs.
-- [`CONTEXT.md`](CONTEXT.md) defines the words used here: graph, spec, layer, cell, node, shape, preset, fill, morph, morph family and comet.
+- [`CONTEXT.md`](CONTEXT.md) defines the words used here: graph, spec, seed, layer, cell, node, edge, edge rule, shape, density, preset, fill, morph, morph family, presence, dissolve and comet.
 
 ## Contributing
 
