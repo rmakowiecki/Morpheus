@@ -106,6 +106,10 @@ Flip `showBloom` from anywhere, such as a selected tab, and the graph morphs fro
   morph between them reuses the same cells: the nodes stay put, presence and fill interpolate, and comets carry light
   from the nodes that leave to the nodes that arrive. Other layer pairs dissolve instead. A morph can stop, reverse
   and be interrupted part way, and it starts from what is on screen.
+- **Comets bridge shapes that don't overlap.** Where the old and new shapes share cells, the nodes in them just stay.
+  Where they share none, every node of the old shape fades out and every node of the new one fades in, with nothing
+  linking the two. Comets fill that gap: each flies from the nodes only the old shape shows to the nodes only the new
+  one shows, lighting the cells it passes, so the light appears to travel across.
 - **Drawing is batched.** `Modifier.morpheusGraphBackground` draws every layer back to front with `drawBehind`:
   edges and dots go out in point batches, one native draw call per batch, and the frame loop follows the frame
   clock and pauses below the lifecycle's `STARTED`.
