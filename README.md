@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://rmakowiecki.github.io/Morpheus/">
-    <img src="docs/assets/hero.webp" width="540" alt="Two pills of graph morphing into two crossing ribbons and back">
+    <img src="docs/assets/hero.webp" width="540" alt="A graph shaped like two pills morphing into two crossing ribbons and back">
   </a>
 </p>
 
@@ -15,11 +15,13 @@ across.
 > **Viewer discretion is advised.** Some samples have bright, fast-moving lights and rapid changes in brightness,
 > which can trigger seizures in people with photosensitive epilepsy. The gallery's Pause button stops any sample.
 
-- **Morphs.** A graph turns into another one without a cut. Specs of one morph family keep every node in place
-  and only reshape and recolor.
+- **Morphs.** A graph turns into another one without a cut. Layers of one morph family keep every node in place
+  and only reshape and recolor; other layers dissolve.
 - **Shapes.** Pills, ribbons, blooms, rings, rects and triangles, alone or combined, on as many layers as you like.
 - **Fills.** Solid, linear and radial fills that blend through a morph, or any `Brush`, shaders included.
-- **Comets.** Bright heads carry light from the old shape to the new one while a morph runs.
+- **Comets.** Bright heads carry light from the old shape to the new one while a morph runs. They matter most when
+  the old and new shapes don't overlap: the comets carry the light from the nodes that leave to the nodes that arrive,
+  as if moving the graph across.
 - **Compose only.** `:morpheus` depends on the Compose runtime, UI and animation, nothing else.
 
 ## Quick start
@@ -83,16 +85,26 @@ Flip `showBloom` from anywhere, such as a selected tab, and the graph morphs fro
 
 ## How it works
 
-- **A spec describes a graph.** A `MorpheusGraphSpec` is a seed, a list of layers and an optional fill. Each layer
-  has its own mesh density, edge rule, glow, node sizes, motion and shapes.
-- **Nodes never move, they fade.** A layer is a field of nodes with fixed homes that drift a little. Its shapes are
-  density fields over the surface, and a node shows in proportion to the density at its home. Changing a shape
-  changes which nodes are present, and the rest fade in and out.
+- **A spec describes a graph.** A `MorpheusGraphSpec` is a seed, a list of layers and an optional fill that layers
+  can override. Each layer is an independent set of nodes and edges, drawn back to front, with its own mesh density,
+  edge rule, glow, node sizes, motion and shapes.
+- **A layer is a pool of potential nodes.** Each layer lays a seeded, pseudo-random grid of cells over the surface.
+  Each cell is a potential node, with a fixed home, a small drift around it and a fixed random roll. A cell becomes a
+  node of the graph only while it is active, and at any moment most cells are not.
+- **Shapes decide which cells are active.** A shape is a density field, a number from 0 to 1 at every point of the
+  surface, saying how crowded with nodes that spot should be. A cell is active when the density at its home passes its
+  own roll, so a density of 0.7 fills about 70% of the cells there, always the same ones. Nodes fade in and out rather
+  than pop.
+- **Activity changes all the time.** These rules run every frame, not once when the spec is built. Beyond density, a
+  node joins the mesh only if it is present enough, and it needs two visible edges or it is repaired or pruned. During
+  a morph each cell switches between its state at the old shape and its state at the new one, so the old shape
+  recedes and the new one grows as a front.
 - **Edges come from a rule.** `EdgeRule.Proximity` joins every pair within reach, `FixedTriangulation` triangulates
   once and keeps the edges while nodes drift, and `LivingDelaunay` re-triangulates every frame, fading edges that
   flip. The triangulation is hand-written, not a dependency.
-- **A morph switches presence.** Between two specs of one morph family the nodes stay put, presence and fill
-  interpolate, and comets carry light from the nodes that leave to the nodes that arrive. A morph can stop, reverse
+- **A morph switches presence.** A morph runs per layer. Layers of one morph family share an identical grid, so a
+  morph between them reuses the same cells: the nodes stay put, presence and fill interpolate, and comets carry light
+  from the nodes that leave to the nodes that arrive. Other layer pairs dissolve instead. A morph can stop, reverse
   and be interrupted part way, and it starts from what is on screen.
 - **Drawing is batched.** `Modifier.morpheusGraphBackground` draws every layer back to front with `drawBehind`:
   edges and dots go out in point batches, one native draw call per batch, and the frame loop follows the frame
@@ -122,7 +134,7 @@ Guides for each module are coming. Until then:
 
 - [`CHANGELOG.md`](CHANGELOG.md) lists what changed.
 - [`docs/benchmark.md`](docs/benchmark.md) measures what a frame costs.
-- [`CONTEXT.md`](CONTEXT.md) defines the words used here: graph, spec, layer, shape, preset, fill, morph, morph family and comet.
+- [`CONTEXT.md`](CONTEXT.md) defines the words used here: graph, spec, layer, cell, node, shape, preset, fill, morph, morph family and comet.
 
 ## Contributing
 
