@@ -150,8 +150,8 @@ class FrameStatsCaptureTest {
         /** One batch per 8-bit alpha level. Mirrors `PointBatches`. */
         const val EDGE_BATCHES_PER_LAYER = 255
 
-        /** 8 size bins of punches, and 8 of adds in each of 128 alpha buckets. Mirrors `PointBatches`. */
-        const val DOT_BATCHES_PER_LAYER = 8 + 8 * 128
+        /** 16 size bins of punches, and 16 of adds in each of 64 alpha buckets. Mirrors `PointBatches`. */
+        const val DOT_BATCHES_PER_LAYER = 16 + 16 * 64
 
         /** A dot drawn per element is a punch and an add. */
         const val DRAW_CALLS_PER_DOT_PER_ELEMENT = 2

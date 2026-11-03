@@ -30,8 +30,8 @@ class PointBatchesTest {
     fun `a dot is drawn at its alpha rounded up to the alpha step`() {
         val batches = PointBatches()
         batches.dotLevel(100 / 255f) shouldBe 100
-        batches.dotLevel(100.2f / 255f) shouldBe 102
-        batches.dotLevel(MIN_VISIBLE_ALPHA) shouldBe 2
+        batches.dotLevel(100.2f / 255f) shouldBe 104
+        batches.dotLevel(MIN_VISIBLE_ALPHA) shouldBe 4
         batches.dotLevel(1f) shouldBe 255
     }
 
@@ -39,9 +39,9 @@ class PointBatchesTest {
     fun `a dot is drawn at its size bin's center, the bins split the spec's radius range`() {
         val batches = PointBatches()
         batches.clearDots(smallestRadius = 2f, largestRadius = 10f)
-        batches.sizeBinWidth shouldBe 1f
+        withClue("16 bins: half the 1 px that 8 bins gave on this range") { batches.sizeBinWidth shouldBe 0.5f }
         batches.sizeBin(2f) shouldBe 0
-        batches.binRadius(0) shouldBe 2.5f
+        batches.binRadius(0) shouldBe 2.25f
         batches.sizeBin(9.99f) shouldBe DOT_SIZE_BINS - 1
         withClue("a radius past the range goes in the last bin") { batches.sizeBin(12f) shouldBe DOT_SIZE_BINS - 1 }
     }
