@@ -14,7 +14,8 @@ import kotlin.time.Duration.Companion.seconds
  * composition needs its own.
  *
  * Animated captures render [duration] at [fps] (plus [crossfade] in [LoopMode.Crossfade]); the still
- * frame is the one at [stillAt]. A file over [budgetBytes] fails the capture.
+ * frame is the one at [stillAt]. A file over [budgetBytes] fails the capture. [webpQuality] is the lossy WebP
+ * quality, from 0 to 100; a dense mesh at a high quality grows several times larger than at a slightly lower one.
  *
  * [fps] is at least [MIN_CAPTURE_FPS], as the library caps one clock step at 0.1 s. [duration], [crossfade]
  * and [stillAt] are whole frames, so every frame count and timestamp is exact.
@@ -30,6 +31,7 @@ data class CaptureRecipe(
     val crossfade: Duration = 1.seconds,
     val themes: CaptureThemes = CaptureThemes.LightAndDark,
     val budgetBytes: Long = 5_000_000,
+    val webpQuality: Int = 95,
 ) {
     init {
         require(canvasSize.width > 0.dp && canvasSize.height > 0.dp) { "The canvas needs an area, not $canvasSize" }
@@ -39,6 +41,7 @@ data class CaptureRecipe(
         require(!stillAt.isNegative() && stillAt <= duration) { "The still frame at $stillAt is outside the $duration duration" }
         require(!crossfade.isNegative() && crossfade < duration) { "The $crossfade crossfade doesn't fit the $duration duration" }
         require(budgetBytes > 0) { "The byte budget must be positive, not $budgetBytes" }
+        require(webpQuality in 0..MAX_WEBP_QUALITY) { "The WebP quality must be from 0 to $MAX_WEBP_QUALITY, not $webpQuality" }
         require(isWholeFrames(duration)) { "The $duration duration isn't a whole number of frames at $fps fps" }
         require(isWholeFrames(crossfade)) { "The $crossfade crossfade isn't a whole number of frames at $fps fps" }
         require(isWholeFrames(stillAt)) { "The still frame at $stillAt isn't on a frame at $fps fps" }
@@ -57,6 +60,8 @@ data class CaptureRecipe(
 }
 
 const val MIN_CAPTURE_FPS = 20
+
+private const val MAX_WEBP_QUALITY = 100
 
 /** The standard 16:9 sample canvas, also the gallery's 16:9 preview. */
 val WideCanvas = DpSize(640.dp, 360.dp)

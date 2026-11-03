@@ -13,6 +13,8 @@ import com.rossomak.morpheus.samples.catalog.layersSample
 import com.rossomak.morpheus.samples.catalog.morphFamiliesSample
 import com.rossomak.morpheus.samples.catalog.orbitingSweepSample
 import com.rossomak.morpheus.samples.catalog.presetTourSample
+import com.rossomak.morpheus.samples.catalog.quickStartMorphSample
+import com.rossomak.morpheus.samples.catalog.quickStartSample
 import com.rossomak.morpheus.samples.catalog.radialFillSample
 import com.rossomak.morpheus.samples.catalog.retargetMorphSample
 import com.rossomak.morpheus.samples.catalog.ringAndArcsSample
@@ -50,6 +52,8 @@ object SampleRegistry {
         scaleInvarianceSample,
         retargetMorphSample,
         facingArcsSample,
+        quickStartSample,
+        quickStartMorphSample,
     )
 
     init {
