@@ -217,7 +217,7 @@ class PointBatchesCaptureTest {
         const val RIM_REACH = 1f + 0.7072f
 
         /** How far a dot's alpha may round up, in levels out of 255, plus one for a faint dot's blend. */
-        const val DOT_LEVEL_TOLERANCE = 3
+        const val DOT_LEVEL_TOLERANCE = DOT_ALPHA_STEP + 1
         const val MID_FRACTION = 0.5f
 
         /** Where each playground morph's comets are on their way, half way, and nearly arrived. */

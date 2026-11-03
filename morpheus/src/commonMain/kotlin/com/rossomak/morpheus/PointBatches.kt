@@ -11,13 +11,19 @@ import kotlin.math.min
 /** The levels an 8-bit alpha takes, 0 to 255. */
 private const val ALPHA_LEVELS = 255
 
-/** The size bins a layer's dot radii are split into, between the smallest and largest radius its spec allows. */
-internal const val DOT_SIZE_BINS = 8
+/**
+ * The size bins a layer's dot radii are split into, between the smallest and largest radius its spec allows. A
+ * sparked dot grows through the bins as it heats, so a bin is narrow enough that each step reads as growth, not a jump.
+ */
+internal const val DOT_SIZE_BINS = 16
 
-/** Dot alphas round up to a multiple of this many levels out of 255, so a dot is drawn at most two levels too opaque. */
-internal const val DOT_ALPHA_STEP = 2
+/**
+ * Dot alphas round up to a multiple of this many levels out of 255, so a dot is drawn at most three levels too
+ * opaque. Four keeps the add batches at 1,024 with [DOT_SIZE_BINS] at 16.
+ */
+internal const val DOT_ALPHA_STEP = 4
 
-/** The dot alpha buckets: 128, the last one capped at 255. */
+/** The dot alpha buckets: 64, the last one capped at 255. */
 private const val DOT_ALPHA_BUCKETS = (ALPHA_LEVELS + DOT_ALPHA_STEP - 1) / DOT_ALPHA_STEP
 
 /** The faintest dot that still punches the edges and halo under it: a plain node's [NODE_ALPHA]. */
@@ -39,7 +45,7 @@ private const val INITIAL_FLOATS = 32
  * One layer's edges and dots as [LayerField.draw] paints them, refilled every frame: each
  * edge goes into the batch of its 8-bit alpha level, each dot into an add batch per alpha bucket and size bin
  * and, at [PUNCH_MIN_ALPHA] or above, a punch batch per size bin. Each non-empty batch is one draw call: up to
- * 255 for the edges, 8 for the punches and 1,024 for the adds, though a frame uses a fraction of them.
+ * 255 for the edges, 16 for the punches and 1,024 for the adds, though a frame uses a fraction of them.
  *
  * Dot alphas round up to a multiple of [DOT_ALPHA_STEP] levels, so a dot is never drawn fainter than its own
  * 8-bit level and stays at least as opaque as every edge it anchors, which round to nearest. The buffers only
