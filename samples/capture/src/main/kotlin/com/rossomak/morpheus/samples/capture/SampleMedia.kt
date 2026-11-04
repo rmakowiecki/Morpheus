@@ -1,5 +1,6 @@
 package com.rossomak.morpheus.samples.capture
 
+import com.rossomak.morpheus.samples.CaptureRecipe
 import com.rossomak.morpheus.samples.CaptureThemes
 import com.rossomak.morpheus.samples.Sample
 import java.nio.file.Files
@@ -20,7 +21,7 @@ suspend fun writeSampleMedia(sample: Sample, mediaDir: Path): List<Path> {
     try {
         val files = recipe.themes.themes.flatMap { theme ->
             val baseName = if (recipe.themes == CaptureThemes.DarkOnly) sample.id else "${sample.id}-${theme.suffix}"
-            writeCapture(renderCapture(sample, theme), baseName, recipe.fps, workDir)
+            writeCapture(renderCapture(sample, theme), baseName, recipe, workDir)
         }
 
         val overBudget = files.filter { Files.size(it) > recipe.budgetBytes }
@@ -28,7 +29,7 @@ suspend fun writeSampleMedia(sample: Sample, mediaDir: Path): List<Path> {
             val sizes = overBudget.joinToString("\n") { "  ${it.fileName} is ${megabytes(Files.size(it))}, over the ${megabytes(recipe.budgetBytes)} budget" }
             throw CaptureException(
                 "Nothing was written for \"${sample.id}\":\n$sizes\n" +
-                    "To shrink it, lower the recipe's fps, then its canvas area, then its duration, or the WebP quality (${Img2WebP.QUALITY}).",
+                    "To shrink it, lower the recipe's fps, then its canvas area, then its duration, or the WebP quality (${recipe.webpQuality}).",
             )
         }
 
@@ -39,13 +40,15 @@ suspend fun writeSampleMedia(sample: Sample, mediaDir: Path): List<Path> {
     }
 }
 
-private fun writeCapture(capture: Capture, baseName: String, fps: Int, workDir: Path): List<Path> {
+private fun writeCapture(capture: Capture, baseName: String, recipe: CaptureRecipe, workDir: Path): List<Path> {
     val animation = if (capture.frames.isNotEmpty()) {
         val framesDir = Files.createDirectory(workDir.resolve("$baseName-frames"))
         val framePaths = capture.frames.mapIndexed { index, frame ->
             framesDir.resolve("%05d.png".format(Locale.ROOT, index)).also { Files.write(it, frame.encodePng()) }
         }
-        workDir.resolve("$baseName.webp").also { Img2WebP.encode(framePaths, delayMillis = (MILLIS_PER_SECOND / fps).roundToInt(), output = it) }
+        workDir.resolve("$baseName.webp").also {
+            Img2WebP.encode(framePaths, delayMillis = (MILLIS_PER_SECOND / recipe.fps).roundToInt(), quality = recipe.webpQuality, output = it)
+        }
     } else {
         null
     }

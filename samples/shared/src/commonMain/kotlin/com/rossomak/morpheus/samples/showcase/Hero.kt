@@ -134,14 +134,18 @@ internal val heroSample = Sample(
     description = "Two pills morph in place into two crossing ribbons and back, trading colors as they go.",
     category = SampleCategory.Showcase,
     recipe = CaptureRecipe(
-        // Not a standard canvas: the shapes are composed for 2:1. 880×440 and 720×360 ran over the budget
-        // at 30 fps; the duration stays whole.
+        // Not a standard canvas: the shapes are composed for 2:1. It renders at density 2 (1080×540 pixels) so
+        // the README's hero stays sharp on retina screens; that only fits at 24 fps and WebP quality 80, as the
+        // dense mesh grows several times larger above 85. The duration stays whole.
         canvasSize = DpSize(540.dp, 270.dp),
+        density = 2f,
         duration = HeroTiming.leg,
+        fps = 24,
         stillAt = Duration.ZERO,
         loop = LoopMode.Boomerang,
         themes = CaptureThemes.DarkOnly,
-        budgetBytes = 10_000_000,
+        budgetBytes = 15_000_000,
+        webpQuality = 80,
     ),
     specs = listOf(TunableSpec(PILLS, heroPills), TunableSpec(RIBBONS, heroRibbons)),
     morphs = listOf(TunableMorph(TO_RIBBONS), TunableMorph(TO_PILLS)),

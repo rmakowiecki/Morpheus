@@ -21,9 +21,10 @@ object Img2WebP {
         }
     }
 
-    fun encode(frames: List<Path>, delayMillis: Int, output: Path) {
+    /** Encodes [frames] as a looping lossy WebP of [quality], from 0 to 100. */
+    fun encode(frames: List<Path>, delayMillis: Int, quality: Int, output: Path) {
         // Every file is its own argument, never one joined string, so no path is ever split or quoted.
-        val command = listOf(COMMAND, "-loop", "0", "-lossy", "-q", QUALITY.toString(), "-d", delayMillis.toString()) +
+        val command = listOf(COMMAND, "-loop", "0", "-lossy", "-q", quality.toString(), "-d", delayMillis.toString()) +
             frames.map { it.toString() } +
             listOf("-o", output.toString())
         val process = ProcessBuilder(command).redirectErrorStream(true).start()
@@ -31,9 +32,6 @@ object Img2WebP {
         val exitCode = process.waitFor()
         if (exitCode != 0) throw CaptureException("$COMMAND failed with exit code $exitCode on ${output.fileName}:\n$log")
     }
-
-    /** Lossy WebP quality, from 0 to 100. */
-    const val QUALITY = 95
 
     private const val COMMAND = "img2webp"
 }
