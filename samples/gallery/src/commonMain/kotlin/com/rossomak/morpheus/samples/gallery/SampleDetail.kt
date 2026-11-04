@@ -187,6 +187,9 @@ internal fun SampleDetail(
 /** The area the sample's canvas is scaled into, for the layout test. */
 internal const val STAGE_TEST_TAG = "sample-stage"
 
+/** The canvas as shown on the stage, at its scaled size, for the layout test. */
+internal const val CANVAS_TEST_TAG = "sample-canvas"
+
 /** Starts a fresh window on the page's stats and on every tile's. */
 private fun resetStats(frameStats: GalleryFrameStats, session: GallerySession) {
     frameStats.stats.reset()
@@ -321,7 +324,7 @@ private fun SampleStage(canvasSize: DpSize?, scalesToFit: Boolean, onScaledChang
         val scaled = abs(scale - 1f) > SCALE_EPSILON
         SideEffect { onScaledChange(scaled) }
         val canvasWindow = rememberCanvasWindowInfo(canvas)
-        Box(modifier = Modifier.size(canvas.width * scale, canvas.height * scale), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.size(canvas.width * scale, canvas.height * scale).testTag(CANVAS_TEST_TAG), contentAlignment = Alignment.Center) {
             Box(
                 modifier = Modifier
                     .requiredSize(canvas)

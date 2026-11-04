@@ -2,9 +2,17 @@
 
 package com.rossomak.morpheus.samples.gallery
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SkikoComposeUiTest
@@ -17,11 +25,14 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.v2.runSkikoComposeUiTest
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
 import com.rossomak.morpheus.ExperimentalMorpheusGraphApi
 import com.rossomak.morpheus.samples.SampleRegistry
 import io.kotest.assertions.withClue
 import io.kotest.matchers.floats.shouldBeGreaterThanOrEqual
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import kotlin.test.Test
 
 /**
@@ -29,7 +40,8 @@ import kotlin.test.Test
  * scrubbing, opening and closing each pane, a reading with every note on against none yet, and every preview
  * preset leave it where it was, with the side column, with list and detail only, and with the detail alone. The
  * detail pane is never narrower than the side column leaves it at its narrowest. Below 840 dp, where panes are sheets,
- * opening one closes the others and Back closes them all. The frame clock is driven by hand, since the
+ * opening one closes the others and Back closes them all. The stage still follows the window, and the canvas the
+ * preset. The frame clock is driven by hand, since the
  * gallery records frame intervals on every frame and never idles.
  */
 @OptIn(ExperimentalTestApi::class)
@@ -92,6 +104,33 @@ class StableStageTest {
         onNodeWithText(sample.title).performClick()
         settle()
         onNodeWithText(TUNE_SHEET_TEXT).assertDoesNotExist()
+    }
+
+    @Test
+    fun `stage follows the window and the canvas follows the preset`() = runSkikoComposeUiTest(size = WIDE, density = Density(1f)) {
+        val sample = SampleRegistry.samples.single { it.id == CYCLE_SAMPLE_ID }
+        // The gallery's own space, shrunk below to stand for a resized window.
+        var host by mutableStateOf(DpSize(WIDE.width.dp, WIDE.height.dp))
+        mainClock.autoAdvance = false
+        setContent { Box(modifier = Modifier.size(host)) { Gallery(samples = listOf(sample), onSpecExport = {}, benchmark = null) } }
+        settle()
+        onNodeWithText(sample.title).performClick()
+        settle()
+
+        val wideStage = stageBounds()
+        host = DpSize(MIDDLE.width.dp, MIDDLE.height.dp)
+        settle()
+        stageBounds().size shouldNotBe wideStage.size
+
+        // At its own size, so the canvas shows each preset's shape, not the stage's.
+        onNode(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch)).performClick()
+        button(PreviewPreset.Wide.label).performClick()
+        settle()
+        val wideCanvas = canvasBounds()
+        button(PreviewPreset.Square.label).performClick()
+        settle()
+        canvasBounds().size shouldNotBe wideCanvas.size
+        canvasBounds().width shouldBe canvasBounds().height
     }
 
     private fun checkStageStaysStill(windowSize: Size, sampleId: String) = runSkikoComposeUiTest(size = windowSize, density = Density(1f)) {
@@ -163,6 +202,8 @@ class StableStageTest {
     }
 
     private fun SkikoComposeUiTest.stageBounds(): Rect = onNodeWithTag(STAGE_TEST_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+
+    private fun SkikoComposeUiTest.canvasBounds(): Rect = onNodeWithTag(CANVAS_TEST_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
 
     /** A button by its text, or an icon button by what it says to a screen reader. */
     private fun SkikoComposeUiTest.button(label: String) = onNode((hasText(label) or hasContentDescription(label)) and hasClickAction())
