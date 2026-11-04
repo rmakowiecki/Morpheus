@@ -81,7 +81,8 @@ import kotlinx.coroutines.delay
  * The open sample on the [previewFrame]'s canvas, centered on the sample theme's background, under its title,
  * the theme control, the Tune and Reset to defaults actions, Pause for every sample, the scrub slider and the comet
  * debug button for a sample that runs a cycle, the Frame stats button and the preview canvas control. Frame stats
- * opens the frame stats pane, which shows the reading; the sample reports into [frameStats] through
+ * opens the frame stats pane, which shows the reading under a header with its notes (debug switches on, capped,
+ * canvas scaled); the sample reports into [frameStats] through
  * [LocalMorpheusGraphFrameStats], so neither needs anything from the sample. A window wide enough shows the panes in a
  * side column; [opensOnePaneAtATime] is for a narrower one, whose panes are modal sheets, so opening one closes the
  * others. [onBack] is the single-pane layout's way back to the list. [logsBenchmarkReadings] prints each reading
@@ -152,7 +153,7 @@ internal fun SampleDetail(
                 }
             }
             CycleControls(control = session.cycle, runsCycle = session.runsCycle)
-            FrameStatsButton(isOpen = frameStats.isBreakdownExpanded, onClick = { toggle(frameStats.isBreakdownExpanded) { frameStats.isBreakdownExpanded = it } })
+            FrameStatsButton(isOpen = frameStats.isFrameStatsOpen, onClick = { toggle(frameStats.isFrameStatsOpen) { frameStats.isFrameStatsOpen = it } })
             if (session.runsCycle) CometDebugButton(frameStats = frameStats, onClick = { toggle(frameStats.isCometDebugExpanded) { frameStats.isCometDebugExpanded = it } })
         }
         PreviewFrameControl(
@@ -240,14 +241,15 @@ private fun PlayPauseLabel(icon: ImageVector, label: String, shown: Boolean) {
 /**
  * The cycle's slider and time. While paused the slider scrubs the cycle, so a morph can be held anywhere. While
  * playing it is disabled and follows the cycle, read every [PLAYHEAD_REFRESH] rather than on every frame: the
- * cycle's time changes each frame, and only this slot recomposes, that often. The time is monospace and padded
- * to [TIME_CHARS], so the slot keeps its width. Until the sample's cycle reports its period, the slider rests at
- * the start.
+ * cycle's time changes each frame, and only this slot recomposes, that often. Paused, the slider reads the time
+ * directly and nothing polls. The time is monospace and padded to [TIME_CHARS], so the slot keeps its width. Until
+ * the sample's cycle reports its period, the slider rests at the start.
  */
 @Composable
 private fun ScrubSlot(control: CycleControl) {
     // Read in the coroutine, not in composition, so a frame's new time doesn't recompose anything.
     val playhead by produceState(Duration.ZERO, control, control.isPaused) {
+        if (control.isPaused) return@produceState
         while (true) {
             value = control.time
             delay(PLAYHEAD_REFRESH)

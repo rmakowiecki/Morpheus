@@ -125,7 +125,7 @@ internal fun Gallery(samples: List<Sample>, onSpecExport: (source: String) -> Un
                             NoSampleSelected(modifier = Modifier.weight(1f).fillMaxHeight())
                         } else {
                             detail(session, Modifier.weight(1f).fillMaxHeight())
-                            BesideDetail(hasSideColumn = hasSideColumn, session = session, frameStats = frameStats) { tuneSheet(session, Modifier) }
+                            PanesBesideDetail(hasSideColumn = hasSideColumn, session = session, frameStats = frameStats) { tuneSheet(session, Modifier) }
                         }
                     }
                 } else {
@@ -142,7 +142,7 @@ internal fun Gallery(samples: List<Sample>, onSpecExport: (source: String) -> Un
 }
 
 /** The frame stats pane is open, for the open sample. */
-private fun GalleryFrameStats.showsFrameStats(session: GallerySession?): Boolean = session != null && isBreakdownExpanded
+private fun GalleryFrameStats.showsFrameStats(session: GallerySession?): Boolean = session != null && isFrameStatsOpen
 
 /** The comet debug pane is open, for a sample that runs a cycle: the comets are what a morph sends. */
 private fun GalleryFrameStats.showsCometDebug(session: GallerySession?): Boolean = session != null && session.runsCycle && isCometDebugExpanded
@@ -150,14 +150,14 @@ private fun GalleryFrameStats.showsCometDebug(session: GallerySession?): Boolean
 /** Closes the Tune, frame stats and comet debug panes. */
 internal fun closePanes(session: GallerySession, frameStats: GalleryFrameStats) {
     session.isTuning = false
-    frameStats.isBreakdownExpanded = false
+    frameStats.isFrameStatsOpen = false
     frameStats.isCometDebugExpanded = false
 }
 
 /** Leaves open only the first open pane of Tune, frame stats and comet debug, in that order. */
 private fun keepOnePane(session: GallerySession, frameStats: GalleryFrameStats) {
     if (session.isTuning) {
-        frameStats.isBreakdownExpanded = false
+        frameStats.isFrameStatsOpen = false
         frameStats.isCometDebugExpanded = false
     } else if (frameStats.showsFrameStats(session)) {
         frameStats.isCometDebugExpanded = false
@@ -166,7 +166,7 @@ private fun keepOnePane(session: GallerySession, frameStats: GalleryFrameStats) 
 
 /** The open [session]'s panes, in a row after its detail pane: in the side column when [hasSideColumn], else as sheets. */
 @Composable
-private fun BesideDetail(hasSideColumn: Boolean, session: GallerySession, frameStats: GalleryFrameStats, tuneSheet: @Composable () -> Unit) {
+private fun PanesBesideDetail(hasSideColumn: Boolean, session: GallerySession, frameStats: GalleryFrameStats, tuneSheet: @Composable () -> Unit) {
     if (!hasSideColumn) {
         PaneSheets(session = session, frameStats = frameStats, tuneSheet = tuneSheet)
         return
@@ -189,14 +189,14 @@ private fun BesideDetail(hasSideColumn: Boolean, session: GallerySession, frameS
 @Composable
 private fun PaneSheets(session: GallerySession, frameStats: GalleryFrameStats, tuneSheet: @Composable () -> Unit) {
     LaunchedEffect(session) { keepOnePane(session, frameStats) }
-    val panel = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 16.dp)
+    val paneModifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 16.dp)
     when {
         session.isTuning -> PaneBottomSheet(title = "Tune", onDismiss = { session.isTuning = false }, content = tuneSheet)
-        frameStats.showsFrameStats(session) -> PaneBottomSheet(title = "Frame stats", onDismiss = { frameStats.isBreakdownExpanded = false }) {
-            FrameBreakdownPanel(frameStats = frameStats, tiles = session.tiles, modifier = panel)
+        frameStats.showsFrameStats(session) -> PaneBottomSheet(title = "Frame stats", onDismiss = { frameStats.isFrameStatsOpen = false }) {
+            FrameBreakdownPanel(frameStats = frameStats, tiles = session.tiles, modifier = paneModifier)
         }
         frameStats.showsCometDebug(session) -> PaneBottomSheet(title = "Comet debug", onDismiss = { frameStats.isCometDebugExpanded = false }) {
-            CometDebugPanel(stats = frameStats.stats, modifier = panel)
+            CometDebugPanel(stats = frameStats.stats, modifier = paneModifier)
         }
     }
 }
@@ -233,7 +233,7 @@ private fun SideColumn(
                 if (tuning != null) HorizontalDivider()
                 SideSheet(
                     title = "Frame stats",
-                    onClose = { frameStats.isBreakdownExpanded = false },
+                    onClose = { frameStats.isFrameStatsOpen = false },
                     modifier = Modifier.fillMaxWidth().heightIn(max = frameStatsMaxHeight),
                 ) {
                     FrameBreakdownPanel(frameStats = frameStats, tiles = session.tiles, modifier = Modifier.fillMaxWidth())
@@ -257,11 +257,11 @@ private fun NoPaneOpen(session: GallerySession, modifier: Modifier = Modifier) {
         add("Frame stats")
         if (session.runsCycle) add("Comet debug")
     }
-    val named = if (panes.size == 1) panes.single() else panes.dropLast(1).joinToString(separator = ", ") + " or " + panes.last()
+    val paneNames = if (panes.size == 1) panes.single() else panes.dropLast(1).joinToString(separator = ", ") + " or " + panes.last()
     Surface(modifier = modifier, color = MaterialTheme.colorScheme.surfaceContainerLow) {
         Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
             Text(
-                text = "Open $named",
+                text = "Open $paneNames",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -291,10 +291,11 @@ private val LIST_WIDTH = 320.dp
 private val SIDE_SHEET_WIDTH = 380.dp
 
 /** The narrowest the detail pane gets beside the side column; its controls wrap to about three rows there. */
-private val DETAIL_MIN_WIDTH = 540.dp
+internal val DETAIL_MIN_WIDTH = 540.dp
 
 /** The list, the detail at [DETAIL_MIN_WIDTH], the side column and the two dividers between them. */
 private val SIDE_COLUMN_MIN_WIDTH = LIST_WIDTH + DETAIL_MIN_WIDTH + SIDE_SHEET_WIDTH + 2.dp
 
+/** Tags the open sample's detail pane, for tests that measure it. */
 internal const val DETAIL_TEST_TAG = "sample-detail"
 private const val FRAME_STATS_MAX_SHARE = 0.4f

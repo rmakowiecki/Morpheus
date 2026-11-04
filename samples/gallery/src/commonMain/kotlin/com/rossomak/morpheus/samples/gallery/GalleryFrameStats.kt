@@ -41,14 +41,14 @@ import kotlin.math.floor
 import kotlin.math.roundToInt
 
 /**
- * The gallery-wide frame stats every sample reports into, whether the breakdown and comet debug panels are
+ * The gallery-wide frame stats every sample reports into, whether the frame stats and comet debug panes are
  * open, and whether the preview [isCanvasScaled]: it shows at other than its own size, which the frame stats pane
  * notes. Kept across samples, like the preview frame, so the debug switches stay as set.
  */
 @Stable
 internal class GalleryFrameStats {
     val stats = MorpheusGraphFrameStats()
-    var isBreakdownExpanded by mutableStateOf(false)
+    var isFrameStatsOpen by mutableStateOf(false)
     var isCometDebugExpanded by mutableStateOf(false)
     var isCanvasScaled by mutableStateOf(false)
 }

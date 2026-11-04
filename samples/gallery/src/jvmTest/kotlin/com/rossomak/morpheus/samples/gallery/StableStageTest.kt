@@ -28,7 +28,8 @@ import kotlin.test.Test
  * The stage, the area the open sample's canvas is scaled into, keeps its bounds while a sample is open: pausing,
  * scrubbing, opening and closing each pane, a reading with every note on against none yet, and every preview
  * preset leave it where it was, with the side column, with list and detail only, and with the detail alone. The
- * detail pane is never narrower than the side column leaves it at its narrowest. The frame clock is driven by hand, since the
+ * detail pane is never narrower than the side column leaves it at its narrowest. Below 840 dp, where panes are sheets,
+ * opening one closes the others and Back closes them all. The frame clock is driven by hand, since the
  * gallery records frame intervals on every frame and never idles.
  */
 @OptIn(ExperimentalTestApi::class)
@@ -60,6 +61,39 @@ class StableStageTest {
     @Test
     fun `a grid sample keeps its stage in the narrow layout`() = checkStageStaysStill(NARROW, GRID_SAMPLE_ID)
 
+    @Test
+    fun `sheets open one at a time and Back closes them all`() = runSkikoComposeUiTest(size = NARROW, density = Density(1f)) {
+        val sample = SampleRegistry.samples.single { it.id == CYCLE_SAMPLE_ID }
+        val frameStats = GalleryFrameStats()
+        mainClock.autoAdvance = false
+        setContent { Gallery(samples = listOf(sample), onSpecExport = {}, benchmark = null, frameStats = frameStats) }
+        settle()
+        onNodeWithText(sample.title).performClick()
+        settle()
+
+        button("Tune").performClick()
+        settle()
+        onNodeWithText(TUNE_SHEET_TEXT).assertExists()
+        // The button's own click, not a tap that the open sheet would take as a dismissal.
+        button("Frame stats").performSemanticsAction(SemanticsActions.OnClick)
+        settle()
+        onNodeWithText(TUNE_SHEET_TEXT).assertDoesNotExist()
+        frameStats.isFrameStatsOpen shouldBe true
+
+        button("Comet debug").performSemanticsAction(SemanticsActions.OnClick)
+        settle()
+        frameStats.isFrameStatsOpen shouldBe false
+        frameStats.isCometDebugExpanded shouldBe true
+
+        button("Back to the samples").performSemanticsAction(SemanticsActions.OnClick)
+        settle()
+        frameStats.isFrameStatsOpen shouldBe false
+        frameStats.isCometDebugExpanded shouldBe false
+        onNodeWithText(sample.title).performClick()
+        settle()
+        onNodeWithText(TUNE_SHEET_TEXT).assertDoesNotExist()
+    }
+
     private fun checkStageStaysStill(windowSize: Size, sampleId: String) = runSkikoComposeUiTest(size = windowSize, density = Density(1f)) {
         val sample = SampleRegistry.samples.single { it.id == sampleId }
         val frameStats = GalleryFrameStats()
@@ -68,7 +102,7 @@ class StableStageTest {
         settle()
         onNodeWithText(sample.title).performClick()
         settle()
-        onNodeWithTag(DETAIL_TEST_TAG).fetchSemanticsNode().boundsInRoot.width shouldBeGreaterThanOrEqual DETAIL_MIN_WIDTH_PX
+        onNodeWithTag(DETAIL_TEST_TAG).fetchSemanticsNode().boundsInRoot.width shouldBeGreaterThanOrEqual DETAIL_MIN_WIDTH.value
         val stage = stageBounds()
 
         button("Pause").performClick()
@@ -104,6 +138,9 @@ class StableStageTest {
         stageBounds() shouldBe stage
         runOnIdle {
             frameStats.stats.skipEdges = true
+            // Set here, not left to the window size. The stage writes it only when it recomposes, on a new size or preset, and
+            // a reading recomposes only the pane.
+            frameStats.isCanvasScaled = true
             // Half a second at 60 Hz with nothing drawn: a reading at the refresh interval, so capped.
             repeat(FRAMES_PER_WINDOW) { frameStats.stats.recordFrame(REFRESH_INTERVAL_NANOS) }
         }
@@ -135,11 +172,12 @@ class StableStageTest {
         val MIDDLE = Size(1000f, 900f)
         val NARROW = Size(700f, 900f)
 
-        /** The detail pane's narrowest beside the side column, in pixels at density 1. */
-        const val DETAIL_MIN_WIDTH_PX = 540f
         const val CYCLE_SAMPLE_ID = "fill-morph"
         const val STILL_SAMPLE_ID = "layers"
         const val GRID_SAMPLE_ID = "seed-grid"
+
+        /** Shown only in the Tune pane. */
+        const val TUNE_SHEET_TEXT = "Copy as Kotlin"
 
         /** Long enough for a sheet to open or close. */
         const val SETTLE_MILLIS = 700L

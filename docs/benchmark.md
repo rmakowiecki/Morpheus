@@ -38,7 +38,7 @@ links here rather than repeating the steps.
 ## The readout
 
 The gallery's control row has a **Frame stats** button, the speedometer icon. It opens the frame stats pane: in the side
-column, under the Tune pane when that is open, or as a bottom sheet in a narrow window. The pane's
+column, under the Tune pane when that is open, or as a bottom sheet below 1,242 dp. The pane's
 header reads `frame 9.8 ms · graphs 6.1 ms`, refreshed twice a second, with its notes on the line
 under it. The pane dims from a reset, such as a sample change, until the next reading arrives. The
 reading shows in the pane only, so it never moves or rescales the sample:
