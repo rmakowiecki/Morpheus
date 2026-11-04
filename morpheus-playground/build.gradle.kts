@@ -1,6 +1,6 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
-// The desktop host of the network-graph playground, packaged as an app by the Compose Multiplatform
+// The desktop host of the graph playground, packaged as an app by the Compose Multiplatform
 // Gradle plugin. Run it with `./gradlew :morpheus-playground:run`.
 plugins {
     id("org.jetbrains.kotlin.jvm")

@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /**
- * How a layer's comets look. A morph's comets carry the nodes only its start shows over to the nodes only
+ * How a layer's comets look. A morph's comets carry light from the nodes only its start shows to the nodes only
  * its end shows: each piece of the leaving nodes sends a stream of heads to the nearest piece of the
  * arriving nodes, and each arriving piece takes one from its nearest leaving piece, and a node lights while
  * a head passes over it. Every field is averaged over a morph's two
@@ -296,8 +296,8 @@ internal class CometPiece(val nodes: IntArray, val centerX: Float, val centerY: 
  * Each piece of one side is matched with the piece of the other that it lies nearest to, both ways, by the
  * gap between them, so a comet lands on the first geometry it meets. A piece lying nearer to the [kept]
  * nodes, the ones both ends show, than to any piece of the other side sends or takes no stream: the kept
- * shape absorbs it. Only kept clusters as large as a leaving or arriving one count, so the stray nodes an
- * envelope floor keeps everywhere don't absorb whatever they happen to lie in. A matched pair is cut into slices along one shared axis, the larger piece's, and slice
+ * shape absorbs it. Only kept clusters as large as a leaving or arriving one count, so the stray nodes the
+ * density floor keeps everywhere don't absorb whatever they happen to lie in. A matched pair is cut into slices along one shared axis, the larger piece's, and slice
  * i of one sends a head to slice i of the other. Each head draws its size and window from [seed] and its
  * two pieces, so the same morph in the same direction draws the same heads every time.
  *

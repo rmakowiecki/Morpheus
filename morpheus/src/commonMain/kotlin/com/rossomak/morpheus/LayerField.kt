@@ -235,20 +235,21 @@ private const val NODE_SIZE_FLOOR = 0.2f
 private const val DEPTH_SIZE_SHRINK = 0.45f
 
 /**
- * One layer's nodes and edges.
+ * One layer's mesh: the cells of its grid, and the nodes and edges they become.
  *
- * The node pool is a fixed grid: the cell size comes from [referenceSize] (the window's longer side)
- * rather than the surface, and every cell draws its randoms from a hash of its own column, row and
- * [seed]. So a surface that grows only adds cells, nodes that already exist never move, and a surface
- * that shrinks keeps its pool and fades the nodes now outside it.
+ * Every cell has a record here, indexed as a "node" throughout this file, whether or not it is active; a
+ * cell is a node of the mesh only while it is active (see the glossary). The grid is fixed: the cell size
+ * comes from [referenceSize] (the window's longer side) rather than the surface, and every cell draws its
+ * randoms from a hash of its own column, row and [seed]. So a surface that grows only adds cells, nodes
+ * that already exist never move, and a surface that shrinks keeps its grid and fades the nodes now outside it.
  *
  * Which nodes show is decided every frame, not at build time, by [shape]: under one spec, a node's
- * presence rises from 0 to 1 as the shape density at its home (see [MorpheusGraphEnvelope]) passes its
+ * presence rises from 0 to 1 as the density at its home (see [MorpheusGraphEnvelope]) passes its
  * own random roll. Under a morph, each node takes its presence at the two ends and only switches
  * between them, over a short window around a fraction of its own: nodes leaving go furthest from the
  * shape being morphed into first, nodes arriving go nearest to the shape being morphed out of first.
  * So a node present at both ends stays untouched, the shape recedes or grows as a front, and scrubbing
- * back retraces it exactly. Comets carry the nodes only the start shows over to the nodes only the end
+ * back retraces it exactly. Comets carry light from the nodes only the start shows to the nodes only the end
  * shows (see [cometStreams]), lighting the nodes they pass that neither end shows, each once.
  * Only nodes present enough join the mesh. [spec] and [shape] may change
  * freely within the morph family ([isSameMorphFamily]); anything else needs a new field.
@@ -563,13 +564,13 @@ internal class LayerField(
     /** Node [index]'s dot alpha, as of the last [advance]. */
     internal fun nodeAlpha(index: Int): Float = nodeAlphas[index]
 
-    /** How hot node [index] is, from 0 to 1, as of the last [advance]: its dot's size and halo follow it. */
+    /** How hot node [index] is, from 0 to 1, as of the last [advance]: its dot's size and glow follow it. */
     internal fun nodeHotWeight(index: Int): Float = hotWeights[index]
 
-    /** How much of its halo node [index]'s edges allow, from 0 to 1, as of the last [advance]. */
+    /** How much of its glow node [index]'s edges allow, from 0 to 1, as of the last [advance]. */
     internal fun nodeGlowFactor(index: Int): Float = glowFactors[index]
 
-    /** Node [index]'s halo alpha as [draw] draws it, as of the last [advance]. */
+    /** Node [index]'s glow alpha as [draw] draws it, as of the last [advance]. */
     internal fun nodeHaloAlpha(index: Int): Float =
         spec.glowStrength * spec.alpha * depthAlphas[index] * glowFactors[index] * hotWeights[index] * presences[index]
 
@@ -591,7 +592,7 @@ internal class LayerField(
     /** Node [index]'s presence under [shape], border fade included, as of the last [advance]. */
     internal fun nodePresence(index: Int): Float = presences[index]
 
-    /** Node [index]'s rest position, which never changes once the node exists. */
+    /** Node [index]'s home, which never changes once the node exists. */
     internal fun nodeHome(index: Int): Offset = Offset(homeX[index], homeY[index])
 
     /**
@@ -748,7 +749,7 @@ internal class LayerField(
         } else if (morph != null) {
             topology = morphMeshFor(morph, width, height).union
         } else if (resettles) {
-            // Triangulated over rest positions: drift stays under a cell, so the mesh never tangles.
+            // Triangulated over homes: drift stays under a cell, so the mesh never tangles.
             topology = restingMorphEnd(width, height) ?: settleTopology(homeX, homeY, presentMask, presences, spec)
         }
         wasMidMorph = morph != null
@@ -811,7 +812,7 @@ internal class LayerField(
     }
 
     /**
-     * Paints the layer into its own offscreen layer, composited onto the canvas once. Edges and halos
+     * Paints the layer into its own offscreen layer, composited onto the canvas once. Edges and glows
      * blend with each other there. A dot at [PUNCH_MIN_ALPHA] or above is punched out with [BlendMode.DstOut]
      * before any dot is added with [BlendMode.SrcOver]; see [drawDotBatches].
      *
@@ -1331,7 +1332,7 @@ internal class LayerField(
             .also { cometTracks.store(level, it) }
     }
 
-    /** Every node's presence under [vanish]'s guide, the other mesh's shape, with the other mesh's envelope. */
+    /** Every node's presence under [vanish]'s guide, the other mesh's shapes, with the other mesh's density. */
     private fun guidePresences(vanish: LayerShape.Vanish, width: Float, height: Float): FloatArray {
         val guideEnvelope = envelopes.of(vanish)
         shapeDensitiesEvaluated += count
@@ -1909,7 +1910,7 @@ internal class LayerField(
 
     private fun depthAlpha(index: Int): Float = 1f - spec.depthDimming * (1f - nodes[index].depth)
 
-    /** Halos are exempt from the alpha rule but still fade with their node's presence and edges. Returns how many it drew. */
+    /** Glows are exempt from the alpha rule but still fade with their node's presence and edges. Returns how many it drew. */
     internal fun DrawScope.drawGlows(halos: HaloBrushCache): Int {
         if (spec.glowStrength <= 0f) return 0
         var drawn = 0
@@ -1951,7 +1952,7 @@ internal class LayerField(
     }
 
     /**
-     * Drawn last. A dot at [PUNCH_MIN_ALPHA] or above replaces the edges and halo under it: a [BlendMode.DstOut]
+     * Drawn last. A dot at [PUNCH_MIN_ALPHA] or above replaces the edges and glow under it: a [BlendMode.DstOut]
      * punch at alpha 1 leaves `d·(1−c)` at coverage `c` over what lies under it `d`, then a [BlendMode.SrcOver] add
      * at the dot's alpha `a` adds `a·c`. That is the antialiased [BlendMode.Src] result `c·a + (1−c)·d` without
      * Src, which Skia draws on WebGL by copying the layer once per dot. A fainter dot skips the punch, since
@@ -2149,12 +2150,12 @@ private fun sweepAt(x: Float, y: Float, cell: Float, reversed: Boolean): Float {
     return if (reversed) 0.5f - noise else 0.5f + noise
 }
 
-/** A layer's own envelope, and those of the other meshes a dissolve hands its nodes over to or takes them from, by seed. */
+/** A mesh's own [MorpheusGraphEnvelope], and those of the other meshes a dissolve hands its nodes over to or takes them from, by seed. */
 private class MeshEnvelopes(seed: Int) {
     val own = MorpheusGraphEnvelope(seed)
     private val guides = HashMap<Int, MorpheusGraphEnvelope>()
 
-    /** The envelope [shape]'s own mesh draws it with. */
+    /** The [MorpheusGraphEnvelope] [shape]'s own mesh draws it with. */
     fun of(shape: LayerShape): MorpheusGraphEnvelope = shape.nearestSeed?.let { guideSeed -> guides.getOrPut(guideSeed) { MorpheusGraphEnvelope(guideSeed) } } ?: own
 }
 
@@ -2702,7 +2703,7 @@ private class NodeBuckets(homeX: FloatArray, homeY: FloatArray, count: Int, priv
     fun rowOf(y: Float): Int = floor((y - lowY) / bucket).toInt().coerceIn(0, rows - 1)
 }
 
-/** Everything about a node that never changes: its rest position, its motion, and the rolls its looks are decided against. */
+/** Everything about a node that never changes: its home, its motion, and the rolls its looks are decided against. */
 private class NodeTraits(
     val homeX: Float,
     val homeY: Float,

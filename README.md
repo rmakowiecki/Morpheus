@@ -86,13 +86,13 @@ Flip `showBloom` from anywhere, such as a selected tab, and the graph morphs fro
 ## How it works
 
 - **A spec describes a graph.** A `MorpheusGraphSpec` is a seed, a list of layers and an optional fill that layers
-  can override. Each layer is an independent set of nodes and edges, drawn back to front, with its own cell density,
-  edge rule, glow, node sizes, motion and shapes.
+  can override. Each layer describes one mesh, an independent set of nodes and edges, drawn back to front, with its
+  own cell density, edge rule, glow, node sizes, motion and shapes.
 - **A layer is a pool of potential nodes.** Each layer lays a seeded, pseudo-random grid of cells over the surface.
   Each cell is a potential node, with a fixed home, a small drift around it and a fixed random roll. A cell becomes a
-  node of the graph only while it is active, and at any moment most cells are not.
+  node of the layer's mesh only while it is active, and at any moment most cells are not.
 - **Shapes decide which cells are active.** A shape is a density field, a number from 0 to 1 at every point of the
-  surface, saying how crowded with nodes that spot should be. A cell is active when the density at its home passes its
+  surface, saying how crowded with nodes that spot should be. A layer takes the strongest of its shapes at each point. A cell is active when the density at its home passes its
   own roll, so a density of 0.7 fills about 70% of the cells there, always the same ones. Nodes fade in and out rather
   than pop.
 - **Activity changes all the time.** These rules run every frame, not once when the spec is built. Beyond density, a
@@ -138,7 +138,7 @@ Guides for each module are coming. Until then:
 
 - [`CHANGELOG.md`](CHANGELOG.md) lists what changed.
 - [`docs/benchmark.md`](docs/benchmark.md) measures what a frame costs.
-- [`CONTEXT.md`](CONTEXT.md) defines the words used here: graph, spec, seed, layer, cell, node, edge, edge rule, shape, density, preset, fill, morph, morph family, presence, dissolve and comet.
+- [`CONTEXT.md`](CONTEXT.md) defines the words used here: graph, spec, seed, layer, mesh, cell, node, edge, edge rule, shape, density, fill chance, surface, window, preset, fill, glow, hot node, morph, morph family, presence, dissolve and comet.
 
 ## Contributing
 

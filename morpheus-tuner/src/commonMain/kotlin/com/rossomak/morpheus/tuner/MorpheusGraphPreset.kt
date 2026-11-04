@@ -23,7 +23,7 @@ public object LabeledMorpheusGraphPresets {
             MorpheusGraphPreset("Baseline", "Uniform field, proximity edges, depth, pulse", baseline),
             MorpheusGraphPreset("Ribbon mesh", "Wavy triangulated band, fixed topology, single layer", ribbonMesh),
             MorpheusGraphPreset("Ribbon + ghost", "Ribbon over a faint, sparser, slower far mesh", ribbonPlusGhost),
-            MorpheusGraphPreset("Glow constellation", "Ribbon with a hot node subset haloed; long edges fade", glowConstellation),
+            MorpheusGraphPreset("Glow constellation", "Ribbon with a subset of hot nodes glowing; long edges fade", glowConstellation),
             MorpheusGraphPreset("Corner bloom", "Dense at the top-end corner, thinning out; built for app bars", cornerBloom),
             MorpheusGraphPreset("Depth fog", "Uniform single mesh, per-node depth dims and shrinks far nodes", depthFog),
             MorpheusGraphPreset("Living Delaunay", "Ribbon re-triangulated every frame; flipped edges fade in and out", livingDelaunay),

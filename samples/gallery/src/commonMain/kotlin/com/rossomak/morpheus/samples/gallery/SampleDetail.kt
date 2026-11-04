@@ -220,7 +220,7 @@ private fun ThemeControl(selected: ThemeMode, enabled: Boolean, onSelect: (Theme
 }
 
 /**
- * Runs [content] on a [canvasSize] canvas inside a window reference of that same size, so the mesh density
+ * Runs [content] on a [canvasSize] canvas inside a window reference of that same size, so the cell density
  * follows the canvas, not the app window, as in a capture. The canvas is centered and, when it
  * [scalesToFit], scaled uniformly to fill the stage; otherwise it shows at its own size, shrunk only if it
  * wouldn't fit. Either way it is never cropped or scrolled, and the window reference keeps the canvas size,

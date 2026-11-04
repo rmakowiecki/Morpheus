@@ -15,7 +15,7 @@ private const val LAYER_SEED_STRIDE = 7_919
 private const val SNAP_FRACTION = 0.5f
 
 /**
- * A background part way between two specs: what [morpheusGraphBackground]'s morph overload draws.
+ * A graph part way between two specs: what [morpheusGraphBackground]'s morph overload draws.
  * [fraction] runs from 0 ([from]) to 1 ([to]) and can stop, scrub and reverse anywhere in between.
  *
  * [origin] is set only by [MorpheusGraphMorphState] when a morph starts part way through another: the
@@ -34,7 +34,7 @@ public data class MorpheusGraphMorph(
 /**
  * One drawn layer of a morph: the layer's own seed, its spec at the morph's fraction, the [shape]
  * that decides which of its nodes show, the [fill] it is painted with, and the spec layer it draws,
- * counted from the front: two meshes dissolving into each other draw the same [slotFromFront].
+ * counted from the front: two meshes dissolving into each other draw the same layer position, [slotFromFront].
  */
 internal class MorphLayer(
     val seed: Int,
@@ -107,7 +107,7 @@ internal fun morphLayers(morph: MorpheusGraphMorph, inherited: MorpheusGraphFill
     val to = morph.to
     val progress = morph.fraction.coerceIn(0f, 1f)
     val originLayers = morph.origin?.let { origin -> morphLayers(origin, inherited) }.orEmpty()
-    // An interrupted dissolve between seeds can leave a slot only the origin still draws.
+    // An interrupted dissolve between seeds can leave a layer position only the origin still draws.
     val originSlots = (originLayers.maxOfOrNull { it.slotFromFront } ?: -1) + 1
     val count = max(max(from.layers.size, to.layers.size), originSlots)
     return (count - 1 downTo 0).flatMap { slotFromFront ->
@@ -132,7 +132,7 @@ internal fun morphLayers(morph: MorpheusGraphMorph, inherited: MorpheusGraphFill
 }
 
 /**
- * A slot neither end has but [MorpheusGraphMorph.origin] still draws: its meshes fade out where they
+ * A layer position neither end has but [MorpheusGraphMorph.origin] still draws: its meshes fade out where they
  * stand, as a layer the end lacks would, the one the origin was morphing on leading at its own seed.
  */
 private fun originOnlySlot(meshes: List<MorphLayer>, progress: Float, slot: Int): List<MorphLayer> {
@@ -146,7 +146,7 @@ private fun originOnlySlot(meshes: List<MorphLayer>, progress: Float, slot: Int)
     return slotLayers(meshes, SlotEnds(lead.spec, lead.seed, lead.fill, end, lead.seed, endFill), progress, slot)
 }
 
-/** One slot's two ends, as [morphLayers] resolved them. */
+/** One layer position's two ends, as [morphLayers] resolved them. */
 private class SlotEnds(
     val start: MorpheusGraphLayerSpec,
     val startSeed: Int,
@@ -156,7 +156,7 @@ private class SlotEnds(
     val endFill: FillState.Of,
 )
 
-/** The meshes one slot draws at [progress]: [startMeshes] each morphing on or dissolving, and the end's mesh arriving if none of them is it. */
+/** The meshes one layer position draws at [progress]: [startMeshes] each morphing on or dissolving, and the end's mesh arriving if none of them is it. */
 private fun slotLayers(startMeshes: List<MorphLayer>, ends: SlotEnds, progress: Float, slot: Int): List<MorphLayer> {
     val end = ends.end
     if (progress <= 0f) return startMeshes

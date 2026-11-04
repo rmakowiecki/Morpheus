@@ -19,8 +19,8 @@ import kotlin.math.sqrt
 import kotlin.math.tan
 
 // Where a layer's nodes are present is a density field over the surface: 0 to 1, evaluated at a point.
-// MorpheusGraphEnvelope combines a layer's primitives into that field; this file holds what each
-// primitive contributes on its own. Every kind needs its own function because each is a different
+// MorpheusGraphEnvelope combines a layer's shapes into that field; this file holds what each
+// shape contributes on its own. Every kind needs its own function because each is a different
 // geometry (a distance to a curve, a distance into a rounded polygon) and takes different parameters,
 // but they all end the same way: a distance in pixels, turned into a 0..1 falloff with smoothStep.
 // Sizes are fractions of the longer side and angles are degrees, so a spec reads the same on any

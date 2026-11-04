@@ -10,7 +10,7 @@ import com.rossomak.morpheus.MorpheusGraphPresets
 import com.rossomak.morpheus.MorpheusGraphSpec
 import com.rossomak.morpheus.ShapePrimitive
 
-// Each primitive's constructor defaults, read off a default instance so they never drift from the lib.
+// Each shape's constructor defaults, read off a default instance so they never drift from the lib.
 private val UniformDefaults = ShapePrimitive.Uniform()
 private val RibbonDefaults = ShapePrimitive.Ribbon()
 private val BloomDefaults = ShapePrimitive.Bloom()
@@ -119,7 +119,7 @@ private fun List<GradientStop>.toSource(): String =
 
 private fun Color.toSource(): String = "Color(0x${toArgbHex()})"
 
-/** The primitive as a constructor call, listing only the arguments that differ from its defaults. */
+/** The shape as a constructor call, listing only the arguments that differ from its defaults. */
 private fun ShapePrimitive.toSource(): String {
     val arguments = when (this) {
         is ShapePrimitive.Uniform -> listOf("weight" to (weight to UniformDefaults.weight))

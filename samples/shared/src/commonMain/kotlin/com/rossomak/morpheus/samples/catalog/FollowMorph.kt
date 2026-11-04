@@ -39,12 +39,12 @@ private val WalkMorphNames = Walk.zipWithNext { from, to -> "${SpecNames[from]} 
 
 private val FollowMorphTiming = MorphTiming(hold = 500.milliseconds, morph = 1500.milliseconds)
 
-/** The background never crosses from one spec to the next faster than this share of a morph, so a quick scrub leaves it behind the position. */
+/** The graph never crosses from one spec to the next faster than this share of a morph, so a quick scrub leaves it behind the position. */
 private const val SPEED_LIMIT = 3
 
 /**
  * A morph that follows a position across [specs], here a walk out to the last spec and back. The label gives the
- * position and the spec nearest it; scrub quickly and the background trails behind, catching up at a limited pace.
+ * position and the spec nearest it; scrub quickly and the graph trails behind, catching up at a limited pace.
  */
 @Composable
 fun FollowMorphSample(
@@ -69,7 +69,7 @@ private fun Float.toTenths(): String = (this * 10).roundToInt().let { "${it / 10
 internal val followMorphSample = Sample(
     id = "follow-morph",
     title = "Follow morph",
-    description = "A morph that follows a position across four specs, out to the last and back; scrub fast and the background trails behind.",
+    description = "A morph that follows a position across four specs, out to the last and back; scrub fast and the graph trails behind.",
     category = SampleCategory.Morphs,
     // The capture covers the whole walk, out and back.
     recipe = CaptureRecipe(duration = FollowMorphTiming.cyclePeriod(legs = WalkMorphNames.size)),

@@ -22,18 +22,18 @@ internal const val DEGREES_TO_RADIANS = 0.017453292f
 private const val RIBBON_PHASE_SEED_STRIDE = 104_729
 
 /**
- * The overall shape of one layer, from its [ShapePrimitive]s, in three parts:
+ * The density of one layer, combined from its shapes ([ShapePrimitive]s), in three parts:
  * - [densityAt] decides where nodes are *present*: a node shows in proportion to the density at its
- *   home, so a shape is just a density field over the surface, from 0 to 1. It is evaluated every
+ *   home, so each shape is just a density field over the surface, from 0 to 1. It is evaluated every
  *   frame, against the current spec and surface size, which is what lets shapes morph and follow a
  *   resizing surface: nodes fade in and out where the field changes, but never move.
  * - [closenessAt] orders the nodes a morph switches: how near a point is to the shape, falling off
  *   over the whole surface instead of stopping at the shape's border, so even points far outside it
  *   still rank by distance.
- * - [waveOffsetY] *moves* every node's home over time, uniformly for neighbors, so the shape itself
- *   breathes while the mesh topology stays intact.
+ * - [waveOffsetY] *moves* every node's home over time, uniformly for neighbors, so the shapes themselves
+ *   breathe while the mesh topology stays intact.
  *
- * What each primitive contributes on its own lives in `MorpheusGraphShapeDensity.kt`. Only the random
+ * What each shape contributes on its own lives in `MorpheusGraphShapeDensity.kt`. Only the random
  * phases live here; every shape value comes from the spec passed in, so one envelope serves every
  * frame of a morph. Each ribbon takes its meander phases by its place among the spec's ribbons, so
  * two ribbons in one spec meander differently, and the first takes the same phases as a lone ribbon.
@@ -49,7 +49,7 @@ internal class MorpheusGraphEnvelope(private val seed: Int) {
         wavePhase = random.nextFloat() * TWO_PI
     }
 
-    /** The strongest weighted primitive at the point, never under the spec's outlier floor. */
+    /** The strongest weighted shape at the point, never under the spec's density floor. */
     fun densityAt(spec: MorpheusGraphLayerSpec, width: Float, height: Float, x: Float, y: Float): Float {
         var density = 0f
         var ribbonOrdinal = 0
@@ -75,7 +75,7 @@ internal class MorpheusGraphEnvelope(private val seed: Int) {
     /**
      * How near the point is to the shape, from 0 (the far side of the surface) to 1 (on a ribbon's
      * center line, a bloom's, rectangle's or triangle's center, a pill's axis or a ring's curve), as the
-     * strongest weighted primitive like [densityAt]. Uniform is equally near everywhere.
+     * strongest weighted shape like [densityAt]. Uniform is equally near everywhere.
      */
     fun closenessAt(spec: MorpheusGraphLayerSpec, width: Float, height: Float, x: Float, y: Float): Float {
         var closeness = 0f

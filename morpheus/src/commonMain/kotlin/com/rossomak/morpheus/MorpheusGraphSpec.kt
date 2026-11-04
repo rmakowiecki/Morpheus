@@ -1,12 +1,12 @@
 package com.rossomak.morpheus
 
 /**
- * Everything that makes one network-graph background look different from another. A variant is a
+ * Everything that makes one graph look different from another. A variant is a
  * value of this class, not a renderer of its own: [MorpheusGraphPresets] holds curated starting points,
  * and a tuning tool can edit a copy live.
  *
- * [layers] draw back to front, each an independent mesh with its own nodes, envelope and seed, so a
- * sharp foreground can sit over a faint, larger background mesh for depth.
+ * [layers] draw back to front, each describing an independent mesh with its own cell density, shapes and
+ * seed, so a sharp foreground mesh can sit over a faint, larger background mesh for depth.
  * Layer seeds count from the front layer, so adding a back layer leaves the front one's layout alone.
  *
  * Any two specs morph into each other (see [morphLayers]). Layers that share [seed] and their morph
@@ -29,7 +29,7 @@ public enum class EdgeRule {
     /** Every pair within reach, re-evaluated each frame. */
     Proximity,
 
-    /** Delaunay over the nodes' rest positions, triangulated once and kept while they drift. */
+    /** Delaunay over the nodes' homes, triangulated once and kept while they drift. */
     FixedTriangulation,
 
     /** Delaunay re-triangulated every frame; edges that flip in or out fade rather than pop. */
@@ -58,10 +58,10 @@ private const val TRIANGLE_DEFAULT_CORNER_RADIUS = 0.03f
 private const val SOLID_DEFAULT_PLATEAU = 0.8f
 
 /**
- * One part of a layer's shape: a density field over the surface, from 0 to 1, scaled by [weight]. A
- * layer combines its primitives by taking the strongest at each point, so any mix of them is a union.
- * Two layers' primitives never need to match up for a morph: each node takes its presence from the two
- * ends, and comets carry the nodes only one end shows over to the nodes only the other shows (see [LayerField]).
+ * One shape: a density field over the surface, from 0 to 1, scaled by [weight]. A
+ * layer combines its shapes by taking the strongest at each point, so any mix of them is a union.
+ * Two layers' shapes never need to match up for a morph: each node takes its presence from the two
+ * ends, and comets carry light from the nodes only one end shows to the nodes only the other shows (see [LayerField]).
  */
 public sealed interface ShapePrimitive {
     public val weight: Float
@@ -174,7 +174,7 @@ public sealed interface ShapePrimitive {
 }
 
 /**
- * One mesh layer. Geometry is in grid cells (a cell is the window's longer side over [density]), so
+ * One layer, describing one mesh. Geometry is in grid cells (a cell is the window's longer side over [density]), so
  * the mesh is equally fine on every surface of a screen and never reshuffles when one resizes; stroke,
  * node and glow sizes are in dp, so they read the same on a 64dp app bar and a full-screen hero.
  * Fractions marked "of height"/"of width" are of the surface.
@@ -189,23 +189,23 @@ public sealed interface ShapePrimitive {
  */
 public data class MorpheusGraphLayerSpec(
     /**
-     * Where nodes sit: up to [MAX_SHAPE_PRIMITIVES] primitives, combined by taking the strongest weighted
-     * one at each point. See [ShapePrimitive] and [MorpheusGraphEnvelope].
+     * Where nodes sit: up to [MAX_SHAPE_PRIMITIVES] shapes, combined by taking the strongest weighted
+     * one at each point into the layer's density. See [ShapePrimitive] and [MorpheusGraphEnvelope].
      */
     val shapes: List<ShapePrimitive> = listOf(ShapePrimitive.Uniform()),
     val edgeRule: EdgeRule = EdgeRule.FixedTriangulation,
-    /** Grid cells along the window's longer side; the node-count knob. */
+    /** Cells along the window's longer side, the grid's resolution; the node-count knob. Not the shapes' density. */
     val density: Float = 20f,
-    /** Chance a cell inside the envelope holds a node at all. */
+    /** Ceiling on how many cells may activate: a 0..1 multiplier on the density at each cell's home. */
     val fillChance: Float = 0.9f,
-    /** How far a node's rest position sits from its cell's center, in cells. */
+    /** How far a node's home sits from its cell's center, in cells. */
     val jitter: Float = 0.45f,
-    /** How far a node wanders from its rest position, in cells. Kept under 1 to avoid clumping. */
+    /** How far a node drifts from its home, in cells. Kept under 1 to avoid clumping. */
     val driftAmplitude: Float = 0.4f,
     val driftSpeed: Float = 1f,
-    /** Node density outside the envelope, so the shape has stray outliers instead of a hard border. */
+    /** Density floor: the density outside every shape, so the shapes leave stray nodes instead of a hard border. */
     val envelopeFloor: Float = 0.03f,
-    /** Travelling vertical wave applied to every rest position, as a fraction of height. 0 = static. */
+    /** Travelling vertical wave applied to every home, as a fraction of height. 0 = static. */
     val waveAmplitude: Float = 0f,
     val waveSpeed: Float = 0.3f,
     /** Longest edge kept, in cells. For [EdgeRule.Proximity] this is the reach itself. */
@@ -230,15 +230,15 @@ public data class MorpheusGraphLayerSpec(
     val nodeSizeDp: Float = 2.2f,
     /** Spread of node radii around [nodeSizeDp], 0 = all equal. */
     val nodeSizeVariance: Float = 0.3f,
-    /** Share of nodes that are "hot": larger, fully opaque, and haloed. Nodes heat up and cool down gradually as it changes. */
+    /** Share of nodes that are hot: larger, fully opaque, and glowing. Nodes heat up and cool down gradually as it changes. */
     val hotNodeShare: Float = 0f,
     val glowRadiusDp: Float = 14f,
     val glowStrength: Float = 0.35f,
     /** Per-node depth inside this one mesh: far nodes and their edges dim and shrink. 0 = off. */
     val depthDimming: Float = 0f,
     /**
-     * The comets a morph sends from the nodes only its start shows to the nodes only its end shows, averaged
-     * over the morph's two ends. See [MorpheusGraphComets].
+     * The comets a morph sends, carrying light from the nodes only its start shows to the nodes only its end shows,
+     * averaged over the morph's two ends. See [MorpheusGraphComets].
      */
     val comets: MorpheusGraphComets = MorpheusGraphComets(),
     /**

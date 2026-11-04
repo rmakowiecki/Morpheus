@@ -22,7 +22,7 @@ import kotlin.test.Test
 
 /**
  * Renders layers headlessly on the recipe canvas and checks what a viewer sees of the dots: that overlapping dots
- * keep the mask's color, and that no dot is dimmer at its center than the edges and halo alone would be there.
+ * keep the mask's color, and that no dot is dimmer at its center than the edges and glow alone would be there.
  */
 class DotColourTest {
 
