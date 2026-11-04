@@ -37,10 +37,11 @@ links here rather than repeating the steps.
 
 ## The readout
 
-The gallery's control row has a button reading `frame 9.8 ms · graphs 6.1 ms`, refreshed twice a
-second. Clicking it opens the breakdown panel, in the side column, under the Tune sheet when that is
-open (under the preview in a narrow window). The button and the panel dim from a reset, such as a
-sample change, until the next reading arrives:
+The gallery's control row has a **Frame stats** button, the speedometer icon. It opens the frame stats pane: in the side
+column, under the Tune pane when that is open, or as a bottom sheet in a narrow window. The pane's
+header reads `frame 9.8 ms · graphs 6.1 ms`, refreshed twice a second, with its notes on the line
+under it. The pane dims from a reset, such as a sample change, until the next reading arrives. The
+reading shows in the pane only, so it never moves or rescales the sample:
 
 - **frame** is the average interval between frames; **graphs** is the CPU time spent recording the
   graphs into the display list, every graph on the canvas summed.
@@ -53,7 +54,7 @@ sample change, until the next reading arrives:
 - The **switches** skip drawing edges, halos, dots or the fill recolor, or show violations. A skipped
   step records no time and no draw calls; its raster and GPU cost shows as the drop in **frame**.
 
-The button flags a reading that isn't a benchmark number:
+The header's notes flag a reading that isn't a benchmark number:
 
 - **capped**: the frame interval sits at a display refresh interval while the graphs take well under it
   (less than 70%), so the frame is waiting for the display and the cap is still on.
@@ -70,7 +71,8 @@ Phases under the timer's resolution read 0.00 until enough frames add up: in the
 1. Run `./gradlew :samples:gallery:run -Pbenchmark`, or the "Gallery (benchmark)" run configuration in
    the IDE. The property adds `-Dskiko.vsync.enabled=false -Dsun.java2d.uiScale=2`.
 2. Maximize the window, at least about 1,370 dp wide: the sample list (320 dp), the 640 dp canvas with
-   its padding and the 380 dp side column.
+   its padding and the 380 dp side column. The side column shows from 1,242 dp, but the canvas is scaled
+   below about 1,370.
 
 ### Browser (wasm)
 
@@ -124,10 +126,10 @@ python3 scripts/gallery_benchmark.py --skip-build --sample comet-playground
 
 1. Open "Pills to ribbons", or "Comet playground" for its rows. Press Reset to defaults if it was tuned.
 2. Pick the **16:9** preview and turn **Scale to fit** off.
-3. Open the breakdown panel by clicking the frame time button in the control row. It opens in the side
-   column; open the Tune sheet as well if the numbers should cover tuning, and the two share the column.
-   Neither takes canvas height or width from the other.
-4. Check that the button says neither "capped" nor "canvas scaled".
+3. Open the frame stats pane by clicking **Frame stats** (the speedometer icon) in the control row. It opens in the side
+   column; open the Tune pane as well if the numbers should cover tuning, and the two share the column.
+   The column is there whether or not a pane is open, so neither takes canvas height or width.
+4. Check that the pane's header notes neither "capped" nor "canvas scaled".
 5. With every switch off, watch a full loop and record frame, graphs and the phase table.
 6. Turn on each skip switch in turn, alone, and record the same over a loop.
 7. Turn on every skip switch at once and record the same over a loop.

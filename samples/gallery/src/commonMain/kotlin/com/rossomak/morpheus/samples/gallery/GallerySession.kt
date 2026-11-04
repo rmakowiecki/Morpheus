@@ -46,6 +46,9 @@ internal class GallerySession(val sample: Sample, pageStats: MorpheusGraphFrameS
      */
     val cycle = CycleControl()
 
+    /** True for a sample with specs or morphs, which the Tune pane tunes. */
+    val isTunable: Boolean get() = sample.specs.isNotEmpty() || sample.morphs.isNotEmpty()
+
     /** True for a sample with morphs, which runs a cycle: only such a sample has a scrub slider, comet debug and timing. */
     val runsCycle: Boolean get() = sample.timing != null
 

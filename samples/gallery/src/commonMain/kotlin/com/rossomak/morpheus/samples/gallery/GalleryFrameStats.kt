@@ -8,18 +8,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,7 +27,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -46,14 +41,16 @@ import kotlin.math.floor
 import kotlin.math.roundToInt
 
 /**
- * The gallery-wide frame stats every sample reports into, and whether the breakdown and comet debug panels are
- * open. Kept across samples, like the preview frame, so the debug switches stay as set.
+ * The gallery-wide frame stats every sample reports into, whether the breakdown and comet debug panels are
+ * open, and whether the preview [isCanvasScaled]: it shows at other than its own size, which the frame stats pane
+ * notes. Kept across samples, like the preview frame, so the debug switches stay as set.
  */
 @Stable
 internal class GalleryFrameStats {
     val stats = MorpheusGraphFrameStats()
     var isBreakdownExpanded by mutableStateOf(false)
     var isCometDebugExpanded by mutableStateOf(false)
+    var isCanvasScaled by mutableStateOf(false)
 }
 
 /** One tile of a grid sample, under its label, with the stats it reports into. */
@@ -123,79 +120,75 @@ internal fun RecordFrameIntervals(frameStats: GalleryFrameStats, tiles: TileStat
 }
 
 /**
- * `frame 9.8 ms · graphs 6.1 ms`, marked when a debug switch is on, when the frame interval sits at a display
- * refresh interval ("capped": the frame-rate cap hides the cost) and when the preview [canvasScaled]. It is
- * the open or closed state of the frame stats pane, as Tune is of the tuner's, and dims while the reading
- * is from before the last reset.
+ * Opens and closes the frame stats pane, filled while it [isOpen], as Tune is of the tuner's. A static label: the
+ * reading lives in the pane's header, so the control row never changes width with it.
  */
 @Composable
-internal fun FrameStatsButton(frameStats: GalleryFrameStats, tiles: TileStatsGroup, canvasScaled: Boolean, modifier: Modifier = Modifier) {
+internal fun FrameStatsButton(isOpen: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    PaneButton(icon = Icons.Filled.Speed, label = "Frame stats", isActive = isOpen, onClick = onClick, modifier = modifier)
+}
+
+/**
+ * The last published window: the [FrameStatsHeader] on top, then per phase and count, the total and one column
+ * per spec layer, back to front; then the debug switches. A grid sample shows a column per tile instead, or a row
+ * per tile past [MAX_TILE_COLUMNS]. Below the header it scrolls inside itself both ways, so it never scrolls the
+ * page. Dims while the reading is from before the last reset.
+ */
+@Composable
+internal fun FrameBreakdownPanel(frameStats: GalleryFrameStats, tiles: TileStatsGroup, modifier: Modifier = Modifier) {
+    val stats = frameStats.stats
+    Surface(modifier = modifier, color = MaterialTheme.colorScheme.surfaceContainerLow, shape = MaterialTheme.shapes.small) {
+        Column(modifier = Modifier.alpha(if (stats.isStale || tiles.isStale) STALE_ALPHA else 1f)) {
+            FrameStatsHeader(frameStats = frameStats, tiles = tiles, modifier = Modifier.fillMaxWidth().padding(start = 8.dp, top = 8.dp, end = 8.dp))
+            FrameBreakdownBody(stats = stats, tiles = tiles)
+        }
+    }
+}
+
+/**
+ * `frame 9.8 ms · graphs 6.1 ms`, and under it the notes on a reading that isn't a benchmark number: a debug switch
+ * is on, the frame interval sits at a display refresh interval ("capped": the frame-rate cap hides the cost), or
+ * the preview's canvas is scaled. The notes line is there, blank, without notes, so the header keeps its height.
+ */
+@Composable
+private fun FrameStatsHeader(frameStats: GalleryFrameStats, tiles: TileStatsGroup, modifier: Modifier = Modifier) {
     val stats = frameStats.stats
     // A grid's tiles each report their own recording time; the page's stats see none of it.
     val drawMillis = if (tiles.isTiled) tiles.drawMillis else stats.drawMillis
     val notes = buildList {
         if (stats.anySwitchOn) add("debug switches on")
         if (isCapped(frameMillis = stats.frameMillis, drawMillis = drawMillis)) add("capped")
-        if (canvasScaled) add("canvas scaled")
+        if (frameStats.isCanvasScaled) add("canvas scaled")
     }
     val readout = if (stats.frameMillis <= 0f) "frame – ms · graphs – ms" else "frame ${stats.frameMillis.toFixed(1)} ms · graphs ${drawMillis.toFixed(1)} ms"
-    val colors = if (frameStats.isBreakdownExpanded) ButtonDefaults.filledTonalButtonColors() else ButtonDefaults.outlinedButtonColors()
-    OutlinedButton(
-        onClick = { frameStats.isBreakdownExpanded = !frameStats.isBreakdownExpanded },
-        colors = colors,
-        modifier = modifier.alpha(if (stats.isStale || tiles.isStale) STALE_ALPHA else 1f),
-    ) {
-        Icon(Icons.Filled.Speed, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-        Text(
-            text = (listOf(readout) + notes).joinToString(separator = " · "),
-            color = if (notes.isEmpty()) Color.Unspecified else MaterialTheme.colorScheme.tertiary,
-        )
+    Column(modifier = modifier) {
+        Text(text = readout, style = MaterialTheme.typography.titleSmall.copy(fontFamily = FontFamily.Monospace))
+        Text(text = notes.joinToString(separator = " · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
     }
 }
 
-/**
- * The breakdown of the last published window: per phase and count, the total and then one column per spec layer,
- * back to front; then the debug switches. A grid sample shows a column per tile instead, or a row per tile past
- * [MAX_TILE_COLUMNS]. At most [maxHeight] tall, scrolling inside itself both ways, so it
- * never scrolls the page. Dims while the reading is from before the last reset.
- */
 @Composable
-internal fun FrameBreakdownPanel(
-    frameStats: GalleryFrameStats,
-    tiles: TileStatsGroup,
-    modifier: Modifier = Modifier,
-    maxHeight: Dp = BREAKDOWN_MAX_HEIGHT,
-) {
-    val stats = frameStats.stats
+private fun FrameBreakdownBody(stats: MorpheusGraphFrameStats, tiles: TileStatsGroup) {
     val breakdown = stats.breakdown
-    Surface(modifier = modifier, color = MaterialTheme.colorScheme.surfaceContainerLow, shape = MaterialTheme.shapes.small) {
-        Column(
-            modifier = Modifier
-                .alpha(if (stats.isStale || tiles.isStale) STALE_ALPHA else 1f)
-                .heightIn(max = maxHeight)
-                .verticalScroll(rememberScrollState())
-                .padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (tiles.isTiled) {
-                Text(
-                    text = "Frame time and unrecorded (raster) time belong to the whole page and can't be split per tile. " +
-                        "Per tile: recording time, work counts and draw calls.",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.tertiary,
-                )
-            } else if (breakdown.backgroundCount > 1) {
-                Text(
-                    text = "several backgrounds: ${breakdown.backgroundCount}, summed per spec layer",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.tertiary,
-                )
-            }
-            Column(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                if (tiles.isTiled) TileBreakdownTable(tiles.tiles) else BreakdownTable(breakdown)
-            }
-            DebugSwitches(stats)
+    Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (tiles.isTiled) {
+            Text(
+                text = "Frame time and unrecorded (raster) time belong to the whole page and can't be split per tile. " +
+                    "Per tile: recording time, work counts and draw calls.",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.tertiary,
+            )
+        } else if (breakdown.backgroundCount > 1) {
+            Text(
+                text = "several backgrounds: ${breakdown.backgroundCount}, summed per spec layer",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.tertiary,
+            )
         }
+        Column(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+            if (tiles.isTiled) TileBreakdownTable(tiles.tiles) else BreakdownTable(breakdown)
+        }
+        DebugSwitches(stats)
     }
 }
 
@@ -321,7 +314,6 @@ internal fun Float.toFixed(decimals: Int): String {
     return "$sign$whole.${(scaled % factor).toString().padStart(decimals, '0')}"
 }
 
-private val BREAKDOWN_MAX_HEIGHT = 240.dp
 private val LABEL_WIDTH = 104.dp
 private val CELL_WIDTH = 64.dp
 private val TILE_CELL_WIDTH = 124.dp
