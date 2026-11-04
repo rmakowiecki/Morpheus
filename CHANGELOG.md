@@ -22,3 +22,6 @@
 - `MorpheusGraphDrawingApproach` and `MorpheusGraphFrameStats.drawingApproach`, both experimental, are removed.
   Draw-call counts in `MorpheusGraphLayerBreakdown` count each batch as one call, so they don't compare with
   earlier readings.
+- Two tuning sheet sliders are renamed to match the glossary in `CONTEXT.md`: "Density" is now "Cell density" and
+  "Outlier density" is now "Density floor". The gallery's frame stats readout says "several graphs" where it said
+  "several backgrounds". No API changes.

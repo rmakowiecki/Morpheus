@@ -82,7 +82,7 @@ public object MorpheusGraphPresets {
         layers = listOf(ribbonGhost, ribbonFront),
     )
 
-    /** Ribbon with a hot node subset haloed; long edges fade. */
+    /** Ribbon with a subset of hot nodes glowing; long edges fade. */
     public val glowConstellation: MorpheusGraphSpec = MorpheusGraphSpec(
         seed = 4,
         layers = listOf(

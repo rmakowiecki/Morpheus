@@ -5,9 +5,9 @@ import kotlin.math.roundToInt
 import kotlin.test.Test
 
 /**
- * Reports how abruptly halos go out over the "Pills to ribbons" showcase's loop, as the gallery seeks it: per
- * layer with halos, how many halos drop by more than [HALO_DROP] of a full halo in one frame, the most in any
- * one frame, what took each one down, and the most of the layer's whole halo lost in one frame. A comet's patch once lost its halos together, mostly on the reverse
+ * Reports how abruptly glows go out over the "Pills to ribbons" showcase's loop, as the gallery seeks it: per
+ * layer with glows, how many glows drop by more than [HALO_DROP] of a full glow in one frame, the most in any
+ * one frame, what took each one down, and the most of the layer's whole glow lost in one frame. A comet's patch once lost its glows together, mostly on the reverse
  * morph, when its sparks' heat or its nodes' presence fell in a frame or two (#43); normal switching, and the
  * odd glow factor the alpha settle drops, stay. Printed, not asserted; only runs with `MORPHEUS_BENCHMARK` set:
  *
@@ -37,7 +37,7 @@ class MorphHaloReport {
         for ((slot, tally) in tallies.entries.sortedBy { it.key }) println("slot $slot: ${tally.describe()}")
     }
 
-    /** Every node's halo as a share of a full one, and the three things it multiplies, after one [LayerField.advance]. */
+    /** Every node's glow as a share of a full one, and the three things it multiplies, after one [LayerField.advance]. */
     private class NodeHalos(val halo: FloatArray, val heat: FloatArray, val glow: FloatArray, val presence: FloatArray, val switching: BooleanArray) {
         companion object {
             fun of(field: LayerField, fullHalo: Float) = NodeHalos(
@@ -50,12 +50,12 @@ class MorphHaloReport {
         }
     }
 
-    /** One layer's halo drops over the loop, by frame and by cause. */
+    /** One layer's glow drops over the loop, by frame and by cause. */
     private class Tally {
         private var previous: NodeHalos? = null
         private var largestDrop = 0f
 
-        /** The most of the layer's summed halo lost in one frame, as a share of that sum the frame before. */
+        /** The most of the layer's summed glow lost in one frame, as a share of that sum the frame before. */
         private var largestTotalFall = 0f
         private val dropsByFrame = HashMap<Int, Int>()
         private val dropsByCause = LinkedHashMap<String, Int>()
@@ -91,7 +91,7 @@ class MorphHaloReport {
     }
 
     private companion object {
-        /** A halo losing more than this share of a full halo in one frame reads as going out. */
+        /** A glow losing more than this share of a full glow in one frame reads as going out. */
         const val HALO_DROP = 0.15f
     }
 }

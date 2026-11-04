@@ -32,10 +32,10 @@ private const val LANDING_DISTANCE = 0.001f
  * duration, so a quick flick or a pager's own short scroll animation still morphs over that long.
  *
  * Slower motion reaches the follower as it is, so scrubbing stays exact. Faster motion leaves the
- * background behind; it then moves at the cap until close, slows down to land on the position, and
+ * graph behind; it then moves at the cap until close, slows down to land on the position, and
  * follows it exactly again from there. A position turning back while it lags just turns the
- * background around. A target beyond the pair of specs the background shows, such as a page several
- * Next taps ahead, skips the specs in between: the background morphs from the screen straight to it
+ * graph around. A target beyond the pair of specs the graph shows, such as a page several
+ * Next taps ahead, skips the specs in between: the graph morphs from the screen straight to it
  * over the minimum duration, starting again from the screen whenever the target changes. A jump of
  * `jumpThreshold` or more goes to the follower's timed morph, with no cap. The minimum is scaled by
  * the context's [MotionDurationScale], so "Remove animations" lifts it.
@@ -51,7 +51,7 @@ internal class LimitedMorphFollower(
 ) {
     private val limiter = MorphSpeedLimiter(jumpThreshold)
 
-    /** Hands the follower the position, then, while the background lags it, the next step every frame until it catches up. */
+    /** Hands the follower the position, then, while the graph lags it, the next step every frame until it catches up. */
     suspend fun update() {
         do {
             val minMorphSeconds = minMorphDuration().toDouble(DurationUnit.SECONDS).toFloat() * durationScale()
@@ -77,7 +77,7 @@ internal class LimitedMorphFollower(
     private suspend fun durationScale(): Float = currentCoroutineContext()[MotionDurationScale]?.scaleFactor ?: 1f
 }
 
-/** What a capped background does on one frame. */
+/** What a capped graph does on one frame. */
 internal sealed interface MorphStep {
     /** Follows [position] along the pairs of specs. */
     data class Follow(val position: Float) : MorphStep
@@ -93,7 +93,7 @@ internal sealed interface MorphStep {
 }
 
 /**
- * The position a capped background shows: it trails the followed position by no more than its speed
+ * The position a capped graph shows: it trails the followed position by no more than its speed
  * allows, or, for a heading beyond the pair it shows, morphs straight there over the minimum duration.
  */
 internal class MorphSpeedLimiter(private val jumpThreshold: Float) {

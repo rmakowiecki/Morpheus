@@ -186,7 +186,7 @@ internal fun FrameBreakdownPanel(
                 )
             } else if (breakdown.backgroundCount > 1) {
                 Text(
-                    text = "several backgrounds: ${breakdown.backgroundCount}, summed per spec layer",
+                    text = "several graphs: ${breakdown.backgroundCount}, summed per spec layer",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.tertiary,
                 )

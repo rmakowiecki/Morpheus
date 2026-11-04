@@ -92,7 +92,7 @@ class PointBatchesCaptureTest {
         drawPerElement(field, Color.White, HaloBrushCache(Color.White), SETTLE_STEPS * STEP_SECONDS, edgesOnly, edgesInLevelOrder)
     }
 
-    /** [field] drawn by [LayerField.draw], in point batches, in white over black, as ARGB pixels; [edgesOnly] skips halos and dots. */
+    /** [field] drawn by [LayerField.draw], in point batches, in white over black, as ARGB pixels; [edgesOnly] skips glows and dots. */
     private fun renderBatched(field: LayerField, width: Int, height: Int, edgesOnly: Boolean = false): IntArray {
         val stats = MorpheusGraphFrameStats().apply {
             skipHalos = edgesOnly

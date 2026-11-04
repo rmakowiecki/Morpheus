@@ -10,9 +10,9 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 
 /**
  * [field] drawn per element, as [LayerField.draw] drew it before point batches: into one offscreen layer, each
- * edge through `drawLine`, then the halos, then each dot as a [BlendMode.DstOut] punch, for a dot at
+ * edge through `drawLine`, then the glows, then each dot as a [BlendMode.DstOut] punch, for a dot at
  * [PUNCH_MIN_ALPHA] or above, and a [BlendMode.SrcOver] add at its own radius and alpha. In solid [color], at
- * [timeSeconds]; [edgesOnly] skips halos and dots, and [edgesInLevelOrder] draws the edges in alpha-level order, as
+ * [timeSeconds]; [edgesOnly] skips glows and dots, and [edgesInLevelOrder] draws the edges in alpha-level order, as
  * point batches do. The reference [PointBatchesCaptureTest] compares point batches against.
  */
 internal fun DrawScope.drawPerElement(field: LayerField, color: Color, halos: HaloBrushCache, timeSeconds: Float, edgesOnly: Boolean = false, edgesInLevelOrder: Boolean = false) {
