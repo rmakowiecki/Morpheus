@@ -33,13 +33,14 @@ private val linearGradientSpec = MorpheusGraphSpec(
     layers = listOf(fillSampleLayer.copy(driftAmplitude = 0.6f, driftSpeed = 1.5f)),
 )
 
-/** A thick ring over outliers: enough of them to cover the surface, few enough to leave the ring plain. */
+/** A thick ring with every cell inside it active and none outside. */
 private val sweepGradientSpec = MorpheusGraphSpec(
     seed = 14,
     layers = listOf(
         fillSampleLayer.copy(
             shapes = listOf(Ring(x = 0.5f, y = 0.5f, radius = 0.3f, thickness = 0.14f)),
-            envelopeFloor = 0.12f,
+            fillChance = 1f,
+            envelopeFloor = 0f,
             driftAmplitude = 0.55f,
             driftSpeed = 1.5f,
         ),
