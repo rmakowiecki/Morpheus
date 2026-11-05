@@ -17,7 +17,7 @@ private fun retargetBloom(x: Float, y: Float) = MorphFamily.cornerBloom.withSamp
 
 private fun MorpheusGraphSpec.forMorphSample(density: Float) = mapLayers { layer ->
     val atDensity = layer.copy(density = density)
-    if (layer.shapes.none { it is Bloom }) atDensity else atDensity.copy(fillChance = 1f, shapes = layer.shapes.map { if (it is Bloom) it.copy(plateau = 1f) else it })
+    if (layer.shapes.none { it is Bloom }) atDensity else atDensity.copy(fillChance = 1f, shapes = layer.shapes.map { if (it is Bloom) it.copy(plateau = 0.95f) else it })
 }
 
 private fun MorpheusGraphSpec.withSampleComets() = forMorphSample(density = 70f).mapLayers { layer ->

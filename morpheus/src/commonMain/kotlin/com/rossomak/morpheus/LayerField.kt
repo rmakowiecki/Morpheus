@@ -2479,7 +2479,7 @@ private class CometTrack(
         val peak = peakFractions[node]
         val heatsFrom = (lightsAt[node] - lightFades[node] / 2f).coerceIn(0f, peak)
         val coolsBy = (peak + darkFades[node]).coerceAtMost(1f)
-        val heat = ramp(heatsFrom, peak, fraction) * (1f - ramp(peak, coolsBy, fraction))
+        val heat = smoothStep(heatsFrom, peak, fraction) * (1f - smoothStep(peak, coolsBy, fraction))
         return rollWeight(hotRoll, COMET_SPARK_SHARE * spark.coerceIn(0f, 1f)) * heat
     }
 
@@ -2638,16 +2638,9 @@ internal fun switchAtCentre(centre: Float): Float = ((centre - MORPH_FADE_WINDOW
 internal fun cometLight(lightsAt: Float, darkensAt: Float, fraction: Float, lightFade: Float, darkFade: Float): Float {
     val lightHalfWindow = if (lightsAt < 0f) lightFade / 2f else min(lightFade / 2f, lightsAt)
     val darkWindow = if (darkensAt > 1f) darkFade else min(darkFade, 1f - darkensAt)
-    val lit = ramp(lightsAt - lightHalfWindow, lightsAt + lightHalfWindow, fraction)
-    val dark = ramp(darkensAt, darkensAt + darkWindow, fraction)
+    val lit = smoothStep(lightsAt - lightHalfWindow, lightsAt + lightHalfWindow, fraction)
+    val dark = smoothStep(darkensAt, darkensAt + darkWindow, fraction)
     return lit * (1f - dark)
-}
-
-/** [smoothStep] from [edgeStart] to [edgeEnd], or a step at [edgeEnd] when the two meet. */
-private fun ramp(edgeStart: Float, edgeEnd: Float, value: Float): Float = when {
-    edgeEnd > edgeStart -> smoothStep(edgeStart, edgeEnd, value)
-    value >= edgeEnd -> 1f
-    else -> 0f
 }
 
 /** Every node by a square bucket of its home, so a comet head visits only the nodes along its path. */
