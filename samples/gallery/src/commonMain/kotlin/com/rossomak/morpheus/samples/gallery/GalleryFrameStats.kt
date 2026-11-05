@@ -162,8 +162,22 @@ private fun FrameStatsHeader(frameStats: GalleryFrameStats, tiles: TileStatsGrou
     }
     val readout = if (stats.frameMillis <= 0f) "frame – ms · graphs – ms" else "frame ${stats.frameMillis.toFixed(1)} ms · graphs ${drawMillis.toFixed(1)} ms"
     Column(modifier = modifier) {
-        Text(text = readout, style = MaterialTheme.typography.titleSmall.copy(fontFamily = FontFamily.Monospace))
-        Text(text = notes.joinToString(separator = " · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+        // One line each, scrolled sideways when wider than the pane, so a large font scale can't grow the header.
+        Text(
+            text = readout,
+            style = MaterialTheme.typography.titleSmall.copy(fontFamily = FontFamily.Monospace),
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+        )
+        Text(
+            text = notes.joinToString(separator = " · "),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.tertiary,
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+        )
     }
 }
 
