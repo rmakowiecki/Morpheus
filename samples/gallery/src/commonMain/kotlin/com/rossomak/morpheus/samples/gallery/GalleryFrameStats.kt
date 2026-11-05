@@ -121,7 +121,14 @@ internal fun RecordFrameIntervals(frameStats: GalleryFrameStats, tiles: TileStat
 /** Toggles the performance stats pane, filled while [isOpen]. The reading lives in the pane's header, not here. */
 @Composable
 internal fun PerformanceStatsButton(isOpen: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    PaneButton(icon = Icons.Filled.Speed, label = GalleryPane.PerformanceStats.title, isActive = isOpen, onClick = onClick, modifier = modifier)
+    PaneButton(
+        icon = Icons.Filled.Speed,
+        label = GalleryPane.PerformanceStats.title,
+        isActive = isOpen,
+        stateDescription = if (isOpen) "Open" else "Closed",
+        onClick = onClick,
+        modifier = modifier,
+    )
 }
 
 /**

@@ -59,6 +59,8 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntSize
@@ -206,10 +208,20 @@ private fun CycleControls(control: CycleControl, runsCycle: Boolean) {
     }
 }
 
-/** Toggles a pane: an icon with [label] as tooltip and content description, filled while [isActive]. */
+/**
+ * Toggles a pane: an icon with [label] as tooltip and content description, filled while [isActive]. [stateDescription]
+ * says the same to a screen reader, which can't see the fill.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun PaneButton(icon: ImageVector, label: String, isActive: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+internal fun PaneButton(
+    icon: ImageVector,
+    label: String,
+    isActive: Boolean,
+    stateDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     TooltipBox(
         positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
         tooltip = { PlainTooltip { Text(label) } },
@@ -217,7 +229,9 @@ internal fun PaneButton(icon: ImageVector, label: String, isActive: Boolean, onC
         modifier = modifier,
     ) {
         val colors = if (isActive) IconButtonDefaults.filledTonalIconButtonColors() else IconButtonDefaults.outlinedIconButtonColors()
-        OutlinedIconButton(onClick = onClick, colors = colors) { Icon(icon, contentDescription = label) }
+        OutlinedIconButton(onClick = onClick, colors = colors, modifier = Modifier.semantics { this.stateDescription = stateDescription }) {
+            Icon(icon, contentDescription = label)
+        }
     }
 }
 

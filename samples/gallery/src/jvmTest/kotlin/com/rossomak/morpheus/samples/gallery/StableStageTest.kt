@@ -16,6 +16,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SkikoComposeUiTest
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
@@ -118,6 +119,7 @@ class StableStageTest {
         settle()
         onNodeWithText(TUNE_SHEET_TEXT).assertDoesNotExist()
         frameStats.isPerformanceStatsOpen shouldBe true
+        button(GalleryPane.PerformanceStats.title).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Open"))
 
         button(GalleryPane.CometDebug.title).performSemanticsAction(SemanticsActions.OnClick)
         settle()
