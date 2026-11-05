@@ -47,7 +47,7 @@ import kotlin.math.roundToInt
 @Stable
 internal class GalleryFrameStats {
     val stats = MorpheusGraphFrameStats()
-    var isFrameStatsOpen by mutableStateOf(false)
+    var isPerformanceStatsOpen by mutableStateOf(false)
     var isCometDebugOpen by mutableStateOf(false)
     var isCanvasScaled by mutableStateOf(false)
 }
@@ -118,14 +118,14 @@ internal fun RecordFrameIntervals(frameStats: GalleryFrameStats, tiles: TileStat
     }
 }
 
-/** Toggles the frame stats pane, filled while [isOpen]. The reading lives in the pane's header, not here. */
+/** Toggles the performance stats pane, filled while [isOpen]. The reading lives in the pane's header, not here. */
 @Composable
-internal fun FrameStatsButton(isOpen: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    PaneButton(icon = Icons.Filled.Speed, label = GalleryPane.FrameStats.title, isActive = isOpen, onClick = onClick, modifier = modifier)
+internal fun PerformanceStatsButton(isOpen: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    PaneButton(icon = Icons.Filled.Speed, label = GalleryPane.PerformanceStats.title, isActive = isOpen, onClick = onClick, modifier = modifier)
 }
 
 /**
- * The last published window: the [FrameStatsHeader], then per phase and count the total and a column per spec
+ * The last published window: the [PerformanceStatsHeader], then per phase and count the total and a column per spec
  * layer, back to front, then the debug switches. A grid sample shows a column per tile instead, or a row per tile
  * past [MAX_TILE_COLUMNS]. Scrolls below the header. Dims while the reading is from before the last reset.
  */
@@ -134,7 +134,7 @@ internal fun FrameBreakdownPanel(frameStats: GalleryFrameStats, tiles: TileStats
     val stats = frameStats.stats
     Surface(modifier = modifier, color = MaterialTheme.colorScheme.surfaceContainerLow, shape = MaterialTheme.shapes.small) {
         Column(modifier = Modifier.alpha(if (stats.isStale || tiles.isStale) STALE_ALPHA else 1f)) {
-            FrameStatsHeader(frameStats = frameStats, tiles = tiles, modifier = Modifier.fillMaxWidth().padding(start = 8.dp, top = 8.dp, end = 8.dp))
+            PerformanceStatsHeader(frameStats = frameStats, tiles = tiles, modifier = Modifier.fillMaxWidth().padding(start = 8.dp, top = 8.dp, end = 8.dp))
             FrameBreakdownBody(stats = stats, tiles = tiles)
         }
     }
@@ -146,7 +146,7 @@ internal fun FrameBreakdownPanel(frameStats: GalleryFrameStats, tiles: TileStats
  * blank, without notes, so the header keeps its height.
  */
 @Composable
-private fun FrameStatsHeader(frameStats: GalleryFrameStats, tiles: TileStatsGroup, modifier: Modifier = Modifier) {
+private fun PerformanceStatsHeader(frameStats: GalleryFrameStats, tiles: TileStatsGroup, modifier: Modifier = Modifier) {
     val stats = frameStats.stats
     // A grid's tiles each report their own recording time; the page's stats see none of it.
     val drawMillis = if (tiles.isTiled) tiles.drawMillis else stats.drawMillis

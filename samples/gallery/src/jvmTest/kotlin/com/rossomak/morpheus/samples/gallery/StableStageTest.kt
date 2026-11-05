@@ -110,24 +110,24 @@ class StableStageTest {
         val frameStats = GalleryFrameStats()
         openSample(sample, frameStats)
 
-        button("Tune").performClick()
+        button(GalleryPane.Tune.title).performClick()
         settle()
         onNodeWithText(TUNE_SHEET_TEXT).assertExists()
         // The button's own click, not a tap that the open sheet would take as a dismissal.
-        button("Frame stats").performSemanticsAction(SemanticsActions.OnClick)
+        button(GalleryPane.PerformanceStats.title).performSemanticsAction(SemanticsActions.OnClick)
         settle()
         onNodeWithText(TUNE_SHEET_TEXT).assertDoesNotExist()
-        frameStats.isFrameStatsOpen shouldBe true
+        frameStats.isPerformanceStatsOpen shouldBe true
 
-        button("Comet debug").performSemanticsAction(SemanticsActions.OnClick)
+        button(GalleryPane.CometDebug.title).performSemanticsAction(SemanticsActions.OnClick)
         settle()
-        frameStats.isFrameStatsOpen shouldBe false
+        frameStats.isPerformanceStatsOpen shouldBe false
         frameStats.isCometDebugOpen shouldBe true
 
         if (hasBack) {
             button("Back to the samples").performSemanticsAction(SemanticsActions.OnClick)
             settle()
-            frameStats.isFrameStatsOpen shouldBe false
+            frameStats.isPerformanceStatsOpen shouldBe false
             frameStats.isCometDebugOpen shouldBe false
             onNodeWithText(sample.title).performClick()
             settle()
@@ -181,7 +181,7 @@ class StableStageTest {
     /** No reading yet, then every note on: the reading lives in the pane, so neither moves the stage. */
     private fun SkikoComposeUiTest.checkReadings(frameStats: GalleryFrameStats, stage: Rect) {
         runOnIdle { frameStats.stats.reset() }
-        button(GalleryPane.FrameStats.title).performClick()
+        button(GalleryPane.PerformanceStats.title).performClick()
         settle()
         stageBounds() shouldBe stage
         runOnIdle {
@@ -195,7 +195,7 @@ class StableStageTest {
         mainClock.advanceTimeByFrame()
         onNodeWithText("debug switches on · capped · canvas scaled").assertExists()
         stageBounds() shouldBe stage
-        button(GalleryPane.FrameStats.title).performClick()
+        button(GalleryPane.PerformanceStats.title).performClick()
         settle()
     }
 

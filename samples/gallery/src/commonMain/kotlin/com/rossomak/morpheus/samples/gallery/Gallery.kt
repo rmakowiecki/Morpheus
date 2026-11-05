@@ -166,8 +166,8 @@ private fun PaneSheets(session: GallerySession, frameStats: GalleryFrameStats, t
 }
 
 /**
- * Stacks the open panes like an IDE's side panes. The tuner takes the height the frame stats pane leaves; that pane
- * takes what its table needs, up to [FRAME_STATS_MAX_SHARE] of the column, and scrolls past that. With no pane open,
+ * Stacks the open panes like an IDE's side panes. The tuner takes the height the performance stats pane leaves; that pane
+ * takes what its table needs, up to [PERFORMANCE_STATS_MAX_SHARE] of the column, and scrolls past that. With no pane open,
  * the column shows a hint.
  */
 @Composable
@@ -179,13 +179,13 @@ private fun SideColumn(session: GallerySession, frameStats: GalleryFrameStats, t
         return
     }
     BoxWithConstraints(modifier = modifier) {
-        val frameStatsMaxHeight = maxHeight * FRAME_STATS_MAX_SHARE
+        val performanceStatsMaxHeight = maxHeight * PERFORMANCE_STATS_MAX_SHARE
         Column(modifier = Modifier.fillMaxSize()) {
             open.forEachIndexed { index, pane ->
                 if (index > 0) HorizontalDivider()
                 val sheetModifier = when (pane) {
                     GalleryPane.Tune -> Modifier.weight(1f)
-                    GalleryPane.FrameStats -> Modifier.heightIn(max = frameStatsMaxHeight)
+                    GalleryPane.PerformanceStats -> Modifier.heightIn(max = performanceStatsMaxHeight)
                     GalleryPane.CometDebug -> Modifier
                 }
                 SideSheet(title = pane.title, onClose = { panes.setOpen(pane, false) }, modifier = sheetModifier.fillMaxWidth()) {
@@ -200,7 +200,7 @@ private fun SideColumn(session: GallerySession, frameStats: GalleryFrameStats, t
 private fun PaneContent(pane: GalleryPane, session: GallerySession, frameStats: GalleryFrameStats, tuneSheet: @Composable () -> Unit, modifier: Modifier) {
     when (pane) {
         GalleryPane.Tune -> tuneSheet()
-        GalleryPane.FrameStats -> FrameBreakdownPanel(frameStats = frameStats, tiles = session.tiles, modifier = modifier)
+        GalleryPane.PerformanceStats -> FrameBreakdownPanel(frameStats = frameStats, tiles = session.tiles, modifier = modifier)
         GalleryPane.CometDebug -> CometDebugPanel(stats = frameStats.stats, modifier = modifier)
     }
 }
@@ -249,4 +249,4 @@ internal val DETAIL_MIN_WIDTH = 540.dp
 private val SIDE_COLUMN_MIN_WIDTH = LIST_WIDTH + DETAIL_MIN_WIDTH + SIDE_SHEET_WIDTH + 2.dp
 
 internal const val DETAIL_TEST_TAG = "sample-detail"
-private const val FRAME_STATS_MAX_SHARE = 0.4f
+private const val PERFORMANCE_STATS_MAX_SHARE = 0.4f

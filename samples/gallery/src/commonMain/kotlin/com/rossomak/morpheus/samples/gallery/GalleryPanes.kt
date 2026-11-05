@@ -8,14 +8,14 @@ import com.rossomak.morpheus.samples.Sample
 /** The panes beside a sample, in the order they stack and in which one stays when only one fits. */
 internal enum class GalleryPane(val title: String) {
     Tune("Tune"),
-    FrameStats("Frame stats"),
+    PerformanceStats("Performance stats"),
     CometDebug("Comet debug"),
     ;
 
     /** Tune needs something to tune; comet debug needs a cycle, since the comets are what a morph sends. */
     fun isAvailableFor(sample: Sample): Boolean = when (this) {
         Tune -> sample.specs.isNotEmpty() || sample.morphs.isNotEmpty()
-        FrameStats -> true
+        PerformanceStats -> true
         CometDebug -> sample.timing != null
     }
 }
@@ -30,14 +30,14 @@ internal class OpenPanes(private val session: GallerySession, private val frameS
     fun isOpen(pane: GalleryPane): Boolean = pane in available &&
         when (pane) {
             GalleryPane.Tune -> session.isTuning
-            GalleryPane.FrameStats -> frameStats.isFrameStatsOpen
+            GalleryPane.PerformanceStats -> frameStats.isPerformanceStatsOpen
             GalleryPane.CometDebug -> frameStats.isCometDebugOpen
         }
 
     fun setOpen(pane: GalleryPane, isOpen: Boolean) {
         when (pane) {
             GalleryPane.Tune -> session.isTuning = isOpen
-            GalleryPane.FrameStats -> frameStats.isFrameStatsOpen = isOpen
+            GalleryPane.PerformanceStats -> frameStats.isPerformanceStatsOpen = isOpen
             GalleryPane.CometDebug -> frameStats.isCometDebugOpen = isOpen
         }
     }

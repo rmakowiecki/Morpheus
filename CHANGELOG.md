@@ -25,3 +25,4 @@
 - Two tuning sheet sliders are renamed to match the glossary in `CONTEXT.md`: "Density" is now "Cell density" and
   "Outlier density" is now "Density floor". The gallery's frame stats readout says "several graphs" where it said
   "several backgrounds". No API changes.
+- The gallery's "Frame stats" pane is now "Performance stats". No API changes.

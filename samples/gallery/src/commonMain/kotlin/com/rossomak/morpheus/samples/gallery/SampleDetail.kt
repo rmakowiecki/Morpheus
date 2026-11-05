@@ -80,7 +80,7 @@ import kotlinx.coroutines.flow.collectLatest
 
 /**
  * The open sample on the [previewFrame]'s canvas, under its title and controls: theme, Tune and Reset to defaults,
- * Pause, and for a sample that runs a cycle the scrub slider and Comet debug, then Frame stats and the preview
+ * Pause, and for a sample that runs a cycle the scrub slider and Comet debug, then Performance stats and the preview
  * canvas control. The sample reports into [frameStats] through [LocalMorpheusGraphFrameStats].
  * [opensOnePaneAtATime] is for a window without a side column, whose panes are sheets. [onBack] is the
  * single-pane layout's way back to the list. [logsBenchmarkReadings] prints each reading for the benchmark script.
@@ -146,7 +146,10 @@ internal fun SampleDetail(
                 }
             }
             CycleControls(control = session.cycle, runsCycle = session.runsCycle)
-            FrameStatsButton(isOpen = panes.isOpen(GalleryPane.FrameStats), onClick = { panes.toggle(GalleryPane.FrameStats, closesOthers = opensOnePaneAtATime) })
+            PerformanceStatsButton(
+                isOpen = panes.isOpen(GalleryPane.PerformanceStats),
+                onClick = { panes.toggle(GalleryPane.PerformanceStats, closesOthers = opensOnePaneAtATime) },
+            )
             if (GalleryPane.CometDebug in panes.available) {
                 CometDebugButton(frameStats = frameStats, onClick = { panes.toggle(GalleryPane.CometDebug, closesOthers = opensOnePaneAtATime) })
             }

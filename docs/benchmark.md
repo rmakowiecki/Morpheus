@@ -37,8 +37,8 @@ links here rather than repeating the steps.
 
 ## The readout
 
-The gallery's control row has a **Frame stats** button, the speedometer icon. It opens the frame stats pane: in the side
-column, under the Tune pane when that is open, or as a bottom sheet below 1,242 dp. The pane's
+The gallery's control row has a **Performance stats** button, the speedometer icon. It opens the performance stats
+pane: in the side column, under the Tune pane when that is open, or as a bottom sheet below 1,242 dp. The pane's
 header reads `frame 9.8 ms · graphs 6.1 ms`, refreshed twice a second, with its notes on the line
 under it. The pane dims from a reset, such as a sample change, until the next reading arrives. The
 reading shows in the pane only, so it never moves or rescales the sample:
@@ -126,8 +126,8 @@ python3 scripts/gallery_benchmark.py --skip-build --sample comet-playground
 
 1. Open "Pills to ribbons", or "Comet playground" for its rows. Press Reset to defaults if it was tuned.
 2. Pick the **16:9** preview and turn **Scale to fit** off.
-3. Open the frame stats pane by clicking **Frame stats** (the speedometer icon) in the control row. It opens in the side
-   column; open the Tune pane as well if the numbers should cover tuning, and the two share the column.
+3. Open the performance stats pane by clicking **Performance stats** (the speedometer icon) in the control row. It
+   opens in the side column; open the Tune pane as well if the numbers should cover tuning, and the two share the column.
    The column is there whether or not a pane is open, so neither takes canvas height or width.
 4. Check that the pane's header notes neither "capped" nor "canvas scaled".
 5. With every switch off, watch a full loop and record frame, graphs and the phase table.
