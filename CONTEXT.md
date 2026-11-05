@@ -29,7 +29,7 @@ One square of a layer's fixed, seeded grid, and a potential node. The grid's res
 _Avoid_: Slot
 
 **Node**:
-A grid cell that has become active, as its mesh shows it: a dot joined to others by edges. An inactive cell is not a node. It keeps its home in its cell and drifts around it. A cell also has to be present enough to be drawn, and its node needs two visible edges; the edge rule repairs or prunes one that has fewer.
+A grid cell that has become active, as its mesh shows it: a dot joined to others by edges. An inactive cell is not a node. It keeps its home in its cell and drifts around it. A cell also has to be present enough to be drawn, and its node needs two edges in the mesh; the edge rule repairs or prunes one that has fewer. A layer can draw only its nodes or only its edges.
 _Avoid_: Vertex, point
 
 **Drift**:
@@ -139,7 +139,7 @@ The app that runs every sample, on desktop and in the browser, where a viewer tu
 _Avoid_: Demo app, catalog
 
 **Section**:
-One group of samples in the gallery's list: Showcase, Shapes, Meshes, Fills or Morphs, in that order (`SampleSection` in code). Each sample belongs to exactly one.
+One group of samples in the gallery's list: Showcase, Shapes, Basic Parameters, Meshes, Fills or Morphs, in that order (`SampleSection` in code). Each sample belongs to exactly one.
 _Avoid_: Category
 
 **Showcase**:
