@@ -15,3 +15,6 @@ local.properties
 
 # Topics parked for a later grilling session, kept local.
 /docs/to-grill/
+
+# Python bytecode from the scripts.
+__pycache__/
