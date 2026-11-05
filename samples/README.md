@@ -10,11 +10,18 @@ and before any sample plays. Its text lives in `ViewerNotice`. The root README a
 `gallery/src/wasmJsMain/resources/index.html` quote it, and `ViewerNoticeTest` fails when they stop matching.
 [`CONTRIBUTING.md`](../CONTRIBUTING.md) says what to check when you add a sample.
 
-## The root README's code
+## The gallery's sections
 
-The two **Start here** samples, `quick-start` and `quick-start-morph`, are the README's quick-start code. The static
-snippet is the sample verbatim. The morph snippet is its body with the sample's cycle clock replaced by a state the
-app flips. When you change either sample, change the README's snippet with it.
+The gallery lists its samples in five sections, in this order, and the registry keeps them sorted the same way:
+
+- **Showcase**: eye-catchers, which earn their place by how they look.
+- **Shapes**: the shapes that decide where a layer's nodes sit, and how a layer unites them.
+- **Meshes**: how a layer's mesh is built and moves: layers, edge rules, seeds, the window, wave and pulse.
+- **Fills**: what paints the nodes and edges, from a solid color to a custom brush.
+- **Morphs**: a graph changing from one spec to another.
+
+Every sample has a one-sentence summary for the list and a description of two to four sentences for its pane, both in
+the terms of [`CONTEXT.md`](../CONTEXT.md). A new sample goes at the end of its section.
 
 ## Refreshing the README's hero
 

@@ -1,4 +1,4 @@
-package com.rossomak.morpheus.samples.catalog
+package com.rossomak.morpheus.samples.showcase
 
 import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -20,11 +20,12 @@ import com.rossomak.morpheus.rememberMorpheusGraphMorphState
 import com.rossomak.morpheus.samples.MorphCycle
 import com.rossomak.morpheus.samples.MorphTiming
 import com.rossomak.morpheus.samples.Sample
-import com.rossomak.morpheus.samples.SampleCategory
 import com.rossomak.morpheus.samples.SampleLabel
+import com.rossomak.morpheus.samples.SampleSection
 import com.rossomak.morpheus.samples.TunableMorph
 import com.rossomak.morpheus.samples.TunableSpec
 import com.rossomak.morpheus.samples.cyclePeriod
+import com.rossomak.morpheus.samples.easings
 import com.rossomak.morpheus.samples.rememberCycleTime
 import kotlin.time.Duration.Companion.seconds
 
@@ -79,8 +80,10 @@ private val TourMorphNames = PresetNames.mapIndexed { index, name -> "$name → 
 internal val presetTourSample = Sample(
     id = "preset-tour",
     title = "Preset tour",
-    description = "Every preset in turn, each morphing into the next, with the preset on stage named in the corner.",
-    category = SampleCategory.BasicShapes,
+    summary = "Every preset in turn, each morphing into the next.",
+    description = "Every preset plays in turn, each morphing into the next, with its name in the corner. The presets belong to different morph families, so each morph " +
+        "is a dissolve. The old mesh's nodes fade out as the new mesh's fade in, along one sweep across the surface.",
+    section = SampleSection.Showcase,
     specs = PresetNames.zip(MorpheusGraphPresets.all) { name, spec -> TunableSpec(name, spec) },
     morphs = TourMorphNames.map { TunableMorph(it) },
     timing = PresetTourTiming,

@@ -26,10 +26,11 @@ import com.rossomak.morpheus.samples.CaptureThemes
 import com.rossomak.morpheus.samples.MorphCycle
 import com.rossomak.morpheus.samples.MorphTiming
 import com.rossomak.morpheus.samples.Sample
-import com.rossomak.morpheus.samples.SampleCategory
+import com.rossomak.morpheus.samples.SampleSection
 import com.rossomak.morpheus.samples.TunableMorph
 import com.rossomak.morpheus.samples.TunableSpec
 import com.rossomak.morpheus.samples.cyclePeriod
+import com.rossomak.morpheus.samples.easings
 import com.rossomak.morpheus.samples.rememberCycleTime
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -144,9 +145,10 @@ private const val CROSS_TO_FRAME = "Cross → Frame"
 internal val cometPlaygroundSample = Sample(
     id = "comet-playground",
     title = "Comet playground",
-    description = "Four framing pills, five blooms and a cross morph into each other in turn, to watch the comets; " +
-        "the Comets sample shows them on a simpler pair.",
-    category = SampleCategory.Showcase,
+    summary = "A frame of pills, five blooms and a cross morph into each other in turn.",
+    description = "A frame of four pills, five blooms and a cross morph into each other in turn. All three specs are one morph family over a very dense mesh. The " +
+        "shapes share few nodes, so comets carry the light from each old shape to the new one. Open Comet debug to see where comets set off and land.",
+    section = SampleSection.Showcase,
     // The whole three-leg loop, crossfaded over the half of the frame's hold it starts with; 24 fps, as
     // 12.75 s isn't whole frames at 30.
     recipe = CaptureRecipe(

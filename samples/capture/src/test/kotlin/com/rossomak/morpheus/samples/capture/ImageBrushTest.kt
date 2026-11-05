@@ -5,9 +5,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import com.rossomak.morpheus.samples.SampleRegistry
-import com.rossomak.morpheus.samples.catalog.ImageBrushSource
-import com.rossomak.morpheus.samples.catalog.coverCrop
-import com.rossomak.morpheus.samples.catalog.fitCover
+import com.rossomak.morpheus.samples.fills.ImageBrushSource
+import com.rossomak.morpheus.samples.fills.coverCrop
+import com.rossomak.morpheus.samples.fills.fitCover
 import io.kotest.matchers.shouldBe
 import kotlin.test.Test
 import kotlinx.coroutines.runBlocking

@@ -13,7 +13,7 @@ import com.rossomak.morpheus.samples.CaptureRecipe
 import com.rossomak.morpheus.samples.CaptureThemes
 import com.rossomak.morpheus.samples.LoopMode
 import com.rossomak.morpheus.samples.Sample
-import com.rossomak.morpheus.samples.SampleCategory
+import com.rossomak.morpheus.samples.SampleSection
 import com.rossomak.morpheus.samples.rememberCycleTime
 import io.kotest.assertions.withClue
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -87,8 +87,9 @@ class CycleTimeCaptureTest {
         val cycleTimeSample = Sample(
             id = "cycle-time",
             title = "Cycle time",
+            summary = "The cycle-time helper's share of its period, as a gray level.",
             description = "The cycle-time helper's share of its period, as a gray level.",
-            category = SampleCategory.BasicShapes,
+            section = SampleSection.Shapes,
             content = { CycleTimeGray() },
         )
     }

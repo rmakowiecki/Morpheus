@@ -228,7 +228,7 @@ class StableStageTest {
 
         const val CYCLE_SAMPLE_ID = "fill-morph"
         const val STILL_SAMPLE_ID = "layers"
-        const val GRID_SAMPLE_ID = "seed-grid"
+        const val GRID_SAMPLE_ID = "seeds"
 
         /** Shown only in the Tune pane. */
         const val TUNE_SHEET_TEXT = "Copy as Kotlin"

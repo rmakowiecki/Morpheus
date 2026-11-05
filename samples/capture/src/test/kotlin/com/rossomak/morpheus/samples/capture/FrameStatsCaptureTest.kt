@@ -105,7 +105,7 @@ class FrameStatsCaptureTest {
     fun `a cross-family morph keeps one column per spec layer, the dissolving one drawn by two meshes`() {
         // A denser front no longer shares the ribbons' morph family, so the hero's front layer dissolves.
         val densePills = heroPills.copy(layers = heroPills.layers.mapIndexed { index, layer -> if (index == 1) layer.copy(density = 50f) else layer })
-        val dissolving = Sample(id = "hero-dissolve", title = hero.title, description = hero.description, category = hero.category, recipe = hero.recipe) {
+        val dissolving = Sample(id = "hero-dissolve", title = hero.title, summary = hero.summary, description = hero.description, section = hero.section, recipe = hero.recipe) {
             HeroSample(pills = densePills, ribbons = heroRibbons)
         }
         val breakdown = measure(dissolving, stillAt = MID_MORPH).breakdown

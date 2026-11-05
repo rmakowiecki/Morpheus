@@ -1,6 +1,6 @@
 @file:Suppress("MagicNumber")
 
-package com.rossomak.morpheus.samples.catalog
+package com.rossomak.morpheus.samples.morphs
 
 import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.LinearEasing
@@ -27,11 +27,12 @@ import com.rossomak.morpheus.morpheusGraphBackground
 import com.rossomak.morpheus.rememberMorpheusGraphMorphState
 import com.rossomak.morpheus.samples.MorphTiming
 import com.rossomak.morpheus.samples.Sample
-import com.rossomak.morpheus.samples.SampleCategory
 import com.rossomak.morpheus.samples.SampleLabel
+import com.rossomak.morpheus.samples.SampleSection
 import com.rossomak.morpheus.samples.TunableSpec
 import com.rossomak.morpheus.samples.cyclePeriod
 import com.rossomak.morpheus.samples.legProgressAt
+import com.rossomak.morpheus.samples.mapLayers
 import com.rossomak.morpheus.samples.rememberCycleTime
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -157,8 +158,10 @@ private fun MorpheusGraphSpec.bloomCentre(): Offset? =
 internal val retargetMorphSample = Sample(
     id = "retarget-morph",
     title = "Retarget morph",
-    description = "A new target in the middle of a morph carries the morph on from the screen as it is, not from either end.",
-    category = SampleCategory.Morphs,
+    summary = "A new target mid-morph carries on from the screen as it is.",
+    description = "Mid-morph, the graph gets a new target. The new morph starts from the screen as it is, not from either end. The interrupted morph stays nested as " +
+        "the new one's start, so nothing jumps.",
+    section = SampleSection.Morphs,
     specs = RetargetTarget.entries.map { TunableSpec(it.label, it.spec) },
     content = { specs -> RetargetMorphSample(specs = RetargetTarget.entries.map { specs[it.label] }) },
 )

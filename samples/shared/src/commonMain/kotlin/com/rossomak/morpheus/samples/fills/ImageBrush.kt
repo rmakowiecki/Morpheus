@@ -1,6 +1,6 @@
 @file:Suppress("MagicNumber")
 
-package com.rossomak.morpheus.samples.catalog
+package com.rossomak.morpheus.samples.fills
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -21,8 +21,11 @@ import com.rossomak.morpheus.MorpheusGraphFill
 import com.rossomak.morpheus.MorpheusGraphLayerContext
 import com.rossomak.morpheus.MorpheusGraphSpec
 import com.rossomak.morpheus.samples.Sample
-import com.rossomak.morpheus.samples.SampleCategory
+import com.rossomak.morpheus.samples.SampleGraph
+import com.rossomak.morpheus.samples.SampleSection
+import com.rossomak.morpheus.samples.SampleStyle
 import com.rossomak.morpheus.samples.TunableSpec
+import com.rossomak.morpheus.samples.fillSampleLayer
 import com.rossomak.morpheus.samples.resources.Res
 import kotlin.math.ceil
 import kotlin.math.max
@@ -114,8 +117,10 @@ fun ImageBrushSample(modifier: Modifier = Modifier, spec: MorpheusGraphSpec = im
 internal val imageBrushSample = Sample(
     id = "image-brush",
     title = "Image brush",
-    description = "A custom fill: a photograph shows through the nodes and edges.",
-    category = SampleCategory.Fills,
+    summary = "A photograph showing through the nodes and edges.",
+    description = "A custom fill whose brush is an image shader. The photograph shows only where nodes and edges are drawn. Big, bright nodes and thick edges leave " +
+        "enough paint for the image to read.",
+    section = SampleSection.Fills,
     specs = listOf(TunableSpec(IMAGE_BRUSH, imageBrushSpec)),
     prepare = { ImageBrushSource.load() },
     content = { specs -> ImageBrushSample(spec = specs[IMAGE_BRUSH]) },

@@ -1,4 +1,4 @@
-package com.rossomak.morpheus.samples.catalog
+package com.rossomak.morpheus.samples.morphs
 
 import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -9,18 +9,23 @@ import com.rossomak.morpheus.MorpheusGraphSpec
 import com.rossomak.morpheus.ShapePrimitive.Ribbon
 import com.rossomak.morpheus.samples.MorphTiming
 import com.rossomak.morpheus.samples.Sample
-import com.rossomak.morpheus.samples.SampleCategory
 import com.rossomak.morpheus.samples.SampleGrid
+import com.rossomak.morpheus.samples.SampleMorph
+import com.rossomak.morpheus.samples.SampleSection
 import com.rossomak.morpheus.samples.SampleTile
 import com.rossomak.morpheus.samples.TunableMorph
 import com.rossomak.morpheus.samples.TunableSpec
 import com.rossomak.morpheus.samples.cyclePeriod
+import com.rossomak.morpheus.samples.easings
+import com.rossomak.morpheus.samples.forMorphSample
+import com.rossomak.morpheus.samples.mapLayers
 import com.rossomak.morpheus.samples.rememberCycleTime
+import com.rossomak.morpheus.samples.withoutComets
 import kotlin.time.Duration.Companion.seconds
 
 private const val RIBBON = "Ribbon"
 private const val CORNER_BLOOM = "Corner bloom"
-internal const val RIBBON_MESH = "Ribbon mesh"
+private const val RIBBON_MESH = "Ribbon mesh"
 private const val LIVING_DELAUNAY = "Living Delaunay"
 private const val RIBBON_TO_CORNER_BLOOM = "$RIBBON → $CORNER_BLOOM"
 private const val CORNER_BLOOM_TO_RIBBON = "$CORNER_BLOOM → $RIBBON"
@@ -66,8 +71,10 @@ fun MorphFamiliesSample(
 internal val morphFamiliesSample = Sample(
     id = "morph-families",
     title = "Morph families",
-    description = "A ribbon morphing in place into a corner bloom, beside one mesh dissolving into another.",
-    category = SampleCategory.Morphs,
+    summary = "A ribbon morphing in place, beside a mesh dissolving into another.",
+    description = "Left, a ribbon morphs into a corner bloom within one morph family. Both specs share seed, cell density, jitter, edge rule and strict triangles, so " +
+        "every node keeps its cell. Right, the specs are of different families, so one mesh dissolves into the other.",
+    section = SampleSection.Morphs,
     specs = listOf(
         TunableSpec(RIBBON, ribbon),
         TunableSpec(CORNER_BLOOM, cornerBloom),

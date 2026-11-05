@@ -37,7 +37,7 @@ import com.rossomak.morpheus.samples.SampleTheme
 import com.rossomak.morpheus.samples.SampleTile
 import com.rossomak.morpheus.samples.SampleTileStats
 import com.rossomak.morpheus.samples.TileSize
-import com.rossomak.morpheus.samples.catalog.PresetTourSample
+import com.rossomak.morpheus.samples.showcase.PresetTourSample
 import io.kotest.matchers.floats.shouldBeGreaterThan
 import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.shouldBe

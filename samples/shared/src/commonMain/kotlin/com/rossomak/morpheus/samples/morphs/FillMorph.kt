@@ -1,6 +1,6 @@
 @file:Suppress("MagicNumber")
 
-package com.rossomak.morpheus.samples.catalog
+package com.rossomak.morpheus.samples.morphs
 
 import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -12,10 +12,15 @@ import com.rossomak.morpheus.ShapePrimitive.Rect
 import com.rossomak.morpheus.samples.CaptureRecipe
 import com.rossomak.morpheus.samples.MorphTiming
 import com.rossomak.morpheus.samples.Sample
-import com.rossomak.morpheus.samples.SampleCategory
+import com.rossomak.morpheus.samples.SampleMorph
+import com.rossomak.morpheus.samples.SampleSection
+import com.rossomak.morpheus.samples.SampleStyle
 import com.rossomak.morpheus.samples.TunableMorph
 import com.rossomak.morpheus.samples.TunableSpec
 import com.rossomak.morpheus.samples.cyclePeriod
+import com.rossomak.morpheus.samples.easings
+import com.rossomak.morpheus.samples.shapeSampleLayer
+import com.rossomak.morpheus.samples.withoutComets
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -64,8 +69,10 @@ fun FillMorphSample(
 internal val fillMorphSample = Sample(
     id = "fill-morph",
     title = "Fill morph",
-    description = "A solid blue rectangle on the left and a linear orange one on the right swap shape and fill on the same mesh.",
-    category = SampleCategory.Morphs,
+    summary = "A solid rect and a gradient rect swap shape and fill on one mesh.",
+    description = "A rect in a solid fill morphs into a rect in a linear gradient, and back. Both are one morph family, so the nodes stay and only presence and fill " +
+        "change. Fills morph too, so the color blends across the overlap.",
+    section = SampleSection.Morphs,
     // The capture covers both morphs, there and back.
     recipe = CaptureRecipe(duration = FillMorphTiming.cyclePeriod(legs = 2)),
     specs = listOf(TunableSpec(LEFT, leftSpec), TunableSpec(RIGHT, rightSpec)),

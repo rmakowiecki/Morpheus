@@ -1,7 +1,7 @@
 package com.rossomak.morpheus.samples.capture
 
 import com.rossomak.morpheus.samples.Sample
-import com.rossomak.morpheus.samples.SampleCategory
+import com.rossomak.morpheus.samples.SampleSection
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -40,5 +40,5 @@ class SelectSamplesTest {
     }
 
     private fun sample(id: String, galleryOnly: Boolean = false) =
-        Sample(id = id, title = id, description = id, category = SampleCategory.BasicShapes, galleryOnly = galleryOnly, content = {})
+        Sample(id = id, title = id, summary = id, description = id, section = SampleSection.Shapes, galleryOnly = galleryOnly, content = {})
 }

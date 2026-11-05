@@ -15,9 +15,10 @@ import com.rossomak.morpheus.samples.CaptureThemes
 import com.rossomak.morpheus.samples.MorphEasing
 import com.rossomak.morpheus.samples.MorphTiming
 import com.rossomak.morpheus.samples.Sample
-import com.rossomak.morpheus.samples.SampleCategory
+import com.rossomak.morpheus.samples.SampleSection
 import com.rossomak.morpheus.samples.TunableMorph
 import com.rossomak.morpheus.samples.TunableSpec
+import com.rossomak.morpheus.samples.easings
 import kotlin.time.Duration.Companion.milliseconds
 
 private val Teal = Color(0xFF1FD1B2)
@@ -75,8 +76,10 @@ private const val RIGHT_TO_LEFT = "Right → Left"
 internal val facingArcsSample = Sample(
     id = "facing-arcs",
     title = "Facing arcs",
-    description = "Two arcs on opposite sides, tips facing, morph into each other and back, to watch where the comets leave and land.",
-    category = SampleCategory.Showcase,
+    summary = "Two facing arcs morph into each other, to watch where comets leave and land.",
+    description = "An arc on each side, tips facing, morphs into the other and back. Each arc is a ring with a sweep of three quarters of a turn. Comets leave only " +
+        "from the tips nearest the other arc, and land only on its tips.",
+    section = SampleSection.Showcase,
     // Drawn on its own near-black background whatever the theme.
     recipe = CaptureRecipe(themes = CaptureThemes.DarkOnly),
     specs = listOf(TunableSpec(LEFT, facingArcsLeft), TunableSpec(RIGHT, facingArcsRight)),

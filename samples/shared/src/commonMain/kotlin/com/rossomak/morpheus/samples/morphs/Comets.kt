@@ -1,6 +1,6 @@
 @file:Suppress("MagicNumber")
 
-package com.rossomak.morpheus.samples.catalog
+package com.rossomak.morpheus.samples.morphs
 
 import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -12,9 +12,13 @@ import com.rossomak.morpheus.MorpheusGraphSpec
 import com.rossomak.morpheus.ShapePrimitive.Bloom
 import com.rossomak.morpheus.samples.MorphTiming
 import com.rossomak.morpheus.samples.Sample
-import com.rossomak.morpheus.samples.SampleCategory
+import com.rossomak.morpheus.samples.SampleMorph
+import com.rossomak.morpheus.samples.SampleSection
 import com.rossomak.morpheus.samples.TunableMorph
 import com.rossomak.morpheus.samples.TunableSpec
+import com.rossomak.morpheus.samples.easings
+import com.rossomak.morpheus.samples.forMorphSample
+import com.rossomak.morpheus.samples.mapLayers
 import kotlin.time.Duration.Companion.milliseconds
 
 /** Larger and sparkier than a layer's default, so the streams read at a glance. */
@@ -68,9 +72,11 @@ fun CometsSample(
 internal val cometsSample = Sample(
     id = "comets",
     title = "Comets",
-    description = "A disc and a pair of corner blooms morph into each other with comets carrying the nodes across; " +
-        "the gallery-only Comet playground runs them on a denser mesh.",
-    category = SampleCategory.Morphs,
+    summary = "A disc and two corner blooms morph, with comets carrying the light.",
+    description = "A disc and two corner blooms morph into each other and back, within one morph family. The disc is a bloom with a high plateau, so it " +
+        "keeps full density almost out to its rim. The shapes share almost no nodes, so comets carry the light from the old shape to the new one. " +
+        "Open Comet debug to see where each comet sets off and lands.",
+    section = SampleSection.Morphs,
     specs = listOf(TunableSpec(CENTRE_DISC, centreDisc), TunableSpec(CORNER_PAIR, cornerPair)),
     morphs = listOf(TunableMorph(CENTRE_DISC_TO_CORNER_PAIR), TunableMorph(CORNER_PAIR_TO_CENTRE_DISC)),
     timing = CometsTiming,

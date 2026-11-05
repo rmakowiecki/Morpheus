@@ -1,6 +1,6 @@
 @file:Suppress("MagicNumber")
 
-package com.rossomak.morpheus.samples.catalog
+package com.rossomak.morpheus.samples.meshes
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -8,8 +8,9 @@ import com.rossomak.morpheus.EdgeRule
 import com.rossomak.morpheus.MorpheusGraphLayerSpec
 import com.rossomak.morpheus.MorpheusGraphSpec
 import com.rossomak.morpheus.samples.Sample
-import com.rossomak.morpheus.samples.SampleCategory
+import com.rossomak.morpheus.samples.SampleGraph
 import com.rossomak.morpheus.samples.SampleGrid
+import com.rossomak.morpheus.samples.SampleSection
 import com.rossomak.morpheus.samples.SampleTile
 import com.rossomak.morpheus.samples.TunableSpec
 
@@ -64,8 +65,11 @@ fun EdgeRulesSample(
 internal val edgeRulesSample = Sample(
     id = "edge-rules",
     title = "Edge rules",
-    description = "The same nodes joined by proximity, by a fixed triangulation and by a Delaunay triangulation redone every frame.",
-    category = SampleCategory.BasicShapes,
+    summary = "The same nodes joined by three edge rules.",
+    description = "Three tiles share one seed, so their nodes start in the same places. Proximity joins every pair of nodes within reach, every frame, so it gets a " +
+        "shorter reach. Fixed triangulation triangulates once over the homes and keeps those edges while nodes drift. Living Delaunay triangulates every " +
+        "frame, and edges that flip fade out and in.",
+    section = SampleSection.Meshes,
     specs = listOf(
         TunableSpec(PROXIMITY, proximitySpec),
         TunableSpec(FIXED_TRIANGULATION, fixedTriangulationSpec),
