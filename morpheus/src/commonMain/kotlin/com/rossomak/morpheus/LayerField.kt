@@ -1640,7 +1640,8 @@ internal class LayerField(
      * Each edge's and each dot's alpha, holding both invariants whatever the falloff, depth, fade,
      * presence or alpha settings do:
      * - a dot fades with its second-brightest edge and is hidden once that edge drops under
-     *   [EDGE_VISIBLE_ALPHA], so a node can't show without two visible lines;
+     *   [EDGE_VISIBLE_ALPHA], so a node can't show without two visible lines. Under an edge alpha of
+     *   [EDGE_VISIBLE_ALPHA], dots follow their edges less, down to not at all at 0;
      * - an edge is never more opaque than the dimmer of its two dots, so a dot is at least as opaque as
      *   every edge it anchors, and a fading dot takes its edges with it.
      *
@@ -1859,10 +1860,13 @@ internal class LayerField(
     private fun lowerDotsToTheirEdges(nodes: IntArray, size: Int): Boolean {
         var lowered = false
         changedDotCount = 0
+        val follow = dotsFollowEdges
         for (position in 0 until size) {
             val index = nodes[position]
             val second = secondEdgeAlphas[index]
-            val factor = if (second < EDGE_VISIBLE_ALPHA) 0f else smoothStep(EDGE_VISIBLE_ALPHA, dotFullAts[index], second)
+            val edgeFactor = if (second < EDGE_VISIBLE_ALPHA) 0f else smoothStep(EDGE_VISIBLE_ALPHA, dotFullAts[index], second)
+            // Exactly the edge factor when the dots fully follow, so the settle matches its reference bit for bit.
+            val factor = if (follow >= 1f) edgeFactor else 1f - follow * (1f - edgeFactor)
             val alpha = min(nodeAlphas[index], dotBaseAlphas[index] * factor)
             if (nodeAlphas[index] - alpha > ALPHA_SETTLE_EPSILON) lowered = true
             if (alpha != nodeAlphas[index]) changedDots[changedDotCount++] = index
@@ -1898,6 +1902,7 @@ internal class LayerField(
      */
     private fun hideUnderconnectedDots(nodes: IntArray, size: Int): Boolean {
         changedDotCount = 0
+        if (dotsFollowEdges < 1f) return false
         for (position in 0 until size) {
             val index = nodes[position]
             if (nodeAlphas[index] <= 0f || secondEdgeAlphas[index] >= EDGE_VISIBLE_ALPHA) continue
@@ -1936,6 +1941,8 @@ internal class LayerField(
     /** Sorts the dots [draw] paints into [batches] by size bin and alpha bucket; returns how many. */
     internal fun fillDotBatches(batches: PointBatches): Int {
         batches.clearDots(smallestDotRadius, largestDotRadius)
+        // A layer drawn without nodes: a point of width 0 would still draw, as a hairline.
+        if (largestDotRadius <= 0f) return 0
         var sorted = 0
         forEachVisibleDot { node, alpha ->
             batches.addDot(positionsX[node], positionsY[node], dotRadius(node), alpha)
@@ -1964,6 +1971,12 @@ internal class LayerField(
         drawIntoCanvas { canvas -> pointBatches.drawDots(canvas, color) }
         return drawn
     }
+
+    /**
+     * How fully the dots follow their edges: 1 from an edge alpha of [EDGE_VISIBLE_ALPHA] up, where an edge can count as
+     * visible, down to 0 at no edges, so a nodes-only layer keeps its dots and a morph to it fades smoothly.
+     */
+    private val dotsFollowEdges: Float get() = (spec.edgeAlpha / EDGE_VISIBLE_ALPHA).coerceIn(0f, 1f)
 
     private fun sizeFactor(index: Int): Float = max(NODE_SIZE_FLOOR, 1f + spec.nodeSizeVariance * (nodes[index].sizeRoll * 2f - 1f))
 
@@ -2752,7 +2765,8 @@ private fun restEdgeAlpha(key: Long, xs: FloatArray, ys: FloatArray, presence: F
     val endDepth = 1f - filters.depthDimming * (1f - depths.depthOf(end))
     val depthFactor = min(startDepth, endDepth)
     val edgeAlpha = filters.edgeAlpha * filters.alpha * lengthFactor * depthFactor
-    // The dimmer dot, faded as lowerDotsToTheirEdges would fade it were this its second-brightest edge.
+    // The dimmer dot, faded as lowerDotsToTheirEdges would fade it were this its second-brightest edge. Its blend toward
+    // the dot's own alpha under an edge alpha of EDGE_VISIBLE_ALPHA is left out: no edge counts as visible there anyway.
     val dimmerDot = min(startDepth * presence[start], endDepth * presence[end])
     val fullAt = max(NODE_FULL_AT_EDGE_SHARE * filters.edgeAlpha * filters.alpha * dimmerDot, 2f * EDGE_VISIBLE_ALPHA)
     val dotAlpha = max(NODE_ALPHA, filters.edgeAlpha) * filters.alpha * dimmerDot * smoothStep(EDGE_VISIBLE_ALPHA, fullAt, edgeAlpha)

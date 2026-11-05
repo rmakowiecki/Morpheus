@@ -180,9 +180,10 @@ public sealed interface ShapePrimitive {
  * Fractions marked "of height"/"of width" are of the surface.
  *
  * Invariants, whatever the values:
- * - every drawn node has at least two visible edges. The edge filters below shape the mesh, then
- *   [enforceMinDegree] repairs short nodes or prunes them, and a node's dot dims with its
- *   second-brightest edge, so neither a dangling tail nor a stray dot can appear;
+ * - from an [edgeAlpha] of 0.02 up, every drawn node has at least two visible edges. The edge filters below
+ *   shape the mesh, then [enforceMinDegree] repairs short nodes or prunes them, and a node's dot dims with its
+ *   second-brightest edge, so neither a dangling tail nor a stray dot can appear. Below it the dots fade toward
+ *   their own alpha, so an [edgeAlpha] of 0 draws only the dots, and a [nodeSizeDp] of 0 draws only the edges;
  * - a node's dot is at least as opaque as every edge it anchors, and its pixels are exactly its own
  *   alpha: edges are limited by the dimmer of their two dots, and dots replace rather than blend with
  *   what the layer drew under them.
@@ -222,11 +223,13 @@ public data class MorpheusGraphLayerSpec(
      */
     val strictTriangles: Boolean = true,
     val strokeWidthDp: Float = 0.8f,
+    /** 0 = no edges drawn, only the nodes. */
     val edgeAlpha: Float = 0.55f,
     /** How much dimmer an edge at max length is than a very short one. */
     val lengthFalloff: Float = 0.5f,
     /** How deep edges pulse: 0 = steady, 1 = down to the pulse floor. */
     val pulseDepth: Float = 0f,
+    /** 0 = no dots drawn, only the edges. */
     val nodeSizeDp: Float = 2.2f,
     /** Spread of node radii around [nodeSizeDp], 0 = all equal. */
     val nodeSizeVariance: Float = 0.3f,
