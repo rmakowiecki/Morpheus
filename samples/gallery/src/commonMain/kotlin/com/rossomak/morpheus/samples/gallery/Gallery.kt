@@ -47,8 +47,8 @@ internal const val GALLERY_TITLE = "Morpheus samples"
 /**
  * The samples gallery: the registry's samples in a list, and the open one in a detail pane with a theme
  * control and a tuning sheet. List and detail sit side by side from [WIDE_LAYOUT_MIN_WIDTH]; below it the
- * detail opens over the list. From [SIDE_COLUMN_MIN_WIDTH] the panes stack in a column beside the detail;
- * below it they open as sheets, one at a time. An exported spec's Kotlin source goes to the clipboard and [onSpecExport].
+ * detail opens over the list. From [SIDE_COLUMN_MIN_WIDTH] the panes sit in a column beside the detail; below it
+ * they are sheets. An exported spec's Kotlin source goes to the clipboard and [onSpecExport].
  *
  * With a [benchmark] it opens set up as `docs/benchmark.md`'s recipe asks: its sample on the 16:9
  * preview with scale to fit off, the benchmark's skip switches on, and every reading of the frame stats also
@@ -96,7 +96,7 @@ internal fun Gallery(samples: List<Sample>, onSpecExport: (source: String) -> Un
                         } else {
                             {
                                 // The next sample opens with no sheet over it.
-                                closePanes(openSession, frameStats)
+                                OpenPanes(openSession, frameStats).closeAll()
                                 selectedId = null
                             }
                         },
@@ -141,30 +141,7 @@ internal fun Gallery(samples: List<Sample>, onSpecExport: (source: String) -> Un
     }
 }
 
-/** The frame stats pane is open, for the open sample. */
-private fun GalleryFrameStats.showsFrameStats(session: GallerySession?): Boolean = session != null && isFrameStatsOpen
-
-/** The comet debug pane is open, for a sample that runs a cycle: the comets are what a morph sends. */
-private fun GalleryFrameStats.showsCometDebug(session: GallerySession?): Boolean = session != null && session.runsCycle && isCometDebugExpanded
-
-/** Closes the Tune, frame stats and comet debug panes. */
-internal fun closePanes(session: GallerySession, frameStats: GalleryFrameStats) {
-    session.isTuning = false
-    frameStats.isFrameStatsOpen = false
-    frameStats.isCometDebugExpanded = false
-}
-
-/** Leaves open only the first open pane of Tune, frame stats and comet debug, in that order. */
-private fun keepOnePane(session: GallerySession, frameStats: GalleryFrameStats) {
-    if (session.isTuning) {
-        frameStats.isFrameStatsOpen = false
-        frameStats.isCometDebugExpanded = false
-    } else if (frameStats.showsFrameStats(session)) {
-        frameStats.isCometDebugExpanded = false
-    }
-}
-
-/** The open [session]'s panes, in a row after its detail pane: in the side column when [hasSideColumn], else as sheets. */
+/** The [session]'s panes after its detail: the side column when [hasSideColumn], else sheets. */
 @Composable
 private fun PanesBesideDetail(hasSideColumn: Boolean, session: GallerySession, frameStats: GalleryFrameStats, tuneSheet: @Composable () -> Unit) {
     if (!hasSideColumn) {
@@ -173,91 +150,66 @@ private fun PanesBesideDetail(hasSideColumn: Boolean, session: GallerySession, f
     }
     // Always there while a sample is open, so opening or closing a pane never changes the stage's width.
     VerticalDivider()
-    SideColumn(
-        tuning = if (session.isTuning) tuneSheet else null,
-        onCloseTuning = { session.isTuning = false },
-        frameStats = frameStats,
-        session = session,
-        modifier = Modifier.width(SIDE_SHEET_WIDTH).fillMaxHeight(),
-    )
+    SideColumn(session = session, frameStats = frameStats, tuneSheet = tuneSheet, modifier = Modifier.width(SIDE_SHEET_WIDTH).fillMaxHeight())
 }
 
-/**
- * The panes where no side column fits, as modal sheets one at a time: Tune, shown with [tuneSheet], frame stats or
- * comet debug. Of the panes the side column left open, the first stays.
- */
+/** The panes as modal sheets, one at a time. Of those the side column left open, the first stays. */
 @Composable
 private fun PaneSheets(session: GallerySession, frameStats: GalleryFrameStats, tuneSheet: @Composable () -> Unit) {
-    LaunchedEffect(session) { keepOnePane(session, frameStats) }
-    val paneModifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 16.dp)
-    when {
-        session.isTuning -> PaneBottomSheet(title = "Tune", onDismiss = { session.isTuning = false }, content = tuneSheet)
-        frameStats.showsFrameStats(session) -> PaneBottomSheet(title = "Frame stats", onDismiss = { frameStats.isFrameStatsOpen = false }) {
-            FrameBreakdownPanel(frameStats = frameStats, tiles = session.tiles, modifier = paneModifier)
-        }
-        frameStats.showsCometDebug(session) -> PaneBottomSheet(title = "Comet debug", onDismiss = { frameStats.isCometDebugExpanded = false }) {
-            CometDebugPanel(stats = frameStats.stats, modifier = paneModifier)
-        }
+    val panes = rememberOpenPanes(session, frameStats)
+    LaunchedEffect(panes) { panes.keepFirstOpen() }
+    val pane = panes.open.firstOrNull() ?: return
+    PaneBottomSheet(title = pane.title, onDismiss = { panes.setOpen(pane, false) }) {
+        val paneModifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 16.dp)
+        PaneContent(pane = pane, session = session, frameStats = frameStats, tuneSheet = tuneSheet, modifier = paneModifier)
     }
 }
 
 /**
- * The right-hand column of a window wide enough for it, which stacks the tuner, the frame stats and the comet debug panes like an
- * IDE's side panes; the comet debug pane takes only what its switches need.
- * The tuner takes whatever height the frame stats pane leaves; that pane takes only what its table needs, up to
- * [FRAME_STATS_MAX_SHARE] of the column, and scrolls inside itself past that. Either pane alone fills what it needs.
- * The frame stats and comet debug panes are the open [session]'s; the comet debug pane is for a sample that runs
- * a cycle only. With no pane open, the column holds a hint naming the panes the sample has.
+ * Stacks the open panes like an IDE's side panes. The tuner takes the height the frame stats pane leaves; that pane
+ * takes what its table needs, up to [FRAME_STATS_MAX_SHARE] of the column, and scrolls past that. With no pane open,
+ * the column shows a hint.
  */
 @Composable
-private fun SideColumn(
-    tuning: (@Composable () -> Unit)?,
-    onCloseTuning: () -> Unit,
-    frameStats: GalleryFrameStats,
-    session: GallerySession,
-    modifier: Modifier = Modifier,
-) {
-    val showsFrameStats = frameStats.showsFrameStats(session)
-    val showsCometDebug = frameStats.showsCometDebug(session)
-    if (tuning == null && !showsFrameStats && !showsCometDebug) {
-        NoPaneOpen(session = session, modifier = modifier)
+private fun SideColumn(session: GallerySession, frameStats: GalleryFrameStats, tuneSheet: @Composable () -> Unit, modifier: Modifier = Modifier) {
+    val panes = rememberOpenPanes(session, frameStats)
+    val open = panes.open
+    if (open.isEmpty()) {
+        NoPaneOpen(available = panes.available, modifier = modifier)
         return
     }
     BoxWithConstraints(modifier = modifier) {
         val frameStatsMaxHeight = maxHeight * FRAME_STATS_MAX_SHARE
         Column(modifier = Modifier.fillMaxSize()) {
-            if (tuning != null) {
-                SideSheet(title = "Tune", onClose = onCloseTuning, modifier = Modifier.weight(1f).fillMaxWidth()) { tuning() }
-            }
-            if (showsFrameStats) {
-                if (tuning != null) HorizontalDivider()
-                SideSheet(
-                    title = "Frame stats",
-                    onClose = { frameStats.isFrameStatsOpen = false },
-                    modifier = Modifier.fillMaxWidth().heightIn(max = frameStatsMaxHeight),
-                ) {
-                    FrameBreakdownPanel(frameStats = frameStats, tiles = session.tiles, modifier = Modifier.fillMaxWidth())
+            open.forEachIndexed { index, pane ->
+                if (index > 0) HorizontalDivider()
+                val sheetModifier = when (pane) {
+                    GalleryPane.Tune -> Modifier.weight(1f)
+                    GalleryPane.FrameStats -> Modifier.heightIn(max = frameStatsMaxHeight)
+                    GalleryPane.CometDebug -> Modifier
                 }
-            }
-            if (showsCometDebug) {
-                if (tuning != null || showsFrameStats) HorizontalDivider()
-                SideSheet(title = "Comet debug", onClose = { frameStats.isCometDebugExpanded = false }, modifier = Modifier.fillMaxWidth()) {
-                    CometDebugPanel(stats = frameStats.stats, modifier = Modifier.fillMaxWidth())
+                SideSheet(title = pane.title, onClose = { panes.setOpen(pane, false) }, modifier = sheetModifier.fillMaxWidth()) {
+                    PaneContent(pane = pane, session = session, frameStats = frameStats, tuneSheet = tuneSheet, modifier = Modifier.fillMaxWidth())
                 }
             }
         }
     }
 }
 
-/** The side column with no pane open: "Open Tune, Frame stats or Comet debug", naming only the panes [session]'s sample has. */
 @Composable
-private fun NoPaneOpen(session: GallerySession, modifier: Modifier = Modifier) {
-    val panes = buildList {
-        if (session.isTunable) add("Tune")
-        add("Frame stats")
-        if (session.runsCycle) add("Comet debug")
+private fun PaneContent(pane: GalleryPane, session: GallerySession, frameStats: GalleryFrameStats, tuneSheet: @Composable () -> Unit, modifier: Modifier) {
+    when (pane) {
+        GalleryPane.Tune -> tuneSheet()
+        GalleryPane.FrameStats -> FrameBreakdownPanel(frameStats = frameStats, tiles = session.tiles, modifier = modifier)
+        GalleryPane.CometDebug -> CometDebugPanel(stats = frameStats.stats, modifier = modifier)
     }
-    val paneNames = if (panes.size == 1) panes.single() else panes.dropLast(1).joinToString(separator = ", ") + " or " + panes.last()
+}
+
+/** The side column's hint with no pane open, naming the [available] panes. */
+@Composable
+private fun NoPaneOpen(available: List<GalleryPane>, modifier: Modifier = Modifier) {
+    val titles = available.map { it.title }
+    val paneNames = if (titles.size == 1) titles.single() else titles.dropLast(1).joinToString(separator = ", ") + " or " + titles.last()
     Surface(modifier = modifier, color = MaterialTheme.colorScheme.surfaceContainerLow) {
         Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
             Text(
@@ -290,12 +242,11 @@ private val WIDE_LAYOUT_MIN_WIDTH = 840.dp
 private val LIST_WIDTH = 320.dp
 private val SIDE_SHEET_WIDTH = 380.dp
 
-/** The narrowest the detail pane gets beside the side column; its controls wrap to about three rows there. */
+/** The narrowest the detail gets beside the side column. */
 internal val DETAIL_MIN_WIDTH = 540.dp
 
-/** The list, the detail at [DETAIL_MIN_WIDTH], the side column and the two dividers between them. */
+/** The list, the detail at [DETAIL_MIN_WIDTH], the side column and two dividers. */
 private val SIDE_COLUMN_MIN_WIDTH = LIST_WIDTH + DETAIL_MIN_WIDTH + SIDE_SHEET_WIDTH + 2.dp
 
-/** Tags the open sample's detail pane, for tests that measure it. */
 internal const val DETAIL_TEST_TAG = "sample-detail"
 private const val FRAME_STATS_MAX_SHARE = 0.4f

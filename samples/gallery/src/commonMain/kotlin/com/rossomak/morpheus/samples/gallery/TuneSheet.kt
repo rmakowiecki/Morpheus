@@ -183,7 +183,7 @@ internal fun SideSheet(title: String, onClose: () -> Unit, modifier: Modifier = 
     }
 }
 
-/** The single-pane layout's sheet for a pane, titled [title]; one at a time, over the sample, which keeps its size. */
+/** A pane as a bottom sheet titled [title]. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun PaneBottomSheet(title: String, onDismiss: () -> Unit, content: @Composable () -> Unit) {

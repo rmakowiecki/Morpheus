@@ -21,11 +21,11 @@ import com.rossomak.morpheus.ExperimentalMorpheusGraphApi
 import com.rossomak.morpheus.MorpheusGraphCometDebug
 import com.rossomak.morpheus.MorpheusGraphFrameStats
 
-/** Opens and closes the comet debug pane through [onClick], filled while the pane is open or any comet overlay is on. */
+/** Toggles the comet debug pane through [onClick], filled while it is open or any comet overlay is on. */
 @Composable
 internal fun CometDebugButton(frameStats: GalleryFrameStats, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val active = frameStats.isCometDebugExpanded || frameStats.stats.cometDebug.any
-    PaneButton(icon = Icons.Filled.BugReport, label = "Comet debug", isActive = active, onClick = onClick, modifier = modifier)
+    val active = frameStats.isCometDebugOpen || frameStats.stats.cometDebug.any
+    PaneButton(icon = Icons.Filled.BugReport, label = GalleryPane.CometDebug.title, isActive = active, onClick = onClick, modifier = modifier)
 }
 
 /** One chip per comet overlay (see [MorpheusGraphCometDebug]), and a pair turning them all on or off. */

@@ -41,15 +41,14 @@ import kotlin.math.floor
 import kotlin.math.roundToInt
 
 /**
- * The gallery-wide frame stats every sample reports into, whether the frame stats and comet debug panes are
- * open, and whether the preview [isCanvasScaled]: it shows at other than its own size, which the frame stats pane
- * notes. Kept across samples, like the preview frame, so the debug switches stay as set.
+ * The gallery-wide frame stats every sample reports into, which panes are open, and whether the preview
+ * [isCanvasScaled] (shown at other than its own size). Kept across samples, so the debug switches stay as set.
  */
 @Stable
 internal class GalleryFrameStats {
     val stats = MorpheusGraphFrameStats()
     var isFrameStatsOpen by mutableStateOf(false)
-    var isCometDebugExpanded by mutableStateOf(false)
+    var isCometDebugOpen by mutableStateOf(false)
     var isCanvasScaled by mutableStateOf(false)
 }
 
@@ -119,20 +118,16 @@ internal fun RecordFrameIntervals(frameStats: GalleryFrameStats, tiles: TileStat
     }
 }
 
-/**
- * Opens and closes the frame stats pane, filled while it [isOpen], as Tune is of the tuner's. A static label: the
- * reading lives in the pane's header, so the control row never changes width with it.
- */
+/** Toggles the frame stats pane, filled while [isOpen]. The reading lives in the pane's header, not here. */
 @Composable
 internal fun FrameStatsButton(isOpen: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    PaneButton(icon = Icons.Filled.Speed, label = "Frame stats", isActive = isOpen, onClick = onClick, modifier = modifier)
+    PaneButton(icon = Icons.Filled.Speed, label = GalleryPane.FrameStats.title, isActive = isOpen, onClick = onClick, modifier = modifier)
 }
 
 /**
- * The last published window: the [FrameStatsHeader] on top, then per phase and count, the total and one column
- * per spec layer, back to front; then the debug switches. A grid sample shows a column per tile instead, or a row
- * per tile past [MAX_TILE_COLUMNS]. Below the header it scrolls inside itself both ways, so it never scrolls the
- * page. Dims while the reading is from before the last reset.
+ * The last published window: the [FrameStatsHeader], then per phase and count the total and a column per spec
+ * layer, back to front, then the debug switches. A grid sample shows a column per tile instead, or a row per tile
+ * past [MAX_TILE_COLUMNS]. Scrolls below the header. Dims while the reading is from before the last reset.
  */
 @Composable
 internal fun FrameBreakdownPanel(frameStats: GalleryFrameStats, tiles: TileStatsGroup, modifier: Modifier = Modifier) {
@@ -147,8 +142,8 @@ internal fun FrameBreakdownPanel(frameStats: GalleryFrameStats, tiles: TileStats
 
 /**
  * `frame 9.8 ms · graphs 6.1 ms`, and under it the notes on a reading that isn't a benchmark number: a debug switch
- * is on, the frame interval sits at a display refresh interval ("capped": the frame-rate cap hides the cost), or
- * the preview's canvas is scaled. The notes line is there, blank, without notes, so the header keeps its height.
+ * is on, the frame interval sits at a refresh interval ("capped"), or the canvas is scaled. The notes line stays,
+ * blank, without notes, so the header keeps its height.
  */
 @Composable
 private fun FrameStatsHeader(frameStats: GalleryFrameStats, tiles: TileStatsGroup, modifier: Modifier = Modifier) {

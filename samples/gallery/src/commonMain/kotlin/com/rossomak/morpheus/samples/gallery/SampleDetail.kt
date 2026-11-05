@@ -76,20 +76,17 @@ import kotlin.math.roundToInt
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 
 /**
- * The open sample on the [previewFrame]'s canvas, centered on the sample theme's background, under its title,
- * the theme control, the Tune and Reset to defaults actions, Pause for every sample, the scrub slider and the comet
- * debug button for a sample that runs a cycle, the Frame stats button and the preview canvas control. Frame stats
- * opens the frame stats pane, which shows the reading under a header with its notes (debug switches on, capped,
- * canvas scaled); the sample reports into [frameStats] through
- * [LocalMorpheusGraphFrameStats], so neither needs anything from the sample. A window wide enough shows the panes in a
- * side column; [opensOnePaneAtATime] is for a narrower one, whose panes are modal sheets, so opening one closes the
- * others. [onBack] is the single-pane layout's way back to the list. [logsBenchmarkReadings] prints each reading
- * for the benchmark recipe's script.
+ * The open sample on the [previewFrame]'s canvas, under its title and controls: theme, Tune and Reset to defaults,
+ * Pause, and for a sample that runs a cycle the scrub slider and Comet debug, then Frame stats and the preview
+ * canvas control. The sample reports into [frameStats] through [LocalMorpheusGraphFrameStats].
+ * [opensOnePaneAtATime] is for a window without a side column, whose panes are sheets. [onBack] is the
+ * single-pane layout's way back to the list. [logsBenchmarkReadings] prints each reading for the benchmark script.
  *
- * While a sample is open, nothing in the control rows appears, disappears or changes width, so the stage keeps its
- * size until the window or the preview's canvas changes.
+ * While a sample is open no control appears, disappears or changes width, so the stage keeps its size until the
+ * window or the preview's canvas changes.
  */
 @Suppress("LongParameterList") // The gallery-wide state the pane shows, one piece each.
 @Composable
@@ -120,11 +117,7 @@ internal fun SampleDetail(
     LaunchedEffect(frameStats, session) {
         snapshotFlow { frameStats.stats.switches() }.collect { session.tiles.mirrorSwitches() }
     }
-    // Opens or closes a pane; with one pane at a time, opening it closes the others first.
-    val toggle = { isOpen: Boolean, setOpen: (Boolean) -> Unit ->
-        if (!isOpen && opensOnePaneAtATime) closePanes(session, frameStats)
-        setOpen(!isOpen)
-    }
+    val panes = rememberOpenPanes(session, frameStats)
     Column(modifier = modifier) {
         Row(modifier = Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (onBack != null) {
@@ -142,10 +135,10 @@ internal fun SampleDetail(
             itemVerticalAlignment = Alignment.CenterVertically,
         ) {
             ThemeControl(selected = themeMode, enabled = !darkOnly, onSelect = onThemeModeChange)
-            if (session.isTunable) {
-                FilledTonalButton(onClick = { toggle(session.isTuning) { session.isTuning = it } }) {
+            if (GalleryPane.Tune in panes.available) {
+                FilledTonalButton(onClick = { panes.toggle(GalleryPane.Tune, closesOthers = opensOnePaneAtATime) }) {
                     Icon(Icons.Filled.Tune, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                    Text("Tune", maxLines = 1, softWrap = false)
+                    Text(GalleryPane.Tune.title, maxLines = 1, softWrap = false)
                 }
                 OutlinedButton(onClick = session::resetSpecs, enabled = session.isTuned) {
                     Icon(Icons.Filled.RestartAlt, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
@@ -153,8 +146,10 @@ internal fun SampleDetail(
                 }
             }
             CycleControls(control = session.cycle, runsCycle = session.runsCycle)
-            FrameStatsButton(isOpen = frameStats.isFrameStatsOpen, onClick = { toggle(frameStats.isFrameStatsOpen) { frameStats.isFrameStatsOpen = it } })
-            if (session.runsCycle) CometDebugButton(frameStats = frameStats, onClick = { toggle(frameStats.isCometDebugExpanded) { frameStats.isCometDebugExpanded = it } })
+            FrameStatsButton(isOpen = panes.isOpen(GalleryPane.FrameStats), onClick = { panes.toggle(GalleryPane.FrameStats, closesOthers = opensOnePaneAtATime) })
+            if (GalleryPane.CometDebug in panes.available) {
+                CometDebugButton(frameStats = frameStats, onClick = { panes.toggle(GalleryPane.CometDebug, closesOthers = opensOnePaneAtATime) })
+            }
         }
         PreviewFrameControl(
             frame = previewFrame,
@@ -184,10 +179,8 @@ internal fun SampleDetail(
     }
 }
 
-/** The area the sample's canvas is scaled into, for the layout test. */
 internal const val STAGE_TEST_TAG = "sample-stage"
 
-/** The canvas as shown on the stage, at its scaled size, for the layout test. */
 internal const val CANVAS_TEST_TAG = "sample-canvas"
 
 /** Starts a fresh window on the page's stats and on every tile's. */
@@ -196,10 +189,7 @@ private fun resetStats(frameStats: GalleryFrameStats, session: GallerySession) {
     session.tiles.reset()
 }
 
-/**
- * Pauses and resumes the sample, whatever it is. A sample that [runsCycle] also gets the [ScrubSlot]. The Pause/Play
- * button lays out both labels and shows one, so it keeps the wider one's width whichever shows.
- */
+/** Pause/Play for any sample, plus the [ScrubSlot] if it [runsCycle]. The button lays out both labels, so it keeps the wider one's width. */
 @Composable
 private fun CycleControls(control: CycleControl, runsCycle: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -213,10 +203,7 @@ private fun CycleControls(control: CycleControl, runsCycle: Boolean) {
     }
 }
 
-/**
- * Opens and closes a pane: an icon with its [label] as a tooltip and as what a screen reader says, filled while
- * [isActive]. An icon, not a labelled button, so the control row has room for it beside the scrub slot.
- */
+/** Toggles a pane: an icon with [label] as tooltip and content description, filled while [isActive]. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun PaneButton(icon: ImageVector, label: String, isActive: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
@@ -231,7 +218,7 @@ internal fun PaneButton(icon: ImageVector, label: String, isActive: Boolean, onC
     }
 }
 
-/** One of the Pause/Play button's labels; a hidden one still takes its width, but is neither seen nor found. */
+/** A Pause/Play label; hidden, it still takes its width but is neither seen nor found. */
 @Composable
 private fun PlayPauseLabel(icon: ImageVector, label: String, shown: Boolean) {
     val visibility = if (shown) Modifier else Modifier.alpha(0f).clearAndSetSemantics {}
@@ -242,20 +229,20 @@ private fun PlayPauseLabel(icon: ImageVector, label: String, shown: Boolean) {
 }
 
 /**
- * The cycle's slider and time. While paused the slider scrubs the cycle, so a morph can be held anywhere. While
- * playing it is disabled and follows the cycle, read every [PLAYHEAD_REFRESH] rather than on every frame: the
- * cycle's time changes each frame, and only this slot recomposes, that often. Paused, the slider reads the time
- * directly and nothing polls. The time is monospace and padded to [TIME_CHARS], so the slot keeps its width. Until
- * the sample's cycle reports its period, the slider rests at the start.
+ * The cycle's slider and time. Paused, the slider scrubs the cycle. Playing, it is disabled and follows the cycle,
+ * polled every [PLAYHEAD_REFRESH] so only this slot recomposes, not every frame. The time is monospace and padded
+ * to [TIME_CHARS] to keep the slot's width. Until the cycle reports its period, the slider rests at the start.
  */
 @Composable
 private fun ScrubSlot(control: CycleControl) {
     // Read in the coroutine, not in composition, so a frame's new time doesn't recompose anything.
-    val playhead by produceState(Duration.ZERO, control, control.isPaused) {
-        if (control.isPaused) return@produceState
-        while (true) {
-            value = control.time
-            delay(PLAYHEAD_REFRESH)
+    // Keyed on the control alone, so Play doesn't reset the playhead to zero for a frame.
+    val playhead by produceState(Duration.ZERO, control) {
+        snapshotFlow { control.isPaused }.collectLatest { isPaused ->
+            while (!isPaused) {
+                value = control.time
+                delay(PLAYHEAD_REFRESH)
+            }
         }
     }
     val period = control.period
@@ -271,8 +258,8 @@ private fun ScrubSlot(control: CycleControl) {
 
 /** `  3.4 /  12.0 s`, each number padded to [TIME_CHARS]; dashes until there is a [period]. */
 private fun timeText(time: Duration, period: Duration?): String {
-    val shownTime = if (period == null) "–" else seconds(time)
-    val shownPeriod = if (period == null) "–" else seconds(period)
+    val shownTime = period?.let { seconds(time) } ?: "–"
+    val shownPeriod = period?.let(::seconds) ?: "–"
     return "${shownTime.padStart(TIME_CHARS)} / ${shownPeriod.padStart(TIME_CHARS)} s"
 }
 
@@ -284,7 +271,7 @@ private fun seconds(duration: Duration): String {
 
 private const val TENTHS_PER_SECOND = 10
 
-/** Up to 999.9 s, so any cycle's time fits the slot's width. */
+/** Fits up to 999.9 s. */
 private const val TIME_CHARS = 5
 private val PLAYHEAD_REFRESH = 250.milliseconds
 private val SCRUB_SLIDER_WIDTH = 240.dp

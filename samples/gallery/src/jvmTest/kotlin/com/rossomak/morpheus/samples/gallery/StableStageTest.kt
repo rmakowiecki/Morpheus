@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import com.rossomak.morpheus.ExperimentalMorpheusGraphApi
+import com.rossomak.morpheus.samples.Sample
 import com.rossomak.morpheus.samples.SampleRegistry
 import io.kotest.assertions.withClue
 import io.kotest.matchers.floats.shouldBeGreaterThanOrEqual
@@ -36,13 +37,11 @@ import io.kotest.matchers.shouldNotBe
 import kotlin.test.Test
 
 /**
- * The stage, the area the open sample's canvas is scaled into, keeps its bounds while a sample is open: pausing,
- * scrubbing, opening and closing each pane, a reading with every note on against none yet, and every preview
- * preset leave it where it was, with the side column, with list and detail only, and with the detail alone. The
- * detail pane is never narrower than the side column leaves it at its narrowest. Below 840 dp, where panes are sheets,
- * opening one closes the others and Back closes them all. The stage still follows the window, and the canvas the
- * preset. The frame clock is driven by hand, since the
- * gallery records frame intervals on every frame and never idles.
+ * The stage, the area the open sample's canvas is scaled into, keeps its bounds through pausing, scrubbing, opening
+ * and closing each pane, any reading, and every preview preset, in all three layouts. The detail is never narrower
+ * than [DETAIL_MIN_WIDTH]. Where panes are sheets, opening one closes the others, and Back closes them all. The
+ * stage still follows the window, and the canvas the preset. The frame clock is driven by hand, since the gallery
+ * records frame intervals on every frame and never idles.
  */
 @OptIn(ExperimentalTestApi::class)
 class StableStageTest {
@@ -74,37 +73,10 @@ class StableStageTest {
     fun `a grid sample keeps its stage in the narrow layout`() = checkStageStaysStill(NARROW, GRID_SAMPLE_ID)
 
     @Test
-    fun `sheets open one at a time and Back closes them all`() = runSkikoComposeUiTest(size = NARROW, density = Density(1f)) {
-        val sample = SampleRegistry.samples.single { it.id == CYCLE_SAMPLE_ID }
-        val frameStats = GalleryFrameStats()
-        mainClock.autoAdvance = false
-        setContent { Gallery(samples = listOf(sample), onSpecExport = {}, benchmark = null, frameStats = frameStats) }
-        settle()
-        onNodeWithText(sample.title).performClick()
-        settle()
+    fun `sheets open one at a time beside the list`() = checkSheetsOpenOneAtATime(MIDDLE, hasBack = false)
 
-        button("Tune").performClick()
-        settle()
-        onNodeWithText(TUNE_SHEET_TEXT).assertExists()
-        // The button's own click, not a tap that the open sheet would take as a dismissal.
-        button("Frame stats").performSemanticsAction(SemanticsActions.OnClick)
-        settle()
-        onNodeWithText(TUNE_SHEET_TEXT).assertDoesNotExist()
-        frameStats.isFrameStatsOpen shouldBe true
-
-        button("Comet debug").performSemanticsAction(SemanticsActions.OnClick)
-        settle()
-        frameStats.isFrameStatsOpen shouldBe false
-        frameStats.isCometDebugExpanded shouldBe true
-
-        button("Back to the samples").performSemanticsAction(SemanticsActions.OnClick)
-        settle()
-        frameStats.isFrameStatsOpen shouldBe false
-        frameStats.isCometDebugExpanded shouldBe false
-        onNodeWithText(sample.title).performClick()
-        settle()
-        onNodeWithText(TUNE_SHEET_TEXT).assertDoesNotExist()
-    }
+    @Test
+    fun `sheets open one at a time and Back closes them all`() = checkSheetsOpenOneAtATime(NARROW, hasBack = true)
 
     @Test
     fun `stage follows the window and the canvas follows the preset`() = runSkikoComposeUiTest(size = WIDE, density = Density(1f)) {
@@ -133,17 +105,58 @@ class StableStageTest {
         canvasBounds().width shouldBe canvasBounds().height
     }
 
+    private fun checkSheetsOpenOneAtATime(windowSize: Size, hasBack: Boolean) = runSkikoComposeUiTest(size = windowSize, density = Density(1f)) {
+        val sample = SampleRegistry.samples.single { it.id == CYCLE_SAMPLE_ID }
+        val frameStats = GalleryFrameStats()
+        openSample(sample, frameStats)
+
+        button("Tune").performClick()
+        settle()
+        onNodeWithText(TUNE_SHEET_TEXT).assertExists()
+        // The button's own click, not a tap that the open sheet would take as a dismissal.
+        button("Frame stats").performSemanticsAction(SemanticsActions.OnClick)
+        settle()
+        onNodeWithText(TUNE_SHEET_TEXT).assertDoesNotExist()
+        frameStats.isFrameStatsOpen shouldBe true
+
+        button("Comet debug").performSemanticsAction(SemanticsActions.OnClick)
+        settle()
+        frameStats.isFrameStatsOpen shouldBe false
+        frameStats.isCometDebugOpen shouldBe true
+
+        if (hasBack) {
+            button("Back to the samples").performSemanticsAction(SemanticsActions.OnClick)
+            settle()
+            frameStats.isFrameStatsOpen shouldBe false
+            frameStats.isCometDebugOpen shouldBe false
+            onNodeWithText(sample.title).performClick()
+            settle()
+            onNodeWithText(TUNE_SHEET_TEXT).assertDoesNotExist()
+        }
+    }
+
     private fun checkStageStaysStill(windowSize: Size, sampleId: String) = runSkikoComposeUiTest(size = windowSize, density = Density(1f)) {
         val sample = SampleRegistry.samples.single { it.id == sampleId }
         val frameStats = GalleryFrameStats()
+        openSample(sample, frameStats)
+        onNodeWithTag(DETAIL_TEST_TAG).fetchSemanticsNode().boundsInRoot.width shouldBeGreaterThanOrEqual DETAIL_MIN_WIDTH.value
+        val stage = stageBounds()
+
+        checkPlayback(sample, stage)
+        GalleryPane.entries.filter { it.isAvailableFor(sample) }.forEach { pane -> checkPaneToggle(pane, stage) }
+        checkReadings(frameStats, stage)
+        checkPresets(stage)
+    }
+
+    private fun SkikoComposeUiTest.openSample(sample: Sample, frameStats: GalleryFrameStats) {
         mainClock.autoAdvance = false
         setContent { Gallery(samples = listOf(sample), onSpecExport = {}, benchmark = null, frameStats = frameStats) }
         settle()
         onNodeWithText(sample.title).performClick()
         settle()
-        onNodeWithTag(DETAIL_TEST_TAG).fetchSemanticsNode().boundsInRoot.width shouldBeGreaterThanOrEqual DETAIL_MIN_WIDTH.value
-        val stage = stageBounds()
+    }
 
+    private fun SkikoComposeUiTest.checkPlayback(sample: Sample, stage: Rect) {
         button("Pause").performClick()
         settle()
         stageBounds() shouldBe stage
@@ -155,24 +168,20 @@ class StableStageTest {
         button("Play").performClick()
         settle()
         stageBounds() shouldBe stage
+    }
 
-        val panes = buildList {
-            if (sample.specs.isNotEmpty() || sample.morphs.isNotEmpty()) add("Tune")
-            add("Frame stats")
-            if (sample.timing != null) add("Comet debug")
-        }
-        panes.forEach { pane ->
-            button(pane).performClick()
-            settle()
-            stageBounds() shouldBe stage
-            button(pane).performClick()
+    private fun SkikoComposeUiTest.checkPaneToggle(pane: GalleryPane, stage: Rect) {
+        repeat(2) {
+            button(pane.title).performClick()
             settle()
             stageBounds() shouldBe stage
         }
+    }
 
-        // No reading yet, then every note on: the reading lives in the pane, so neither moves the stage.
+    /** No reading yet, then every note on: the reading lives in the pane, so neither moves the stage. */
+    private fun SkikoComposeUiTest.checkReadings(frameStats: GalleryFrameStats, stage: Rect) {
         runOnIdle { frameStats.stats.reset() }
-        button("Frame stats").performClick()
+        button(GalleryPane.FrameStats.title).performClick()
         settle()
         stageBounds() shouldBe stage
         runOnIdle {
@@ -186,9 +195,11 @@ class StableStageTest {
         mainClock.advanceTimeByFrame()
         onNodeWithText("debug switches on · capped · canvas scaled").assertExists()
         stageBounds() shouldBe stage
-        button("Frame stats").performClick()
+        button(GalleryPane.FrameStats.title).performClick()
         settle()
+    }
 
+    private fun SkikoComposeUiTest.checkPresets(stage: Rect) {
         PreviewPreset.entries.forEach { preset ->
             button(preset.label).performClick()
             settle()
