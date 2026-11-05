@@ -42,7 +42,7 @@ import com.rossomak.morpheus.tuner.toKotlinSource
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.launch
 
-internal const val GALLERY_TITLE = "Morpheus samples"
+internal const val GALLERY_TITLE = "Morpheus gallery"
 
 /**
  * The samples gallery: the registry's samples in a list, and the open one in a detail pane with a theme

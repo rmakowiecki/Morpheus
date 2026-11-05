@@ -72,7 +72,7 @@ val morph = animateMorpheusGraphMorph(
 Box(Modifier.fillMaxSize().morpheusGraphBackground(morph))
 ```
 
-Flip `showBloom` from anywhere, such as a selected tab, and the graph morphs from wherever it is. Both snippets run under **Start here** in the live demo.
+Flip `showBloom` from anywhere, such as a selected tab, and the graph morphs from wherever it is.
 
 ## Modules
 
