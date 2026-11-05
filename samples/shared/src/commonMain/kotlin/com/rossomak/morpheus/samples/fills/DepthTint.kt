@@ -1,6 +1,6 @@
 @file:Suppress("MagicNumber")
 
-package com.rossomak.morpheus.samples.catalog
+package com.rossomak.morpheus.samples.fills
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -12,10 +12,12 @@ import com.rossomak.morpheus.LocalMorpheusGraphFill
 import com.rossomak.morpheus.MorpheusGraphFill
 import com.rossomak.morpheus.MorpheusGraphSpec
 import com.rossomak.morpheus.samples.Sample
-import com.rossomak.morpheus.samples.SampleCategory
+import com.rossomak.morpheus.samples.SampleGraph
 import com.rossomak.morpheus.samples.SampleGrid
+import com.rossomak.morpheus.samples.SampleSection
 import com.rossomak.morpheus.samples.SampleTile
 import com.rossomak.morpheus.samples.TunableSpec
+import com.rossomak.morpheus.samples.fillSampleLayer
 
 private const val DEPTH_TINT = "Depth tint"
 
@@ -31,14 +33,14 @@ private val depthTintSpec = MorpheusGraphSpec(
             nodeSizeDp = 1.4f,
             strokeWidthDp = 0.8f,
             driftAmplitude = 0.15f,
-            alpha = 0.6f,
+            alpha = 0.5f,
         ),
         fillSampleLayer.copy(
             density = 30f,
             nodeSizeDp = 2.4f,
             strokeWidthDp = 1.1f,
             driftAmplitude = 0.35f,
-            alpha = 0.8f,
+            alpha = 0.75f,
         ),
         fillSampleLayer.copy(
             density = 14f,
@@ -83,8 +85,10 @@ fun DepthTintSample(modifier: Modifier = Modifier, spec: MorpheusGraphSpec = dep
 internal val depthTintSample = Sample(
     id = "depth-tint",
     title = "Depth tint",
-    description = "A custom fill that tints three layers by depth, from a muted blue at the back to a bright orange in front.",
-    category = SampleCategory.Fills,
+    summary = "A custom fill that tints three layers by depth.",
+    description = "Three layers in one color, beside the same layers in a custom fill. The custom fill colors each layer by how far back it sits, from muted blue to " +
+        "bright orange. The renderer asks a fill for its brush once per layer, so each layer can get its own.",
+    section = SampleSection.Fills,
     specs = listOf(TunableSpec(DEPTH_TINT, depthTintSpec)),
     content = { specs -> DepthTintSample(spec = specs[DEPTH_TINT]) },
 )

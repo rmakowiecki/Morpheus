@@ -27,10 +27,11 @@ import com.rossomak.morpheus.samples.LoopMode
 import com.rossomak.morpheus.samples.MorphCycle
 import com.rossomak.morpheus.samples.MorphTiming
 import com.rossomak.morpheus.samples.Sample
-import com.rossomak.morpheus.samples.SampleCategory
+import com.rossomak.morpheus.samples.SampleSection
 import com.rossomak.morpheus.samples.TunableMorph
 import com.rossomak.morpheus.samples.TunableSpec
 import com.rossomak.morpheus.samples.cyclePeriod
+import com.rossomak.morpheus.samples.easings
 import com.rossomak.morpheus.samples.rememberCycleTime
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -131,8 +132,10 @@ private const val TO_PILLS = "Ribbons → Pills"
 internal val heroSample = Sample(
     id = "hero",
     title = "Pills to ribbons",
-    description = "Two pills morph in place into two crossing ribbons and back, trading colors as they go.",
-    category = SampleCategory.Showcase,
+    summary = "Two pills morph in place into two crossing ribbons and back.",
+    description = "Two pills morph in place into two crossing ribbons, and back. Both ends are one morph family, so every node keeps its cell and only its presence " +
+        "changes. The fill crosses from blue and red to red, purple and blue. The ribbons' wave builds up only as they form, so they ripple as they arrive.",
+    section = SampleSection.Showcase,
     recipe = CaptureRecipe(
         // Not a standard canvas: the shapes are composed for 2:1. It renders at density 2 (1080×540 pixels) so
         // the README's hero stays sharp on retina screens; that only fits at 24 fps and WebP quality 80, as the

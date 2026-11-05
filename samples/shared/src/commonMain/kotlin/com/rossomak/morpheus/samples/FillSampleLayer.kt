@@ -1,6 +1,6 @@
 @file:Suppress("MagicNumber")
 
-package com.rossomak.morpheus.samples.catalog
+package com.rossomak.morpheus.samples
 
 import com.rossomak.morpheus.MorpheusGraphLayerSpec
 

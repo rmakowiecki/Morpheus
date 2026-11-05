@@ -1,6 +1,6 @@
 @file:Suppress("MagicNumber")
 
-package com.rossomak.morpheus.samples.catalog
+package com.rossomak.morpheus.samples.meshes
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -8,7 +8,8 @@ import com.rossomak.morpheus.MorpheusGraphLayerSpec
 import com.rossomak.morpheus.MorpheusGraphSpec
 import com.rossomak.morpheus.ShapePrimitive.Ribbon
 import com.rossomak.morpheus.samples.Sample
-import com.rossomak.morpheus.samples.SampleCategory
+import com.rossomak.morpheus.samples.SampleGraph
+import com.rossomak.morpheus.samples.SampleSection
 import com.rossomak.morpheus.samples.TunableSpec
 
 /** A ribbon whose nodes ride a travelling wave and whose edges pulse down to their floor and back. */
@@ -43,8 +44,11 @@ private const val WAVE_AND_PULSE = "Wave and pulse"
 internal val waveAndPulseSample = Sample(
     id = "wave-and-pulse",
     title = "Wave and pulse",
-    description = "A ribbon rippling with a travelling wave while its edges pulse.",
-    category = SampleCategory.BasicShapes,
+    summary = "A ribbon rippling with a travelling wave while its edges pulse.",
+    description = "A wave travels through the ribbon's homes, so the whole mesh ripples up and down. The wave amplitude is a share of the surface's height, and adds to " +
+        "each node's drift. The edge pulse dims every edge toward a floor and back. A pulse depth of 0 keeps the edges steady, and 1 dims them all the way to " +
+        "the floor.",
+    section = SampleSection.Meshes,
     specs = listOf(TunableSpec(WAVE_AND_PULSE, waveAndPulseSpec)),
     content = { specs -> WaveAndPulseSample(spec = specs[WAVE_AND_PULSE]) },
 )

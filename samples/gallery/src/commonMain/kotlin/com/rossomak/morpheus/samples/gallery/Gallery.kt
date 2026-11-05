@@ -63,8 +63,8 @@ fun Gallery(samples: List<Sample> = SampleRegistry.samples, onSpecExport: (sourc
 /** The [Gallery] reporting into [frameStats], which a test can feed and read. */
 @Composable
 internal fun Gallery(samples: List<Sample>, onSpecExport: (source: String) -> Unit, benchmark: GalleryBenchmark?, frameStats: GalleryFrameStats) {
-    // Grouped by category in menu order, each group in registry order.
-    val orderedSamples = remember(samples) { samples.sortedBy { it.category.ordinal } }
+    // Grouped by section in menu order, each group in registry order.
+    val orderedSamples = remember(samples) { samples.sortedBy { it.section.ordinal } }
     var selectedId by remember { mutableStateOf(benchmark?.sampleId) }
     // Held here rather than in a pane, so a layout switch keeps the open sample's preparation and tuning.
     var themeMode by remember { mutableStateOf(ThemeMode.System) }

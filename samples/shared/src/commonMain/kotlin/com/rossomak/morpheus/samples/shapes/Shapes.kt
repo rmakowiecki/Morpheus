@@ -1,6 +1,6 @@
 @file:Suppress("MagicNumber")
 
-package com.rossomak.morpheus.samples.catalog
+package com.rossomak.morpheus.samples.shapes
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -13,10 +13,12 @@ import com.rossomak.morpheus.ShapePrimitive.Ribbon
 import com.rossomak.morpheus.ShapePrimitive.Ring
 import com.rossomak.morpheus.ShapePrimitive.Triangle
 import com.rossomak.morpheus.samples.Sample
-import com.rossomak.morpheus.samples.SampleCategory
+import com.rossomak.morpheus.samples.SampleGraph
 import com.rossomak.morpheus.samples.SampleGrid
+import com.rossomak.morpheus.samples.SampleSection
 import com.rossomak.morpheus.samples.SampleTile
 import com.rossomak.morpheus.samples.TunableSpec
+import com.rossomak.morpheus.samples.shapeSampleLayer
 
 private fun shapeSpec(shape: ShapePrimitive) = MorpheusGraphSpec(seed = 9, layers = listOf(shapeSampleLayer.copy(shapes = listOf(shape))))
 
@@ -40,7 +42,7 @@ private const val TRIANGLE = "Triangle"
  * is an isosceles triangle. A layer combines up to a few of them by taking the strongest at each point.
  */
 @Composable
-fun ShapePrimitivesSample(
+fun ShapesSample(
     modifier: Modifier = Modifier,
     ribbon: MorpheusGraphSpec = ribbonSpec,
     bloom: MorpheusGraphSpec = bloomSpec,
@@ -63,11 +65,13 @@ fun ShapePrimitivesSample(
     )
 }
 
-internal val shapePrimitivesSample = Sample(
-    id = "shape-primitives",
-    title = "Shape primitives",
-    description = "A ribbon, a bloom, a pill, a ring, a rectangle and a triangle: the shapes that decide where a layer's nodes sit.",
-    category = SampleCategory.BasicShapes,
+internal val shapesSample = Sample(
+    id = "shapes",
+    title = "Shapes",
+    summary = "The six shapes that decide where a layer's nodes sit.",
+    description = "A ribbon, a bloom, a pill, a ring, a rect and a triangle, one per tile. A shape is a density field: the denser a spot, the more of its cells become " +
+        "nodes. Here the floor outside every shape is 0, so each shape's rim shows clearly.",
+    section = SampleSection.Shapes,
     specs = listOf(
         TunableSpec(RIBBON, ribbonSpec),
         TunableSpec(BLOOM, bloomSpec),
@@ -77,7 +81,7 @@ internal val shapePrimitivesSample = Sample(
         TunableSpec(TRIANGLE, triangleSpec),
     ),
     content = { specs ->
-        ShapePrimitivesSample(
+        ShapesSample(
             ribbon = specs[RIBBON],
             bloom = specs[BLOOM],
             pill = specs[PILL],

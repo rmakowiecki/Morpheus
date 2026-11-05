@@ -1,6 +1,6 @@
 @file:Suppress("MagicNumber")
 
-package com.rossomak.morpheus.samples.catalog
+package com.rossomak.morpheus.samples.meshes
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -10,8 +10,9 @@ import com.rossomak.morpheus.MorpheusGraphSpec
 import com.rossomak.morpheus.samples.CaptureRecipe
 import com.rossomak.morpheus.samples.PortraitCanvas
 import com.rossomak.morpheus.samples.Sample
-import com.rossomak.morpheus.samples.SampleCategory
+import com.rossomak.morpheus.samples.SampleGraph
 import com.rossomak.morpheus.samples.SampleGrid
+import com.rossomak.morpheus.samples.SampleSection
 import com.rossomak.morpheus.samples.SampleTile
 import com.rossomak.morpheus.samples.TileSize
 import com.rossomak.morpheus.samples.TunableSpec
@@ -20,7 +21,7 @@ private const val BASELINE = "Baseline"
 
 /** One spec on an app bar, a card and a hero area: the mesh is as fine on each. */
 @Composable
-fun ScaleInvarianceSample(modifier: Modifier = Modifier, spec: MorpheusGraphSpec = MorpheusGraphPresets.baseline) {
+fun WindowSample(modifier: Modifier = Modifier, spec: MorpheusGraphSpec = MorpheusGraphPresets.baseline) {
     SampleGrid(
         modifier = modifier,
         columns = 1,
@@ -32,12 +33,14 @@ fun ScaleInvarianceSample(modifier: Modifier = Modifier, spec: MorpheusGraphSpec
     )
 }
 
-internal val scaleInvarianceSample = Sample(
-    id = "scale-invariance",
-    title = "Scale invariance",
-    description = "One spec on a 64 dp app bar, a 120 dp card and a hero area: the mesh is equally fine on every surface.",
-    category = SampleCategory.BasicShapes,
+internal val windowSample = Sample(
+    id = "window",
+    title = "Window",
+    summary = "One spec on an app bar, a card and a hero area, with one cell size.",
+    description = "One spec on a 64 dp app bar, a 120 dp card and a hero area. Each layer's grid is built from the window, not from the surface. The cells keep one " +
+        "size, so a bigger surface holds more nodes, not bigger ones.",
+    section = SampleSection.Meshes,
     recipe = CaptureRecipe(canvasSize = PortraitCanvas),
     specs = listOf(TunableSpec(BASELINE, MorpheusGraphPresets.baseline)),
-    content = { specs -> ScaleInvarianceSample(spec = specs[BASELINE]) },
+    content = { specs -> WindowSample(spec = specs[BASELINE]) },
 )

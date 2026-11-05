@@ -1,4 +1,4 @@
-package com.rossomak.morpheus.samples.catalog
+package com.rossomak.morpheus.samples.morphs
 
 import androidx.compose.animation.core.LinearEasing
 import com.rossomak.morpheus.samples.MorphTiming

@@ -2,7 +2,7 @@ package com.rossomak.morpheus.samples.capture
 
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
-import com.rossomak.morpheus.samples.catalog.depthTintColor
+import com.rossomak.morpheus.samples.fills.depthTintColor
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import kotlin.test.Test

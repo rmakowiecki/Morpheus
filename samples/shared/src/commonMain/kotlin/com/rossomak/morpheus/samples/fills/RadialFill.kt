@@ -1,6 +1,6 @@
 @file:Suppress("MagicNumber")
 
-package com.rossomak.morpheus.samples.catalog
+package com.rossomak.morpheus.samples.fills
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -10,7 +10,9 @@ import com.rossomak.morpheus.MorpheusGraphFill
 import com.rossomak.morpheus.MorpheusGraphPresets
 import com.rossomak.morpheus.MorpheusGraphSpec
 import com.rossomak.morpheus.samples.Sample
-import com.rossomak.morpheus.samples.SampleCategory
+import com.rossomak.morpheus.samples.SampleGraph
+import com.rossomak.morpheus.samples.SampleSection
+import com.rossomak.morpheus.samples.SampleStyle
 import com.rossomak.morpheus.samples.TunableSpec
 
 private const val CORNER_BLOOM = "Corner bloom"
@@ -36,8 +38,10 @@ fun RadialFillSample(modifier: Modifier = Modifier, spec: MorpheusGraphSpec = ra
 internal val radialFillSample = Sample(
     id = "radial-fill",
     title = "Radial fill",
-    description = "A radial gradient centered off the middle, on the corner bloom.",
-    category = SampleCategory.Fills,
+    summary = "A radial gradient centered off the middle, on the corner bloom.",
+    description = "The corner bloom preset in a radial gradient. The gradient's center sits near the bloom's corner, so the color follows the shape, not the surface. " +
+        "The radius is a fraction of the surface's longer side.",
+    section = SampleSection.Fills,
     specs = listOf(TunableSpec(CORNER_BLOOM, radialFillSpec)),
     content = { specs -> RadialFillSample(spec = specs[CORNER_BLOOM]) },
 )

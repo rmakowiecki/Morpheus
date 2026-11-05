@@ -21,13 +21,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.rossomak.morpheus.samples.Sample
-import com.rossomak.morpheus.samples.SampleCategory
+import com.rossomak.morpheus.samples.SampleSection
 import com.rossomak.morpheus.samples.ViewerNotice
 
-/** Every sample under its category's heading; an empty category has no heading. */
+/** Every sample, with its summary, under its section's heading; an empty section has no heading. */
 @Composable
 internal fun SampleList(samples: List<Sample>, selectedId: String?, onSelect: (String) -> Unit, modifier: Modifier = Modifier) {
-    val byCategory = samples.groupBy { it.category }
+    val bySection = samples.groupBy { it.section }
     LazyColumn(modifier = modifier) {
         item {
             Text(
@@ -37,22 +37,22 @@ internal fun SampleList(samples: List<Sample>, selectedId: String?, onSelect: (S
             )
         }
         item { ViewerNoticeCard(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
-        SampleCategory.entries.forEach { category ->
-            val categorySamples = byCategory[category].orEmpty()
-            if (categorySamples.isNotEmpty()) {
-                item(key = category) {
+        SampleSection.entries.forEach { section ->
+            val sectionSamples = bySection[section].orEmpty()
+            if (sectionSamples.isNotEmpty()) {
+                item(key = section) {
                     Text(
-                        text = category.heading,
+                        text = section.name,
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
                     )
                 }
-                items(categorySamples, key = { it.id }) { sample ->
+                items(sectionSamples, key = { it.id }) { sample ->
                     val selected = sample.id == selectedId
                     ListItem(
                         headlineContent = { Text(sample.title) },
-                        supportingContent = { Text(sample.description) },
+                        supportingContent = { Text(sample.summary) },
                         colors = if (selected) {
                             ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
                         } else {
@@ -96,12 +96,3 @@ internal fun ViewerNoticeCard(modifier: Modifier = Modifier) {
         )
     }
 }
-
-private val SampleCategory.heading: String
-    get() = when (this) {
-        SampleCategory.StartHere -> "Start here"
-        SampleCategory.Showcase -> "Showcase"
-        SampleCategory.BasicShapes -> "Basic shapes"
-        SampleCategory.Fills -> "Fills"
-        SampleCategory.Morphs -> "Morphs"
-    }

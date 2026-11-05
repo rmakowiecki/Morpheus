@@ -1,6 +1,6 @@
 @file:Suppress("MagicNumber")
 
-package com.rossomak.morpheus.samples.catalog
+package com.rossomak.morpheus.samples.fills
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -9,10 +9,13 @@ import com.rossomak.morpheus.LocalMorpheusGraphFill
 import com.rossomak.morpheus.MorpheusGraphFill
 import com.rossomak.morpheus.MorpheusGraphSpec
 import com.rossomak.morpheus.samples.Sample
-import com.rossomak.morpheus.samples.SampleCategory
+import com.rossomak.morpheus.samples.SampleGraph
 import com.rossomak.morpheus.samples.SampleGrid
+import com.rossomak.morpheus.samples.SampleSection
+import com.rossomak.morpheus.samples.SampleStyle
 import com.rossomak.morpheus.samples.SampleTile
 import com.rossomak.morpheus.samples.TunableSpec
+import com.rossomak.morpheus.samples.fillSampleLayer
 
 private const val FILLS = "Fills"
 
@@ -41,8 +44,10 @@ fun FillsSample(modifier: Modifier = Modifier, spec: MorpheusGraphSpec = fillsSp
 internal val fillsSample = Sample(
     id = "fills",
     title = "Fills",
-    description = "One graph in a solid, a linear and a radial fill.",
-    category = SampleCategory.Fills,
+    summary = "One graph in a solid, a linear and a radial fill.",
+    description = "The same graph three times: in a solid fill, a linear gradient and a radial gradient. The solid and linear fills are set on the spec. The radial " +
+        "fill comes from the composition, and a fill set on the spec would win over it. A layer's own fill wins over both.",
+    section = SampleSection.Fills,
     specs = listOf(TunableSpec(FILLS, fillsSpec)),
     content = { specs -> FillsSample(spec = specs[FILLS]) },
 )

@@ -1,4 +1,4 @@
-package com.rossomak.morpheus.samples.catalog
+package com.rossomak.morpheus.samples
 
 import androidx.compose.animation.core.Easing
 import androidx.compose.foundation.layout.Box
@@ -12,11 +12,6 @@ import com.rossomak.morpheus.MorpheusGraphSpec
 import com.rossomak.morpheus.ShapePrimitive.Bloom
 import com.rossomak.morpheus.morpheusGraphBackground
 import com.rossomak.morpheus.rememberMorpheusGraphMorphState
-import com.rossomak.morpheus.samples.MorphCycle
-import com.rossomak.morpheus.samples.MorphTiming
-import com.rossomak.morpheus.samples.SampleSpecs
-import com.rossomak.morpheus.samples.cyclePeriod
-import com.rossomak.morpheus.samples.rememberCycleTime
 import kotlin.time.Duration
 
 /** The cell density of the morph samples, dense enough that a shape's rim reads as a rim. */

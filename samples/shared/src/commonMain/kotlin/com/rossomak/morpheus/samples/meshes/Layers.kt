@@ -1,6 +1,6 @@
 @file:Suppress("MagicNumber")
 
-package com.rossomak.morpheus.samples.catalog
+package com.rossomak.morpheus.samples.meshes
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -9,7 +9,8 @@ import com.rossomak.morpheus.MorpheusGraphSpec
 import com.rossomak.morpheus.ShapePrimitive.Bloom
 import com.rossomak.morpheus.ShapePrimitive.Ribbon
 import com.rossomak.morpheus.samples.Sample
-import com.rossomak.morpheus.samples.SampleCategory
+import com.rossomak.morpheus.samples.SampleGraph
+import com.rossomak.morpheus.samples.SampleSection
 import com.rossomak.morpheus.samples.TunableSpec
 
 /** Three layers, back to front: a faint fog of big dim nodes, a ghost ribbon, and a bloom in the top-end corner in front. */
@@ -67,8 +68,10 @@ private const val LAYERS = "Layers"
 internal val layersSample = Sample(
     id = "layers",
     title = "Layers",
-    description = "A fog of dim nodes, a ghost ribbon and a bloom, stacked back to front.",
-    category = SampleCategory.BasicShapes,
+    summary = "A fog, a ghost ribbon and a bloom, stacked back to front.",
+    description = "Three layers draw back to front: a fog of dim nodes, a faint ribbon and a bright bloom. Each layer has its own cell density, shapes, motion and " +
+        "glow, and draws its own mesh. The meshes never join, so depth comes from how they differ.",
+    section = SampleSection.Meshes,
     specs = listOf(TunableSpec(LAYERS, layersSpec)),
     content = { specs -> LayersSample(spec = specs[LAYERS]) },
 )

@@ -14,7 +14,8 @@ import kotlin.time.Duration
 /**
  * One registry entry: a sample composable plus what the gallery and the capture tool need to know about it.
  *
- * [id] is kebab-case and names the sample's media files. [specs] are the specs the gallery can tune, by
+ * [id] is kebab-case and names the sample's media files. [summary] is one sentence for the sample list, and
+ * [description] two to four for the main pane: what you see, then how the library does it. [specs] are the specs the gallery can tune, by
  * name, [morphs] the easings of the morphs between them and [timing] how long each morph and each hold takes;
  * a sample with morphs has a timing, one without has none. [content] receives all of them through [SampleSpecs],
  * tuned in the gallery and at their defaults in a capture, and passes them to the sample composable as
@@ -24,8 +25,9 @@ import kotlin.time.Duration
 class Sample(
     val id: String,
     val title: String,
+    val summary: String,
     val description: String,
-    val category: SampleCategory,
+    val section: SampleSection,
     val recipe: CaptureRecipe = CaptureRecipe(),
     val specs: List<TunableSpec> = emptyList(),
     val morphs: List<TunableMorph> = emptyList(),
@@ -50,8 +52,8 @@ class Sample(
     override fun toString(): String = "Sample($id)"
 }
 
-/** Start-here samples are the README's quick-start code, showcases are eye-catchers; the rest cover one capability each: shapes, fills, morphs. */
-enum class SampleCategory { StartHere, Showcase, BasicShapes, Fills, Morphs }
+/** The gallery's sections, in list order: showcases are eye-catchers, and the rest cover one capability each. */
+enum class SampleSection { Showcase, Shapes, Meshes, Fills, Morphs }
 
 /** A spec the gallery can tune, under the [name] its sample's content asks for it by. */
 @Immutable

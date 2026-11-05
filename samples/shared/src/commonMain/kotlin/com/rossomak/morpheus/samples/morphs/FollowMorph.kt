@@ -1,6 +1,6 @@
 @file:Suppress("MagicNumber")
 
-package com.rossomak.morpheus.samples.catalog
+package com.rossomak.morpheus.samples.morphs
 
 import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -19,11 +19,13 @@ import com.rossomak.morpheus.rememberMorpheusGraphMorphState
 import com.rossomak.morpheus.samples.CaptureRecipe
 import com.rossomak.morpheus.samples.MorphTiming
 import com.rossomak.morpheus.samples.Sample
-import com.rossomak.morpheus.samples.SampleCategory
 import com.rossomak.morpheus.samples.SampleLabel
+import com.rossomak.morpheus.samples.SampleSection
 import com.rossomak.morpheus.samples.TunableMorph
 import com.rossomak.morpheus.samples.TunableSpec
 import com.rossomak.morpheus.samples.cyclePeriod
+import com.rossomak.morpheus.samples.easings
+import com.rossomak.morpheus.samples.forMorphSample
 import com.rossomak.morpheus.samples.rememberWalkPosition
 import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.milliseconds
@@ -69,8 +71,11 @@ private fun Float.toTenths(): String = (this * 10).roundToInt().let { "${it / 10
 internal val followMorphSample = Sample(
     id = "follow-morph",
     title = "Follow morph",
-    description = "A morph that follows a position across four specs, out to the last and back; scrub fast and the graph trails behind.",
-    category = SampleCategory.Morphs,
+    summary = "A morph that follows a position across four specs.",
+    description = "The graph follows a fractional position across four specs, out to the last and back. Between two whole positions it shows a morph part way. Scrub " +
+        "quickly and the graph trails behind, because no morph runs faster than a set pace. In an app the position comes from state, such as a pager's " +
+        "offset.",
+    section = SampleSection.Morphs,
     // The capture covers the whole walk, out and back.
     recipe = CaptureRecipe(duration = FollowMorphTiming.cyclePeriod(legs = WalkMorphNames.size)),
     specs = SpecNames.zip(followSpecs) { name, spec ->
