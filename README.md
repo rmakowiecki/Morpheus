@@ -74,6 +74,9 @@ Box(Modifier.fillMaxSize().morpheusGraphBackground(morph))
 
 Flip `showBloom` from anywhere, such as a selected tab, and the graph morphs from wherever it is.
 
+To find a look of your own, tune any sample in the [live demo](https://rmakowiecki.github.io/Morpheus/), then press
+**Copy as Kotlin** in its Tune pane to copy the tuned spec.
+
 ## Modules
 
 | Module | Coordinates | What it is |
