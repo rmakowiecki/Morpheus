@@ -19,7 +19,7 @@ internal const val BENCHMARK_LINE_PREFIX = "morpheus-benchmark"
 
 /**
  * Prints each window [stats] publishes as one line, so `scripts/gallery_benchmark.py` can read the readout
- * without anyone at the screen: frame and graphs, the phase table's totals, and the button's flags. In the
+ * without anyone at the screen: frame and graphs, the phase table's totals, and the performance stats pane's notes. In the
  * browser, a line goes to the console. [canvasScaled] reads whether the preview shows at other than its own size.
  */
 @Composable

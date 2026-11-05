@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -62,9 +63,13 @@ internal class PreviewFrame {
     }
 }
 
-/** Picks the preview canvas: a preset, a custom width and height in dp, and scale-to-fit. */
+/**
+ * Picks the preview canvas: a preset, a width and height in dp, and scale-to-fit. All are always there, so the row
+ * wraps the same whatever the preset. Width and height take input only under [PreviewPreset.Custom], else show the
+ * [canvasSize] (a dash under Fill); scale-to-fit is disabled under Fill.
+ */
 @Composable
-internal fun PreviewFrameControl(frame: PreviewFrame, modifier: Modifier = Modifier) {
+internal fun PreviewFrameControl(frame: PreviewFrame, canvasSize: DpSize?, modifier: Modifier = Modifier) {
     FlowRow(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -77,14 +82,22 @@ internal fun PreviewFrameControl(frame: PreviewFrame, modifier: Modifier = Modif
         if (frame.preset == PreviewPreset.Custom) {
             DpField(label = "Width", value = frame.customSize.width.value.toInt()) { frame.customSize = frame.customSize.copy(width = it.dp) }
             DpField(label = "Height", value = frame.customSize.height.value.toInt()) { frame.customSize = frame.customSize.copy(height = it.dp) }
+        } else {
+            ShownDpField(label = "Width", value = canvasSize?.width?.value?.toInt())
+            ShownDpField(label = "Height", value = canvasSize?.height?.value?.toInt())
         }
-        if (frame.preset != PreviewPreset.Fill) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Switch(checked = frame.scalesToFit, onCheckedChange = { frame.scalesToFit = it })
-                Text("Scale to fit")
-            }
+        val scaleEnabled = frame.preset != PreviewPreset.Fill
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Switch(checked = frame.scalesToFit, onCheckedChange = { frame.scalesToFit = it }, enabled = scaleEnabled)
+            Text(text = "Scale to fit", color = LocalContentColor.current.copy(alpha = if (scaleEnabled) 1f else DISABLED_ALPHA))
         }
     }
+}
+
+/** A disabled field showing [value], or a dash: an empty field would take another height. */
+@Composable
+private fun ShownDpField(label: String, value: Int?) {
+    DpTextField(label = label, text = value?.toString() ?: "–", enabled = false, isError = false, onTextChange = {})
 }
 
 /** A whole number of dp; only values in [MIN_CANVAS_DP]..[MAX_CANVAS_DP] reach [onValueChange]. */
@@ -92,20 +105,36 @@ internal fun PreviewFrameControl(frame: PreviewFrame, modifier: Modifier = Modif
 private fun DpField(label: String, value: Int, onValueChange: (Int) -> Unit) {
     var text by remember { mutableStateOf(value.toString()) }
     val parsed = text.toIntOrNull()
-    OutlinedTextField(
-        value = text,
-        onValueChange = { input ->
+    DpTextField(
+        label = label,
+        text = text,
+        enabled = true,
+        isError = parsed == null || parsed !in MIN_CANVAS_DP..MAX_CANVAS_DP,
+        onTextChange = { input ->
             text = input.filter(Char::isDigit).take(MAX_DIGITS)
             text.toIntOrNull()?.takeIf { it in MIN_CANVAS_DP..MAX_CANVAS_DP }?.let(onValueChange)
         },
-        label = { Text("$label (dp)") },
-        isError = parsed == null || parsed !in MIN_CANVAS_DP..MAX_CANVAS_DP,
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        modifier = Modifier.width(120.dp),
     )
 }
 
+@Composable
+private fun DpTextField(label: String, text: String, enabled: Boolean, isError: Boolean, onTextChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = text,
+        onValueChange = onTextChange,
+        enabled = enabled,
+        label = { Text("$label (dp)") },
+        isError = isError,
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        modifier = Modifier.width(DP_FIELD_WIDTH),
+    )
+}
+
+private val DP_FIELD_WIDTH = 120.dp
+
+/** Material's alpha for disabled content. */
+private const val DISABLED_ALPHA = 0.38f
 private const val MIN_CANVAS_DP = 16
 private const val MAX_CANVAS_DP = 4000
 private const val MAX_DIGITS = 4

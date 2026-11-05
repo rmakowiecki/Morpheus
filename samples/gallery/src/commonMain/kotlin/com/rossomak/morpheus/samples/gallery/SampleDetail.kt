@@ -21,33 +21,47 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedIconButton
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipAnchorPosition
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.WindowInfo
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -63,15 +77,18 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 
 /**
- * The open sample on the [previewFrame]'s canvas, centered on the sample theme's background, under its title,
- * the theme control, the Tune and Reset to defaults actions, Pause for every sample, the scrub slider and the comet
- * debug button for a sample that runs a cycle, the frame time button and the preview canvas control. The frame time button opens the breakdown panel, which
- * the wide layout shows in its side column and [showsInlineBreakdown] shows under the preview instead; the
- * sample reports into [frameStats] through [LocalMorpheusGraphFrameStats], so neither needs anything from the
- * sample. [onBack] is the single-pane layout's way back to the list. [logsBenchmarkReadings] prints each reading
- * for the benchmark recipe's script.
+ * The open sample on the [previewFrame]'s canvas, under its title and controls: theme, Tune and Reset to defaults,
+ * Pause, and for a sample that runs a cycle the scrub slider and Comet debug, then Performance stats and the preview
+ * canvas control. The sample reports into [frameStats] through [LocalMorpheusGraphFrameStats].
+ * [opensOnePaneAtATime] is for a window without a side column, whose panes are sheets. [onBack] is the
+ * single-pane layout's way back to the list. [logsBenchmarkReadings] prints each reading for the benchmark script.
+ *
+ * While a sample is open no control appears, disappears or changes width, so the stage keeps its size until the
+ * window or the preview's canvas changes.
  */
 @Suppress("LongParameterList") // The gallery-wide state the pane shows, one piece each.
 @Composable
@@ -81,7 +98,7 @@ internal fun SampleDetail(
     systemDark: Boolean,
     previewFrame: PreviewFrame,
     frameStats: GalleryFrameStats,
-    showsInlineBreakdown: Boolean,
+    opensOnePaneAtATime: Boolean,
     logsBenchmarkReadings: Boolean,
     onThemeModeChange: (ThemeMode) -> Unit,
     onBack: (() -> Unit)?,
@@ -91,9 +108,8 @@ internal fun SampleDetail(
     val darkOnly = sample.recipe.themes == CaptureThemes.DarkOnly
     val dark = darkOnly || themeMode.isDark(systemDark)
     val canvasSize = previewFrame.canvasSize(sample.recipe)
-    var canvasScaled by remember { mutableStateOf(false) }
     RecordFrameIntervals(frameStats, session.tiles)
-    if (logsBenchmarkReadings) LogBenchmarkReadings(frameStats.stats) { canvasScaled }
+    if (logsBenchmarkReadings) LogBenchmarkReadings(frameStats.stats) { frameStats.isCanvasScaled }
     // No published reading straddles a change of what is measured.
     LaunchedEffect(frameStats, session, dark, canvasSize, previewFrame.scalesToFit) { resetStats(frameStats, session) }
     LaunchedEffect(frameStats, session) {
@@ -103,6 +119,7 @@ internal fun SampleDetail(
     LaunchedEffect(frameStats, session) {
         snapshotFlow { frameStats.stats.switches() }.collect { session.tiles.mirrorSwitches() }
     }
+    val panes = rememberOpenPanes(session, frameStats)
     Column(modifier = modifier) {
         Row(modifier = Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (onBack != null) {
@@ -120,22 +137,31 @@ internal fun SampleDetail(
             itemVerticalAlignment = Alignment.CenterVertically,
         ) {
             ThemeControl(selected = themeMode, enabled = !darkOnly, onSelect = onThemeModeChange)
-            if (sample.specs.isNotEmpty() || sample.morphs.isNotEmpty()) {
-                FilledTonalButton(onClick = { session.isTuning = !session.isTuning }) {
+            if (GalleryPane.Tune in panes.available) {
+                FilledTonalButton(onClick = { panes.toggle(GalleryPane.Tune, closesOthers = opensOnePaneAtATime) }) {
                     Icon(Icons.Filled.Tune, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                    Text("Tune")
+                    Text(GalleryPane.Tune.title, maxLines = 1, softWrap = false)
                 }
                 OutlinedButton(onClick = session::resetSpecs, enabled = session.isTuned) {
                     Icon(Icons.Filled.RestartAlt, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                    Text("Reset to defaults")
+                    Text("Reset to defaults", maxLines = 1, softWrap = false)
                 }
             }
-            CycleControls(control = session.cycle, scrubPeriod = session.cycle.period.takeIf { session.runsCycle })
-            FrameStatsButton(frameStats = frameStats, tiles = session.tiles, canvasScaled = canvasScaled)
-            if (session.runsCycle) CometDebugButton(frameStats = frameStats)
+            CycleControls(control = session.cycle, runsCycle = session.runsCycle)
+            PerformanceStatsButton(
+                isOpen = panes.isOpen(GalleryPane.PerformanceStats),
+                onClick = { panes.toggle(GalleryPane.PerformanceStats, closesOthers = opensOnePaneAtATime) },
+            )
+            if (GalleryPane.CometDebug in panes.available) {
+                CometDebugButton(frameStats = frameStats, onClick = { panes.toggle(GalleryPane.CometDebug, closesOthers = opensOnePaneAtATime) })
+            }
         }
-        PreviewFrameControl(frame = previewFrame, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 8.dp))
-        SampleTheme(dark = dark, modifier = Modifier.weight(1f).fillMaxWidth()) {
+        PreviewFrameControl(
+            frame = previewFrame,
+            canvasSize = canvasSize,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 8.dp),
+        )
+        SampleTheme(dark = dark, modifier = Modifier.weight(1f).fillMaxWidth().testTag(STAGE_TEST_TAG)) {
             when (val preparation = session.preparation) {
                 Preparation.Running -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 is Preparation.Failed -> Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
@@ -144,7 +170,7 @@ internal fun SampleDetail(
                 Preparation.Done -> SampleStage(
                     canvasSize = canvasSize,
                     scalesToFit = previewFrame.scalesToFit,
-                    onScaledChange = { canvasScaled = it },
+                    onScaledChange = { frameStats.isCanvasScaled = it },
                 ) {
                     CompositionLocalProvider(
                         LocalCycleControl provides session.cycle,
@@ -155,14 +181,12 @@ internal fun SampleDetail(
                 }
             }
         }
-        if (showsInlineBreakdown && frameStats.isBreakdownExpanded) {
-            FrameBreakdownPanel(frameStats = frameStats, tiles = session.tiles, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 8.dp))
-        }
-        if (showsInlineBreakdown && session.runsCycle && frameStats.isCometDebugExpanded) {
-            CometDebugPanel(stats = frameStats.stats, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 8.dp))
-        }
     }
 }
+
+internal const val STAGE_TEST_TAG = "sample-stage"
+
+internal const val CANVAS_TEST_TAG = "sample-canvas"
 
 /** Starts a fresh window on the page's stats and on every tile's. */
 private fun resetStats(frameStats: GalleryFrameStats, session: GallerySession) {
@@ -170,27 +194,90 @@ private fun resetStats(frameStats: GalleryFrameStats, session: GallerySession) {
     session.tiles.reset()
 }
 
-/**
- * Pauses and resumes the sample, whatever it is; while paused, a sample with a cycle (a [scrubPeriod]) gets a slider
- * to scrub it, so a morph can be held anywhere.
- */
+/** Pause/Play for any sample, plus the [ScrubSlot] if it [runsCycle]. The button lays out both labels, so it keeps the wider one's width. */
 @Composable
-private fun CycleControls(control: CycleControl, scrubPeriod: Duration?) {
+private fun CycleControls(control: CycleControl, runsCycle: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FilledTonalButton(onClick = { control.isPaused = !control.isPaused }) {
-            val icon = if (control.isPaused) Icons.Filled.PlayArrow else Icons.Filled.Pause
-            Icon(icon, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-            Text(if (control.isPaused) "Play" else "Pause")
+            Box(contentAlignment = Alignment.Center) {
+                PlayPauseLabel(icon = Icons.Filled.Pause, label = "Pause", shown = !control.isPaused)
+                PlayPauseLabel(icon = Icons.Filled.PlayArrow, label = "Play", shown = control.isPaused)
+            }
         }
-        if (control.isPaused && scrubPeriod != null) {
-            Slider(
-                value = (control.time / scrubPeriod).toFloat(),
-                onValueChange = { control.time = scrubPeriod * it.toDouble() },
-                modifier = Modifier.width(240.dp),
-            )
-            Text(text = "${seconds(control.time)} / ${seconds(scrubPeriod)} s", style = MaterialTheme.typography.bodyMedium)
+        if (runsCycle) ScrubSlot(control)
+    }
+}
+
+/**
+ * Toggles a pane: an icon with [label] as tooltip and content description, filled while [isActive]. [stateDescription]
+ * says the same to a screen reader, which can't see the fill.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun PaneButton(
+    icon: ImageVector,
+    label: String,
+    isActive: Boolean,
+    stateDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+        tooltip = { PlainTooltip { Text(label) } },
+        state = rememberTooltipState(),
+        modifier = modifier,
+    ) {
+        val colors = if (isActive) IconButtonDefaults.filledTonalIconButtonColors() else IconButtonDefaults.outlinedIconButtonColors()
+        OutlinedIconButton(onClick = onClick, colors = colors, modifier = Modifier.semantics { this.stateDescription = stateDescription }) {
+            Icon(icon, contentDescription = label)
         }
     }
+}
+
+/** A Pause/Play label; hidden, it still takes its width but is neither seen nor found. */
+@Composable
+private fun PlayPauseLabel(icon: ImageVector, label: String, shown: Boolean) {
+    val visibility = if (shown) Modifier else Modifier.alpha(0f).clearAndSetSemantics {}
+    Row(modifier = visibility, verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+        Text(label, maxLines = 1, softWrap = false)
+    }
+}
+
+/**
+ * The cycle's slider and time. Paused, the slider scrubs the cycle. Playing, it is disabled and follows the cycle,
+ * polled every [PLAYHEAD_REFRESH] so only this slot recomposes, not every frame. The time is monospace and padded
+ * to [TIME_CHARS] to keep the slot's width. Until the cycle reports its period, the slider rests at the start.
+ */
+@Composable
+private fun ScrubSlot(control: CycleControl) {
+    // Read in the coroutine, not in composition, so a frame's new time doesn't recompose anything.
+    // Keyed on the control alone, so Play doesn't reset the playhead to zero for a frame.
+    val playhead by produceState(Duration.ZERO, control) {
+        snapshotFlow { control.isPaused }.collectLatest { isPaused ->
+            while (!isPaused) {
+                value = control.time
+                delay(PLAYHEAD_REFRESH)
+            }
+        }
+    }
+    val period = control.period
+    val time = if (control.isPaused) control.time else playhead
+    Slider(
+        value = if (period == null) 0f else (time / period).toFloat().coerceIn(0f, 1f),
+        onValueChange = { fraction -> if (period != null) control.time = period * fraction.toDouble() },
+        enabled = control.isPaused && period != null,
+        modifier = Modifier.width(SCRUB_SLIDER_WIDTH),
+    )
+    Text(text = timeText(time, period), style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
+}
+
+/** `  3.4 /  12.0 s`, each number padded to [TIME_CHARS]; dashes until there is a [period]. */
+private fun timeText(time: Duration, period: Duration?): String {
+    val shownTime = period?.let { seconds(time) } ?: "–"
+    val shownPeriod = period?.let(::seconds) ?: "–"
+    return "${shownTime.padStart(TIME_CHARS)} / ${shownPeriod.padStart(TIME_CHARS)} s"
 }
 
 /** [duration] in seconds, to a tenth. */
@@ -200,6 +287,11 @@ private fun seconds(duration: Duration): String {
 }
 
 private const val TENTHS_PER_SECOND = 10
+
+/** Fits up to 999.9 s. */
+private const val TIME_CHARS = 5
+private val PLAYHEAD_REFRESH = 250.milliseconds
+private val SCRUB_SLIDER_WIDTH = 240.dp
 
 /** A canvas scaled by less than this shows at its own size, give or take a pixel's rounding. */
 private const val SCALE_EPSILON = 1e-3f
@@ -213,7 +305,7 @@ private fun ThemeControl(selected: ThemeMode, enabled: Boolean, onSelect: (Theme
                 onClick = { onSelect(mode) },
                 enabled = enabled,
                 shape = SegmentedButtonDefaults.itemShape(index = index, count = ThemeMode.entries.size),
-                label = { Text(mode.label) },
+                label = { Text(mode.label, maxLines = 1, softWrap = false) },
             )
         }
     }
@@ -236,7 +328,7 @@ private fun SampleStage(canvasSize: DpSize?, scalesToFit: Boolean, onScaledChang
         val scaled = abs(scale - 1f) > SCALE_EPSILON
         SideEffect { onScaledChange(scaled) }
         val canvasWindow = rememberCanvasWindowInfo(canvas)
-        Box(modifier = Modifier.size(canvas.width * scale, canvas.height * scale), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.size(canvas.width * scale, canvas.height * scale).testTag(CANVAS_TEST_TAG), contentAlignment = Alignment.Center) {
             Box(
                 modifier = Modifier
                     .requiredSize(canvas)

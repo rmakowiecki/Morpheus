@@ -183,10 +183,13 @@ internal fun SideSheet(title: String, onClose: () -> Unit, modifier: Modifier = 
     }
 }
 
-/** The single-pane layout's sheet. */
+/** A pane as a bottom sheet titled [title]. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun TuneBottomSheet(onDismiss: () -> Unit, content: @Composable () -> Unit) {
-    // No scrim: the whole point of tuning is watching the sample change above the sheet.
-    ModalBottomSheet(onDismissRequest = onDismiss, scrimColor = Color.Transparent) { content() }
+internal fun PaneBottomSheet(title: String, onDismiss: () -> Unit, content: @Composable () -> Unit) {
+    // No scrim: the whole point of a pane is watching the sample above the sheet.
+    ModalBottomSheet(onDismissRequest = onDismiss, scrimColor = Color.Transparent) {
+        Text(text = title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp))
+        content()
+    }
 }

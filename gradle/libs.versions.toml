@@ -19,6 +19,7 @@ kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-cor
 kotest-assertions-core = { group = "io.kotest", name = "kotest-assertions-core", version.ref = "kotestAssertions" }
 jetbrains-compose-runtime = { group = "org.jetbrains.compose.runtime", name = "runtime", version.ref = "composeMultiplatform" }
 jetbrains-compose-ui = { group = "org.jetbrains.compose.ui", name = "ui", version.ref = "composeMultiplatform" }
+jetbrains-compose-ui-test = { group = "org.jetbrains.compose.ui", name = "ui-test", version.ref = "composeMultiplatform" }
 jetbrains-compose-ui-util = { group = "org.jetbrains.compose.ui", name = "ui-util", version.ref = "composeMultiplatform" }
 jetbrains-compose-animation-core = { group = "org.jetbrains.compose.animation", name = "animation-core", version.ref = "composeMultiplatform" }
 jetbrains-compose-foundation = { group = "org.jetbrains.compose.foundation", name = "foundation", version.ref = "composeMultiplatform" }

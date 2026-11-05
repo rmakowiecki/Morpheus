@@ -9,11 +9,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BugReport
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -24,15 +21,25 @@ import com.rossomak.morpheus.ExperimentalMorpheusGraphApi
 import com.rossomak.morpheus.MorpheusGraphCometDebug
 import com.rossomak.morpheus.MorpheusGraphFrameStats
 
-/** Opens and closes the comet debug pane, filled while any comet overlay is on. */
+/** Toggles the comet debug pane through [onClick], filled while it is open or any comet overlay is on. */
 @Composable
-internal fun CometDebugButton(frameStats: GalleryFrameStats, modifier: Modifier = Modifier) {
-    val active = frameStats.isCometDebugExpanded || frameStats.stats.cometDebug.any
-    val colors = if (active) ButtonDefaults.filledTonalButtonColors() else ButtonDefaults.outlinedButtonColors()
-    OutlinedButton(onClick = { frameStats.isCometDebugExpanded = !frameStats.isCometDebugExpanded }, colors = colors, modifier = modifier) {
-        Icon(Icons.Filled.BugReport, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-        Text("Comet debug")
-    }
+internal fun CometDebugButton(frameStats: GalleryFrameStats, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val isOpen = frameStats.isCometDebugOpen
+    val overlaysOn = frameStats.stats.cometDebug.any
+    PaneButton(
+        icon = Icons.Filled.BugReport,
+        label = GalleryPane.CometDebug.title,
+        isActive = isOpen || overlaysOn,
+        stateDescription = if (isOpen) {
+            "Open"
+        } else if (overlaysOn) {
+            "Closed, overlays on"
+        } else {
+            "Closed"
+        },
+        onClick = onClick,
+        modifier = modifier,
+    )
 }
 
 /** One chip per comet overlay (see [MorpheusGraphCometDebug]), and a pair turning them all on or off. */

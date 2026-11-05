@@ -10,7 +10,7 @@ fun main() = application {
     Window(
         onCloseRequest = ::exitApplication,
         title = GALLERY_TITLE,
-        state = rememberWindowState(width = 1280.dp, height = 800.dp),
+        state = rememberWindowState(width = 1440.dp, height = 900.dp),
     ) {
         Gallery(onSpecExport = ::println)
     }

@@ -43,6 +43,12 @@ kotlin {
             // Dispatchers.Main for the desktop: the lib's renderer runs repeatOnLifecycle, which switches to it.
             implementation(libs.kotlinx.coroutines.swing)
         }
+        // JVM only: the layout test renders the gallery on the desktop's Skia, and the gallery has no browser tests.
+        jvmTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.kotest.assertions.core)
+            implementation(libs.jetbrains.compose.ui.test)
+        }
     }
 }
 
@@ -58,5 +64,5 @@ compose.desktop {
 
 // detekt's default sources are the JVM `src/main` layout; point it at the multiplatform one.
 extensions.configure<DetektExtension> {
-    source.setFrom("src/commonMain/kotlin", "src/jvmMain/kotlin", "src/wasmJsMain/kotlin")
+    source.setFrom("src/commonMain/kotlin", "src/jvmMain/kotlin", "src/wasmJsMain/kotlin", "src/jvmTest/kotlin")
 }
