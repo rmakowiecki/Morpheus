@@ -80,6 +80,12 @@ class StableStageTest {
     fun `sheets open one at a time and Back closes them all`() = checkSheetsOpenOneAtATime(NARROW, hasBack = true)
 
     @Test
+    fun `a squarish window wide enough for the side column still opens sheets beside the list`() = checkSheetsOpenOneAtATime(SQUARISH, hasBack = false)
+
+    @Test
+    fun `a window taller than it is wide opens the detail over the list, however wide`() = checkSheetsOpenOneAtATime(PORTRAIT, hasBack = true)
+
+    @Test
     fun `stage follows the window and the canvas follows the preset`() = runSkikoComposeUiTest(size = WIDE, density = Density(1f)) {
         val sample = SampleRegistry.samples.single { it.id == CYCLE_SAMPLE_ID }
         // The gallery's own space, shrunk below to stand for a resized window.
@@ -225,6 +231,8 @@ class StableStageTest {
         val WIDE = Size(1400f, 900f)
         val MIDDLE = Size(1000f, 900f)
         val NARROW = Size(700f, 900f)
+        val SQUARISH = Size(1300f, 1000f)
+        val PORTRAIT = Size(1000f, 1200f)
 
         const val CYCLE_SAMPLE_ID = "fill-morph"
         const val STILL_SAMPLE_ID = "layers"
