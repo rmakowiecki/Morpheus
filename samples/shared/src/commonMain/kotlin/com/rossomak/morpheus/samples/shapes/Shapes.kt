@@ -67,7 +67,7 @@ fun ShapesSample(
 
 internal val shapesSample = Sample(
     id = "shapes",
-    title = "Shapes",
+    title = "Shape primitives",
     summary = "The six shapes that decide where a layer's nodes sit.",
     description = "A ribbon, a bloom, a pill, a ring, a rect and a triangle, one per tile. A shape is a density field: the denser a spot, the more of its cells become " +
         "nodes. Here the floor outside every shape is 0, so each shape's rim shows clearly.",

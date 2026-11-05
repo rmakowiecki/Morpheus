@@ -52,8 +52,18 @@ class Sample(
     override fun toString(): String = "Sample($id)"
 }
 
-/** The gallery's sections, in list order: showcases are eye-catchers, and the rest cover one capability each. */
-enum class SampleSection { Showcase, Shapes, Meshes, Fills, Morphs }
+/**
+ * The gallery's sections, in list order: showcases are eye-catchers, basic parameters show one
+ * layer setting at a few values each, and the rest cover one capability each.
+ */
+enum class SampleSection(val title: String) {
+    Showcase("Showcase"),
+    Shapes("Shapes"),
+    BasicParameters("Basic Parameters"),
+    Meshes("Meshes"),
+    Fills("Fills"),
+    Morphs("Morphs"),
+}
 
 /** A spec the gallery can tune, under the [name] its sample's content asks for it by. */
 @Immutable
