@@ -32,7 +32,7 @@ private val waveAndPulseSpec = MorpheusGraphSpec(
     ),
 )
 
-/** A wave travelling through the nodes' rest positions, and the pulse that dims and brightens the edges. */
+/** A wave travelling through the nodes' homes, and the pulse that dims and brightens the edges. */
 @Composable
 fun WaveAndPulseSample(modifier: Modifier = Modifier, spec: MorpheusGraphSpec = waveAndPulseSpec) {
     SampleGraph(spec, modifier)

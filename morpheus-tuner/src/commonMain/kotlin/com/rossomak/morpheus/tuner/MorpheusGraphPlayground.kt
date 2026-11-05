@@ -84,13 +84,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 /**
- * A sample and tuner in one: a full-screen pager for finding which network-graph background looks
+ * A sample and tuner in one: a full-screen pager for finding which graph looks
  * best, and on which surfaces.
  *
- * One [presets] spec per pager page, each shown on the two aspect ratios a background has to hold up
+ * One [presets] spec per pager page, each shown on the two aspect ratios a graph has to hold up
  * on: a wide, short top app bar strip and a tall hero. Then a morph page that scrubs or times a morph
  * between two [morphFamily] specs, and one page per entry of [decks]: a stand-in onboarding pager whose
- * background morphs with its scroll position and whose surface can shrink and grow.
+ * graph morphs with its scroll position and whose surface can shrink and grow.
  *
  * The bottom overlay, laid out under the pages rather than over them, reseeds the page's layout, steps
  * a deck page through its deck, steps every page through [styles], copies the page's current spec as Kotlin to the clipboard and
@@ -209,7 +209,7 @@ private fun RecordFrameIntervals(stats: MorpheusGraphFrameStats) {
 
 /**
  * One stand-in onboarding pager: its steps' specs, editable in place, its own pager, and the
- * [minMorphMillis] its background follows the pager with.
+ * [minMorphMillis] its graph follows the pager with.
  */
 @Stable
 private class Deck(val specs: SnapshotStateList<MorpheusGraphPreset>, val pagerState: PagerState) {
@@ -352,7 +352,7 @@ private class SpecSlot(
 }
 
 /**
- * Steps a deck page's own pager one step back or forward, morphing its background on the way. Swiping
+ * Steps a deck page's own pager one step back or forward, morphing its graph on the way. Swiping
  * does the same, but a desktop mouse can't drag a pager. [onJump] leaps straight to the last step, or
  * back to the first from there, the way an onboarding Skip does.
  */
@@ -450,7 +450,7 @@ private fun MorphControls(specs: List<MorpheusGraphPreset>, selection: MorphSele
     }
 }
 
-/** A deck page's part of the tuning sheet: how long the background takes at least to morph one step. */
+/** A deck page's part of the tuning sheet: how long the graph takes at least to morph one step. */
 @Composable
 private fun DeckControls(deck: Deck) {
     Column {

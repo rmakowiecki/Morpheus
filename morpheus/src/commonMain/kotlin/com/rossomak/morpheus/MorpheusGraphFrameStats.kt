@@ -48,7 +48,7 @@ public class MorpheusGraphFrameStats {
     /** Draws no edges. */
     public var skipEdges: Boolean by ResettingSwitch(false)
 
-    /** Draws no halos. */
+    /** Draws no glows. */
     public var skipHalos: Boolean by ResettingSwitch(false)
 
     /** Draws no dots. */
@@ -114,8 +114,8 @@ public class MorpheusGraphFrameStats {
     }
 
     /**
-     * Notes that the background with [backgroundId] starts drawing, so the breakdown can tell one background
-     * from several, and counts its meshes per spec layer afresh. Only the id is kept, so a background that goes
+     * Notes that the graph drawn under [backgroundId] starts drawing, so the breakdown can tell one graph
+     * from several, and counts its meshes per spec layer afresh. Only the id is kept, so a graph that goes
      * away isn't held on to.
      */
     internal fun recordBackground(backgroundId: Int) {
@@ -157,7 +157,7 @@ public val LocalMorpheusGraphFrameStats: ProvidableCompositionLocal<MorpheusGrap
 
 /**
  * One published window of [MorpheusGraphFrameStats]: [layers] has one entry per spec layer, back to front,
- * and [total] sums them. [backgroundCount] is how many backgrounds reported into the window; several sum
+ * and [total] sums them. [backgroundCount] is how many graphs reported into the window; several sum
  * into the same spec layers.
  */
 @ExperimentalMorpheusGraphApi
@@ -185,11 +185,11 @@ public class MorpheusGraphFrameBreakdown internal constructor(
  * - [edgesMillis], [halosMillis], [dotsMillis]: recording each element type;
  * - [compositeMillis]: the offscreen layer's save and restore.
  *
- * Counts are per frame too: the [nodes] in the pool, the [visibleNodes], the [drawnEdges], [drawnHalos] and [drawnDots],
+ * Counts are per frame too: the [nodes] (every cell of the grid, active or not), the [visibleNodes] (those drawn), the [drawnEdges], [drawnHalos] and [drawnDots],
  * and the [drawCalls]. A draw call is any painting `DrawScope` call (a line, circle or rect) or one batch of edges
  * or dots; an offscreen layer's save and restore count as one, and transforms and clips don't count. [settles]
  * (topology settles) and [morphMeshes] (a morph's mesh builds) are totals over the window, and [meshes] is
- * the most fields that drew the spec layer in any one background's frame. In a total, [meshes] sums the layers'.
+ * the most fields that drew the spec layer in any one graph's frame. In a total, [meshes] sums the layers'.
  */
 @ExperimentalMorpheusGraphApi
 @Immutable

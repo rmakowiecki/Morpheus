@@ -23,8 +23,9 @@ internal const val MIN_GRAPH_NODES = 6
  * The edge set a layer actually draws, after [MeshWorkspace.enforceMinDegree].
  *
  * [edges] are ascending by key, so two topologies compare or merge in one walk, and edges draw in the same
- * order on every platform. [alive] is false for every pruned node. [converged] is false only when the repair
- * rounds hit [MAX_ENFORCEMENT_ROUNDS] and the removal-only terminal pass had to finish the job.
+ * order on every platform. [alive] is false for every pruned node: one the minimum-degree repair left with fewer
+ * than two edges. [converged] is false only when the repair rounds hit [MAX_ENFORCEMENT_ROUNDS] and the
+ * removal-only terminal pass had to finish the job.
  */
 internal class MeshTopology(
     val edges: LongArray,
@@ -260,7 +261,7 @@ internal class MeshWorkspace {
     val faintKeys = LongHashSet()
 
     /**
-     * Enforces the network-graph invariant: every node that is drawn has at least two edges. A node with
+     * Enforces the graph invariant: every node that is drawn has at least two edges. A node with
      * one edge reads as a dangling tail, a node with none as a stray dot, and no slider setting is
      * allowed to produce either.
      *

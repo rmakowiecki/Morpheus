@@ -13,9 +13,9 @@ import kotlin.test.Test
 
 /**
  * Sweeps real [LayerField]s over seeds, both surface shapes and every slider extreme, and checks the
- * network-graph invariants: every drawn node has at least two visible edges, its dot is at least as
- * opaque as every edge it anchors, and, under [EdgeRule.FixedTriangulation], the mesh and the graph as
- * drawn have no graph smaller than [MIN_GRAPH_NODES] and none hanging together by a single node or edge.
+ * mesh invariants: every drawn node has at least two visible edges, its dot is at least as
+ * opaque as every edge it anchors, and, under [EdgeRule.FixedTriangulation], the triangulated edges and the edges as
+ * drawn have no connected piece smaller than [MIN_GRAPH_NODES] nodes and none hanging together by a single node or edge.
  */
 class MinDegreeInvariantTest {
 
@@ -128,7 +128,7 @@ class MinDegreeInvariantTest {
 }
 
 /**
- * Every network-graph invariant violation in [field]'s last frame, labelled with [where]: topology
+ * Every mesh invariant violation in [field]'s last frame, labelled with [where]: topology
  * (live nodes have two edges, pruned ones none, strict meshes have no open edges), visibility (a drawn
  * dot has two visible edges) and the alpha rule (no drawn edge outshines either of its dots).
  */

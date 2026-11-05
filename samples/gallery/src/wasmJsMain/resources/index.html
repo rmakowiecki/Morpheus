@@ -49,10 +49,11 @@
         </div>
     </noscript>
     <!-- Shown instead of the app when the browser lacks WebAssembly GC. The hero comes from develop on GitHub:
-         docs/assets isn't part of the Pages artifact. -->
+         docs/assets isn't part of the Pages artifact. The notice repeats ViewerNotice, which ViewerNoticeTest checks. -->
     <div id="wasm-gc-fallback" class="fallback" hidden>
-        <img data-src="https://raw.githubusercontent.com/rmakowiecki/Morpheus/develop/docs/assets/hero.webp" width="540" height="270"
-             alt="Two pills of mesh morphing into two crossing ribbons and back">
+        <p><strong>Viewer discretion is advised.</strong> Some samples have bright, fast-moving lights and rapid changes in brightness, which can trigger seizures in people with photosensitive epilepsy.</p>
+        <imgdata-src="https://raw.githubusercontent.com/rmakowiecki/Morpheus/develop/docs/assets/hero.webp" width="540" height="270"
+             alt="A graph shaped like two pills morphing into two crossing ribbons and back">
         <p>This demo needs a browser with WebAssembly GC: Chrome or Edge 119+, Firefox 120+, or Safari 18.2+.</p>
         <p><a href="https://github.com/rmakowiecki/Morpheus">See Morpheus on GitHub</a></p>
     </div>

@@ -26,7 +26,7 @@ internal const val DOT_ALPHA_STEP = 4
 /** The dot alpha buckets: 64, the last one capped at 255. */
 private const val DOT_ALPHA_BUCKETS = (ALPHA_LEVELS + DOT_ALPHA_STEP - 1) / DOT_ALPHA_STEP
 
-/** The faintest dot that still punches the edges and halo under it: a plain node's [NODE_ALPHA]. */
+/** The faintest dot that still punches the edges and glow under it: a plain node's [NODE_ALPHA]. */
 internal const val PUNCH_MIN_ALPHA = NODE_ALPHA
 
 /** A radius range narrower than this, in pixels, is one size bin: every dot is the same size. */
@@ -112,7 +112,7 @@ internal class PointBatches {
 
     /**
      * Adds the dot at ([x], [y]), drawn at its [sizeBin]'s [binRadius] and at [alpha]'s [dotLevel]. Only a dot at
-     * [PUNCH_MIN_ALPHA] or above punches; a fainter one is drawn over the edges and halo.
+     * [PUNCH_MIN_ALPHA] or above punches; a fainter one is drawn over the edges and glow.
      */
     fun addDot(x: Float, y: Float, radius: Float, alpha: Float) {
         val bin = sizeBin(radius)

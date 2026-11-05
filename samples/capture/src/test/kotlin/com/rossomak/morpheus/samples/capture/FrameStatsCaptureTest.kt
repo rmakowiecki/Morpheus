@@ -85,7 +85,7 @@ class FrameStatsCaptureTest {
     @Test
     fun `edges and dots draw in far fewer draw calls than elements`() {
         val total = measure().breakdown.total
-        // Halos are still drawn one by one, so they are left out of both sides.
+        // Glows are still drawn one by one, so they are left out of both sides.
         val batched = total.drawCalls - total.drawnHalos
         val perElement = total.drawnEdges + DRAW_CALLS_PER_DOT_PER_ELEMENT * total.drawnDots
         withClue("$batched draw calls for $perElement per element") { batched shouldBeLessThan perElement / 4 }

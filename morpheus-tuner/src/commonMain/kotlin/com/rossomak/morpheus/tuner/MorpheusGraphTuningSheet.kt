@@ -50,7 +50,7 @@ import kotlin.math.roundToInt
 
 /**
  * Live editor for one [MorpheusGraphSpec]: a layer picker (with add-back-layer / remove), the layer's
- * edge rule as a segmented row, its shape as one collapsible card per [ShapePrimitive] (add, remove,
+ * edge rule as a segmented row, its shapes as one collapsible card per [ShapePrimitive] (add, remove,
  * up to [MAX_SHAPE_PRIMITIVES]), then the curated sliders. Edits are in-memory only; [toKotlinSource]
  * is how they survive.
  * [header] goes above everything else, inside the same scroll. [showViolations] is screen-wide,
@@ -153,7 +153,7 @@ private fun LayerPicker(
     }
 }
 
-/** One card per primitive, only one expanded at a time, then a chip per kind to add one more. */
+/** One card per shape, only one expanded at a time, then a chip per kind to add one more. */
 @Composable
 private fun ShapeEditor(shapes: List<ShapePrimitive>, onShapesChange: (List<ShapePrimitive>) -> Unit) {
     var expanded by remember { mutableIntStateOf(-1) }
@@ -369,12 +369,12 @@ private fun primitiveSliders(primitive: ShapePrimitive): List<PrimitiveSlider<Sh
 
 @Suppress("MagicNumber")
 private val layerSliders = listOf(
-    LayerSlider("Density (cells on window long side)", 4f..96f, { it.density }, { spec, value -> spec.copy(density = value) }),
+    LayerSlider("Cell density (cells on window long side)", 4f..96f, { it.density }, { spec, value -> spec.copy(density = value) }),
     LayerSlider("Fill chance", 0.3f..1f, { it.fillChance }, { spec, value -> spec.copy(fillChance = value) }),
     LayerSlider("Jitter (cells)", 0f..0.5f, { it.jitter }, { spec, value -> spec.copy(jitter = value) }),
     LayerSlider("Drift amplitude (cells)", 0f..1.2f, { it.driftAmplitude }, { spec, value -> spec.copy(driftAmplitude = value) }),
     LayerSlider("Drift speed", 0f..4f, { it.driftSpeed }, { spec, value -> spec.copy(driftSpeed = value) }),
-    LayerSlider("Outlier density", 0f..0.3f, { it.envelopeFloor }, { spec, value -> spec.copy(envelopeFloor = value) }, isShaped),
+    LayerSlider("Density floor", 0f..0.3f, { it.envelopeFloor }, { spec, value -> spec.copy(envelopeFloor = value) }, isShaped),
     LayerSlider("Wave amplitude", 0f..0.2f, { it.waveAmplitude }, { spec, value -> spec.copy(waveAmplitude = value) }),
     LayerSlider("Wave speed", 0f..2f, { it.waveSpeed }, { spec, value -> spec.copy(waveSpeed = value) }),
     LayerSlider("Max edge (cells)", 0.8f..5f, { it.maxEdgeFactor }, { spec, value -> spec.copy(maxEdgeFactor = value) }),

@@ -19,7 +19,7 @@ import com.rossomak.morpheus.samples.cyclePeriod
 import com.rossomak.morpheus.samples.rememberCycleTime
 import kotlin.time.Duration
 
-/** The mesh density of the morph samples, dense enough that a shape's rim reads as a rim. */
+/** The cell density of the morph samples, dense enough that a shape's rim reads as a rim. */
 private const val MORPH_DENSITY = 40f
 
 /** This spec at [density] with hard-disc blooms, the look of the morph samples. Specs that share a density stay one morph family. */

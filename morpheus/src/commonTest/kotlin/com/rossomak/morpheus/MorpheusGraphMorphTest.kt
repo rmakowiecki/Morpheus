@@ -492,7 +492,7 @@ class MorpheusGraphMorphTest {
 
     private class NodeToggles(val shownAtAnEnd: Boolean, val toggles: Int)
 
-    /** A morph family member with the one primitive given, so corner to corner leaves a gap for a comet to cross. */
+    /** A morph family member with the one shape given, so corner to corner leaves a gap for a comet to cross. */
     private fun cometTestSpec(primitive: ShapePrimitive) =
         MorpheusGraphPresets.MorphFamily.cornerBloom.let { bloom -> bloom.copy(layers = listOf(bloom.layers.single().copy(shapes = listOf(primitive)))) }
 

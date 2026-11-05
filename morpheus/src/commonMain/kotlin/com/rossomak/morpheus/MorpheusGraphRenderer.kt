@@ -30,7 +30,7 @@ private const val NANOS_PER_SECOND = 1_000_000_000f
 private var nextHolderId = 0
 
 /**
- * Draws [spec] as an animated network-graph background: every layer's edges, glows and nodes,
+ * Draws [spec] as an animated graph: every layer's edges, glows and nodes,
  * back to front, each painted with its own fill, else its spec's, else [fill] (see [MorpheusGraphFill]).
  * Paints nothing else and is transparent everywhere it doesn't draw, so it composes over whatever
  * `Modifier.background(...)` ran earlier in the chain.
@@ -48,7 +48,7 @@ public fun Modifier.morpheusGraphBackground(spec: MorpheusGraphSpec, fill: Morph
 
 /**
  * The [morph] between two specs, at its fraction; see [MorpheusGraphMorph]. Drive the fraction from
- * anything — a pager's scroll position, a slider, or [animateMorpheusGraphMorph] — and the background
+ * anything — a pager's scroll position, a slider, or [animateMorpheusGraphMorph] — and the graph
  * follows it continuously, in either direction.
  *
  * The surface may change size at any time without reshuffling: the node grid is sized from the
@@ -60,7 +60,7 @@ public fun Modifier.morpheusGraphBackground(morph: MorpheusGraphMorph, fill: Mor
 
 /**
  * Whatever [state] shows; see [MorpheusGraphMorphState]. The state is read while drawing, so seeks,
- * timed morphs and [Follow] redraw the background without recomposing anything.
+ * timed morphs and [Follow] redraw the graph without recomposing anything.
  */
 @Composable
 public fun Modifier.morpheusGraphBackground(state: MorpheusGraphMorphState, fill: MorpheusGraphFill = LocalMorpheusGraphFill.current): Modifier =
@@ -162,7 +162,7 @@ private fun Modifier.drawMorpheusGraph(
 
 /** How [LayerField.draw] colors a layer. */
 internal sealed interface LayerFill {
-    /** The opaque color the layer's edges, halos and dots are drawn in before any brush is applied. */
+    /** The opaque color the layer's edges, glows and dots are drawn in before any brush is applied. */
     val maskColor: Color
 
     /** How opaque the whole layer is composited, on top of each element's own alpha. */
@@ -216,7 +216,7 @@ public class MorpheusGraphLayerStats {
 
 /**
  * Per-modifier state kept across frames: the morph's layers, one [LayerField] per mesh, and each drawn
- * layer's fill and halo brushes.
+ * layer's fill and glow brushes.
  *
  * A field is kept for as long as its layer stays in the same morph family and seed, whatever else
  * changes, so a morph, a tuning edit or a resize never rebuilds it; only a new window size, which
@@ -225,7 +225,7 @@ public class MorpheusGraphLayerStats {
  * A still frame reuses the last frame's layers, fields and fills, so it allocates nothing.
  */
 internal class MorpheusGraphHolder {
-    /** Tells the holder's background apart in [MorpheusGraphFrameStats], without the stats holding on to it. */
+    /** Tells the holder's graph apart in [MorpheusGraphFrameStats], without the stats holding on to it. */
     val id = nextHolderId++
 
     private var builtReferenceSize = 0f
@@ -307,12 +307,12 @@ internal class MorpheusGraphHolder {
     /** The last [prepareLayer]'s fill for the layer at [index]. */
     fun layerFill(index: Int): LayerFill = slots[index].fill ?: error("no fill prepared for layer $index")
 
-    /** The halo brushes in the mask color of [layerFill] at [index]. */
+    /** The glow brushes in the mask color of [layerFill] at [index]. */
     fun halos(index: Int): HaloBrushCache = slots[index].halos ?: error("no halos prepared for layer $index")
 
     /**
      * Works out the fill at [position] again only when its inputs change; a [MorpheusGraphFill.Custom] fill reads the
-     * time, so it is worked out every frame. Its halo brushes change only with the mask color.
+     * time, so it is worked out every frame. Its glow brushes change only with the mask color.
      */
     private fun updateFill(position: Int, state: FillState, layerIndex: Int, timeSeconds: Float, size: Size) {
         val slot = slots[position]
@@ -328,7 +328,7 @@ internal class MorpheusGraphHolder {
     }
 }
 
-/** One drawn layer's fill, what it was worked out for, and its halo brushes. */
+/** One drawn layer's fill, what it was worked out for, and its glow brushes. */
 private class LayerSlot {
     var fill: LayerFill? = null
     var state: FillState? = null
@@ -350,7 +350,7 @@ private data class LayerFamily(val seed: Int, val density: Float, val jitter: Fl
 }
 
 /**
- * One radial-gradient [Brush] per halo radius, built on first use and kept. Per-halo brightness goes
+ * One radial-gradient [Brush] per glow radius, built on first use and kept. Per-glow brightness goes
  * through `drawCircle`'s alpha rather than into the brush, so a handful of brushes cover a surface.
  */
 internal class HaloBrushCache(val color: Color) {

@@ -28,7 +28,7 @@ private const val BLOOM_REACH_SHARE = 0.65f
 /** The comets sample's corner blooms shrink further, to this share of their reach, so more of the surface is left to the comets. */
 private const val CORNER_REACH_SHARE = 0.7f
 
-/** This spec at the comets sample's mesh density, with its blooms drawn in and its comets turned up. */
+/** This spec at the comets sample's cell density, with its blooms drawn in and its comets turned up. */
 internal fun MorpheusGraphSpec.withSampleComets() = forMorphSample(COMETS_DENSITY).mapLayers { layer ->
     layer.copy(shapes = layer.shapes.map { if (it is Bloom) it.copy(reach = it.reach * BLOOM_REACH_SHARE) else it }, comets = sampleComets)
 }

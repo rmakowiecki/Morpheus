@@ -29,8 +29,8 @@ import kotlin.test.Test
 import kotlin.test.assertFailsWith
 
 /**
- * Comets carry the nodes only a morph's start shows over to the nodes only its end shows: late in a morph
- * their light sits on the end shape, whatever its primitives, a dissolve's comets land on the other mesh's
+ * Comets carry light from the nodes only a morph's start shows to the nodes only its end shows: late in a morph
+ * their light sits on the end shapes, whatever they are, a dissolve's comets land on the other mesh's
  * shape, the same morph in the same direction draws the same heads every time, and every platform works
  * out the same heads and peaks. Each direction is planned from where it starts, so a way back needn't mirror
  * the way there.
@@ -551,7 +551,7 @@ class MorpheusGraphCometsTest {
         const val EASING_STEPS = 64
         const val EASING_TOLERANCE = 1e-5f
 
-        /** A disc on a shape's soft edge can take in a few nodes the envelope just fades out. */
+        /** A disc on a shape's soft edge can take in a few nodes the density floor just fades out. */
         const val MIN_DISC_SHOWN_SHARE = 0.7f
 
         /** A comet zone sits at its shape's end, so even a middling disc there can take in a node or two past it. */
