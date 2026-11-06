@@ -38,7 +38,7 @@ private val sweepGradientSpec = MorpheusGraphSpec(
     seed = 14,
     layers = listOf(
         fillSampleLayer.copy(
-            shapes = listOf(Ring(x = 0.5f, y = 0.5f, radius = 0.3f, thickness = 0.14f)),
+            shapes = listOf(Ring(x = 0.5f, y = 0.5f, radius = 0.3f, thickness = 0.14f, plateau = 1f)),
             fillChance = 1f,
             envelopeFloor = 0f,
             driftAmplitude = 0.55f,
