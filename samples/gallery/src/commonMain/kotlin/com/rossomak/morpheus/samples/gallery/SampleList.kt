@@ -42,7 +42,7 @@ internal fun SampleList(samples: List<Sample>, selectedId: String?, onSelect: (S
             if (sectionSamples.isNotEmpty()) {
                 item(key = section) {
                     Text(
-                        text = section.name,
+                        text = section.title,
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),

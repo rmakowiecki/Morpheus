@@ -46,9 +46,9 @@ internal const val GALLERY_TITLE = "Morpheus gallery"
 
 /**
  * The samples gallery: the registry's samples in a list, and the open one in a detail pane with a theme
- * control and a tuning sheet. List and detail sit side by side from [WIDE_LAYOUT_MIN_WIDTH]; below it the
- * detail opens over the list. From [SIDE_COLUMN_MIN_WIDTH] the panes sit in a column beside the detail; below it
- * they are sheets. An exported spec's Kotlin source goes to the clipboard and [onSpecExport].
+ * control and a tuning sheet. List and detail sit side by side from [WIDE_LAYOUT_MIN_WIDTH] in a landscape window,
+ * else the detail opens over the list. From [SIDE_COLUMN_MIN_WIDTH] at [SIDE_COLUMN_MIN_ASPECT] or wider, the panes
+ * form a side column, else sheets. An exported spec's Kotlin source goes to the clipboard and [onSpecExport].
  *
  * With a [benchmark] it opens set up as `docs/benchmark.md`'s recipe asks: its sample on the 16:9
  * preview with scale to fit off, the benchmark's skip switches on, and every reading of the frame stats also
@@ -79,8 +79,8 @@ internal fun Gallery(samples: List<Sample>, onSpecExport: (source: String) -> Un
     MaterialTheme(colorScheme = if (systemDark) darkColorScheme() else lightColorScheme()) {
         Surface(modifier = Modifier.fillMaxSize()) {
             BoxWithConstraints {
-                val wide = maxWidth >= WIDE_LAYOUT_MIN_WIDTH
-                val hasSideColumn = maxWidth >= SIDE_COLUMN_MIN_WIDTH
+                val wide = maxWidth >= WIDE_LAYOUT_MIN_WIDTH && maxHeight <= maxWidth
+                val hasSideColumn = maxWidth >= SIDE_COLUMN_MIN_WIDTH && maxWidth >= maxHeight * SIDE_COLUMN_MIN_ASPECT
                 val detail = @Composable { openSession: GallerySession, modifier: Modifier ->
                     SampleDetail(
                         session = openSession,
@@ -247,6 +247,9 @@ internal val DETAIL_MIN_WIDTH = 540.dp
 
 /** The list, the detail at [DETAIL_MIN_WIDTH], the side column and two dividers. */
 private val SIDE_COLUMN_MIN_WIDTH = LIST_WIDTH + DETAIL_MIN_WIDTH + SIDE_SHEET_WIDTH + 2.dp
+
+/** The side column's minimum width-to-height ratio, so a squarish window keeps the stage tall. */
+private const val SIDE_COLUMN_MIN_ASPECT = 1.4f
 
 internal const val DETAIL_TEST_TAG = "sample-detail"
 private const val PERFORMANCE_STATS_MAX_SHARE = 0.4f

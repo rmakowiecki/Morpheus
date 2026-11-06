@@ -90,7 +90,7 @@ public sealed interface ShapePrimitive {
         val y: Float = 0f,
         /** Radius, as a fraction of the surface's longer side. */
         val reach: Float = BLOOM_DEFAULT_REACH,
-        /** Share of [reach] held at full density before the falloff starts: 0 = a soft bloom, near 1 = a hard disc. */
+        /** Share of [reach] held at full density before the falloff starts: 0 = a soft bloom, 1 = a hard disc. */
         val plateau: Float = 0f,
     ) : ShapePrimitive
 
@@ -110,7 +110,7 @@ public sealed interface ShapePrimitive {
         val thickness: Float = PILL_DEFAULT_THICKNESS,
         /** Clockwise turn around the center, in degrees; 0 lies along the width. */
         val rotation: Float = 0f,
-        /** Share of the half-thickness held at full density before the falloff starts: 0 = soft, near 1 = a hard edge. */
+        /** Share of the half-thickness held at full density before the falloff starts: 0 = soft, 1 = a hard edge. */
         val plateau: Float = PILL_DEFAULT_PLATEAU,
     ) : ShapePrimitive
 
@@ -130,7 +130,7 @@ public sealed interface ShapePrimitive {
         val startAngle: Float = 0f,
         /** Clockwise from [startAngle], in degrees: 0 to 360, where 360 closes the ring. */
         val sweep: Float = RING_DEFAULT_SWEEP,
-        /** Share of the half-thickness held at full density: 0 = soft, near 1 = a hard edge. */
+        /** Share of the half-thickness held at full density: 0 = soft, 1 = a hard edge. */
         val plateau: Float = RING_DEFAULT_PLATEAU,
     ) : ShapePrimitive
 
@@ -148,7 +148,7 @@ public sealed interface ShapePrimitive {
         val rotation: Float = 0f,
         /** Held to half the shorter side; 0 is a hard corner. */
         val cornerRadius: Float = RECT_DEFAULT_CORNER_RADIUS,
-        /** Share of the inradius held at full density: 0 = fades up to the center, near 1 = a hard edge. */
+        /** Share of the inradius held at full density: 0 = fades up to the center, 1 = a hard edge. */
         val plateau: Float = SOLID_DEFAULT_PLATEAU,
     ) : ShapePrimitive
 
@@ -168,7 +168,7 @@ public sealed interface ShapePrimitive {
         val rotation: Float = 0f,
         /** Held to the triangle's inradius. */
         val cornerRadius: Float = TRIANGLE_DEFAULT_CORNER_RADIUS,
-        /** Share of the inradius held at full density: 0 = fades up to the center, near 1 = a hard edge. */
+        /** Share of the inradius held at full density: 0 = fades up to the center, 1 = a hard edge. */
         val plateau: Float = SOLID_DEFAULT_PLATEAU,
     ) : ShapePrimitive
 }
@@ -180,9 +180,10 @@ public sealed interface ShapePrimitive {
  * Fractions marked "of height"/"of width" are of the surface.
  *
  * Invariants, whatever the values:
- * - every drawn node has at least two visible edges. The edge filters below shape the mesh, then
- *   [enforceMinDegree] repairs short nodes or prunes them, and a node's dot dims with its
- *   second-brightest edge, so neither a dangling tail nor a stray dot can appear;
+ * - from an [edgeAlpha] of 0.02 up, every drawn node has at least two visible edges. The edge filters below
+ *   shape the mesh, then [enforceMinDegree] repairs short nodes or prunes them, and a node's dot dims with its
+ *   second-brightest edge, so neither a dangling tail nor a stray dot can appear. Below it the dots fade toward
+ *   their own alpha, so an [edgeAlpha] of 0 draws only the dots, and a [nodeSizeDp] of 0 draws only the edges;
  * - a node's dot is at least as opaque as every edge it anchors, and its pixels are exactly its own
  *   alpha: edges are limited by the dimmer of their two dots, and dots replace rather than blend with
  *   what the layer drew under them.
@@ -222,11 +223,13 @@ public data class MorpheusGraphLayerSpec(
      */
     val strictTriangles: Boolean = true,
     val strokeWidthDp: Float = 0.8f,
+    /** 0 = no edges drawn, only the nodes. */
     val edgeAlpha: Float = 0.55f,
     /** How much dimmer an edge at max length is than a very short one. */
     val lengthFalloff: Float = 0.5f,
     /** How deep edges pulse: 0 = steady, 1 = down to the pulse floor. */
     val pulseDepth: Float = 0f,
+    /** 0 = no dots drawn, only the edges. */
     val nodeSizeDp: Float = 2.2f,
     /** Spread of node radii around [nodeSizeDp], 0 = all equal. */
     val nodeSizeVariance: Float = 0.3f,

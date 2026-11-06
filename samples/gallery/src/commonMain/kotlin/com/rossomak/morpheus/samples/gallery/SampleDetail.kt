@@ -321,7 +321,7 @@ private fun ThemeControl(selected: ThemeMode, enabled: Boolean, onSelect: (Theme
  */
 @Composable
 private fun SampleStage(canvasSize: DpSize?, scalesToFit: Boolean, onScaledChange: (Boolean) -> Unit, content: @Composable () -> Unit) {
-    BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 32.dp), contentAlignment = Alignment.Center) {
         val canvas = canvasSize ?: DpSize(maxWidth, maxHeight)
         val fitScale = minOf(maxWidth / canvas.width, maxHeight / canvas.height).coerceAtLeast(0f)
         val scale = if (scalesToFit) fitScale else minOf(1f, fitScale)

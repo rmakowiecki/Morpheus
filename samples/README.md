@@ -12,11 +12,13 @@ and before any sample plays. Its text lives in `ViewerNotice`. The root README a
 
 ## The gallery's sections
 
-The gallery lists its samples in five sections, in this order, and the registry keeps them sorted the same way:
+The gallery lists its samples in six sections, in this order, and the registry keeps them sorted the same way:
 
 - **Showcase**: eye-catchers, which earn their place by how they look.
 - **Shapes**: the shapes that decide where a layer's nodes sit, and how a layer unites them.
-- **Meshes**: how a layer's mesh is built and moves: layers, edge rules, seeds, the window, wave and pulse.
+- **Basic Parameters**: one disc in a grid, each row turning one layer setting from low to high, for layout, motion,
+  edges and nodes.
+- **Meshes**: how a layer's mesh is built and moves: layers, edge rules, seeds and the window.
 - **Fills**: what paints the nodes and edges, from a solid color to a custom brush.
 - **Morphs**: a graph changing from one spec to another.
 

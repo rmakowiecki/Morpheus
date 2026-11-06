@@ -42,7 +42,6 @@ private const val MAX_RIBBON_TILT = 80f
 private const val RADIANS_TO_DEGREES = 57.29578f
 private const val FULL_TURN = 360f
 private const val MIN_SHAPE_SIZE = 0.01f
-private const val MAX_SHAPE_PLATEAU = 0.95f
 
 // Keeps the segment projection finite when a rounded triangle collapses to its incircle.
 private const val MIN_SEGMENT_LENGTH_SQUARED = 1e-6f
@@ -70,13 +69,13 @@ internal fun bloomDensity(bloom: Bloom, width: Float, height: Float, x: Float, y
     val deltaY = bloom.y * height - y
     val distance = sqrt(deltaX * deltaX + deltaY * deltaY) / max(width, height)
     val reach = bloom.reach.coerceAtLeast(MIN_SHAPE_SIZE)
-    return 1f - smoothStep(reach * bloom.plateau.coerceIn(0f, MAX_SHAPE_PLATEAU), reach, distance)
+    return 1f - smoothStep(reach * bloom.plateau.coerceIn(0f, 1f), reach, distance)
 }
 
 /** Full density out to [Pill.plateau] of the half-thickness from the axis, thinning out to nothing at the rim. */
 internal fun pillDensity(pill: Pill, width: Float, height: Float, x: Float, y: Float): Float {
     val halfThickness = pillHalfThickness(pill, width, height)
-    val plateau = halfThickness * pill.plateau.coerceIn(0f, MAX_SHAPE_PLATEAU)
+    val plateau = halfThickness * pill.plateau.coerceIn(0f, 1f)
     return 1f - smoothStep(plateau, halfThickness, pillAxisDistance(pill, width, height, x, y))
 }
 
@@ -102,7 +101,7 @@ internal fun pillAxisDistance(pill: Pill, width: Float, height: Float, x: Float,
 
 internal fun ringDensity(ring: Ring, width: Float, height: Float, x: Float, y: Float): Float {
     val halfThickness = ring.thickness.coerceAtLeast(MIN_SHAPE_SIZE) * max(width, height) / 2f
-    val plateau = halfThickness * ring.plateau.coerceIn(0f, MAX_SHAPE_PLATEAU)
+    val plateau = halfThickness * ring.plateau.coerceIn(0f, 1f)
     return 1f - smoothStep(plateau, halfThickness, ringCurveDistance(ring, width, height, x, y))
 }
 
@@ -170,7 +169,7 @@ internal fun triangleDensity(triangle: Triangle, width: Float, height: Float, x:
 
 /** [depth] is how far in from the rim the point is, in pixels. */
 private fun solidDensity(depth: Float, inradius: Float, plateau: Float): Float =
-    smoothStep(0f, 1f - plateau.coerceIn(0f, MAX_SHAPE_PLATEAU), depth / inradius)
+    smoothStep(0f, 1f - plateau.coerceIn(0f, 1f), depth / inradius)
 
 private fun localX(deltaX: Float, deltaY: Float, cosine: Float, sine: Float): Float = deltaX * cosine + deltaY * sine
 
@@ -218,7 +217,9 @@ private fun segmentDistance(pointX: Float, pointY: Float, startX: Float, startY:
     return hypot(pointX - startX - edgeX * along, pointY - startY - edgeY * along)
 }
 
+/** Smooth 0 to 1 from [edgeStart] to [edgeEnd]; a hard step where the two meet. */
 internal fun smoothStep(edgeStart: Float, edgeEnd: Float, value: Float): Float {
+    if (edgeStart == edgeEnd) return if (value < edgeEnd) 0f else 1f
     val progress = ((value - edgeStart) / (edgeEnd - edgeStart)).coerceIn(0f, 1f)
     return progress * progress * (3f - 2f * progress)
 }

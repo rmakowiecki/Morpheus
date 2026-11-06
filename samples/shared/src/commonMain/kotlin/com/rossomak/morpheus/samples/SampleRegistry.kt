@@ -8,13 +8,16 @@ import com.rossomak.morpheus.samples.fills.rotatingGradientBrushSample
 import com.rossomak.morpheus.samples.meshes.edgeRulesSample
 import com.rossomak.morpheus.samples.meshes.layersSample
 import com.rossomak.morpheus.samples.meshes.seedsSample
-import com.rossomak.morpheus.samples.meshes.waveAndPulseSample
 import com.rossomak.morpheus.samples.meshes.windowSample
 import com.rossomak.morpheus.samples.morphs.cometsSample
 import com.rossomak.morpheus.samples.morphs.fillMorphSample
 import com.rossomak.morpheus.samples.morphs.followMorphSample
 import com.rossomak.morpheus.samples.morphs.morphFamiliesSample
 import com.rossomak.morpheus.samples.morphs.retargetMorphSample
+import com.rossomak.morpheus.samples.parameters.edgesSample
+import com.rossomak.morpheus.samples.parameters.layoutSample
+import com.rossomak.morpheus.samples.parameters.motionSample
+import com.rossomak.morpheus.samples.parameters.nodesSample
 import com.rossomak.morpheus.samples.shapes.shapeUnionSample
 import com.rossomak.morpheus.samples.shapes.shapesSample
 import com.rossomak.morpheus.samples.showcase.cometPlaygroundSample
@@ -34,11 +37,14 @@ object SampleRegistry {
         presetTourSample,
         shapesSample,
         shapeUnionSample,
+        layoutSample,
+        motionSample,
+        edgesSample,
+        nodesSample,
         layersSample,
         edgeRulesSample,
         seedsSample,
         windowSample,
-        waveAndPulseSample,
         fillsSample,
         radialFillSample,
         depthTintSample,

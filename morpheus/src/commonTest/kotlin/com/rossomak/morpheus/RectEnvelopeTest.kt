@@ -89,6 +89,14 @@ class RectEnvelopeTest {
     }
 
     @Test
+    fun `a plateau of 1 is a hard rim, full density right up to it and none past it`() {
+        val layer = layerOf(Rect(width = 0.4f, height = 0.2f, cornerRadius = 0f, plateau = 1f))
+
+        densityAt(layer, CENTER_X + 0.199f * WIDTH, CENTER_Y) shouldBe 1f
+        densityAt(layer, CENTER_X + 0.201f * WIDTH, CENTER_Y) shouldBe FLOOR
+    }
+
+    @Test
     fun `a square keeps its proportions on a tall surface too`() {
         val layer = layerOf(Rect(width = 0.2f, height = 0.2f, cornerRadius = 0f))
 

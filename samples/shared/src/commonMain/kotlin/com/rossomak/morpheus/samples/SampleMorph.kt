@@ -24,7 +24,7 @@ internal fun MorpheusGraphSpec.forMorphSample(density: Float = MORPH_DENSITY) = 
         if (layer.shapes.none { it is Bloom }) {
             atDensity
         } else {
-            atDensity.copy(fillChance = 1f, shapes = layer.shapes.map { if (it is Bloom) it.copy(plateau = 1f) else it })
+            atDensity.copy(fillChance = 1f, shapes = layer.shapes.map { if (it is Bloom) it.copy(plateau = 0.95f) else it })
         }
     },
 )
