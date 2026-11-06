@@ -1,0 +1,49 @@
+name: Pages
+
+# Deploys the wasm samples gallery as the live demo at https://rmakowiecki.github.io/Morpheus/.
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Deploys run one after the other and an in-progress deploy is never cancelled. A newer push replaces a
+# still-pending one, which is fine: the newest commit holds every earlier change, so the last push wins.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The build runs Gradle plugins; don't leave the token in the checkout for them.
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build the gallery's browser distribution
+        run: ./gradlew :samples:gallery:wasmJsBrowserDistribution --stacktrace
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: samples/gallery/build/dist/wasmJs/productionExecutable
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    # Only the deploy job gets the Pages and OIDC scopes.
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

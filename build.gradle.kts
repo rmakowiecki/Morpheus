@@ -14,7 +14,8 @@ plugins {
 // substituted from source; the same coordinates resolve from a repository once the modules are published.
 allprojects {
     group = "com.rossomak"
-    version = "0.1.0-SNAPSHOT"
+    // The release version, in gradle.properties: .github/workflows/release.yml tags a merge into main with it.
+    version = providers.gradleProperty("VERSION_NAME").get()
 }
 
 // The root project itself isn't a subproject, so the per-module quality convention never touches its

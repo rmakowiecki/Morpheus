@@ -1,12 +1,12 @@
 package com.rossomak.morpheus
 
 /**
- * Everything that makes one network-graph background look different from another. A variant is a
+ * Everything that makes one graph look different from another. A variant is a
  * value of this class, not a renderer of its own: [MorpheusGraphPresets] holds curated starting points,
  * and a tuning tool can edit a copy live.
  *
- * [layers] draw back to front, each an independent mesh with its own nodes, envelope and seed, so a
- * sharp foreground can sit over a faint, larger background mesh for depth.
+ * [layers] draw back to front, each describing an independent mesh with its own cell density, shapes and
+ * seed, so a sharp foreground mesh can sit over a faint, larger background mesh for depth.
  * Layer seeds count from the front layer, so adding a back layer leaves the front one's layout alone.
  *
  * Any two specs morph into each other (see [morphLayers]). Layers that share [seed] and their morph
@@ -29,7 +29,7 @@ public enum class EdgeRule {
     /** Every pair within reach, re-evaluated each frame. */
     Proximity,
 
-    /** Delaunay over the nodes' rest positions, triangulated once and kept while they drift. */
+    /** Delaunay over the nodes' homes, triangulated once and kept while they drift. */
     FixedTriangulation,
 
     /** Delaunay re-triangulated every frame; edges that flip in or out fade rather than pop. */
@@ -43,12 +43,25 @@ private const val RIBBON_DEFAULT_CENTER = 0.6f
 private const val RIBBON_DEFAULT_WIDTH = 0.45f
 private const val RIBBON_DEFAULT_CURVE = 0.1f
 private const val BLOOM_DEFAULT_REACH = 0.8f
+private const val PILL_DEFAULT_LENGTH = 0.5f
+private const val PILL_DEFAULT_THICKNESS = 0.18f
+private const val PILL_DEFAULT_PLATEAU = 0.8f
+private const val RING_DEFAULT_RADIUS = 0.25f
+private const val RING_DEFAULT_THICKNESS = 0.1f
+private const val RING_DEFAULT_SWEEP = 360f
+private const val RING_DEFAULT_PLATEAU = 0.8f
+private const val RECT_DEFAULT_SIZE = 0.3f
+private const val RECT_DEFAULT_CORNER_RADIUS = 0.04f
+private const val TRIANGLE_DEFAULT_WIDTH = 0.35f
+private const val TRIANGLE_DEFAULT_HEIGHT = 0.3f
+private const val TRIANGLE_DEFAULT_CORNER_RADIUS = 0.03f
+private const val SOLID_DEFAULT_PLATEAU = 0.8f
 
 /**
- * One part of a layer's shape: a density field over the surface, from 0 to 1, scaled by [weight]. A
- * layer combines its primitives by taking the strongest at each point, so any mix of them is a union.
- * Two layers' primitives never need to match up for a morph: each node takes its presence from the two
- * ends, and comets travel between primitives that moved (see [LayerField]).
+ * One shape: a density field over the surface, from 0 to 1, scaled by [weight]. A
+ * layer combines its shapes by taking the strongest at each point, so any mix of them is a union.
+ * Two layers' shapes never need to match up for a morph: each node takes its presence from the two
+ * ends, and comets carry light from the nodes only one end shows to the nodes only the other shows (see [LayerField]).
  */
 public sealed interface ShapePrimitive {
     public val weight: Float
@@ -77,44 +90,123 @@ public sealed interface ShapePrimitive {
         val y: Float = 0f,
         /** Radius, as a fraction of the surface's longer side. */
         val reach: Float = BLOOM_DEFAULT_REACH,
-        /** Share of [reach] held at full density before the falloff starts: 0 = a soft bloom, near 1 = a hard disc. */
+        /** Share of [reach] held at full density before the falloff starts: 0 = a soft bloom, 1 = a hard disc. */
         val plateau: Float = 0f,
+    ) : ShapePrimitive
+
+    /**
+     * A capsule: a straight bar with round ends, dense along its axis and thinning out toward its rim.
+     * Sizes are fractions of the surface's longer side, like [Bloom.reach], so the pill keeps its
+     * proportions on any aspect ratio. A [length] under [thickness] leaves a disc.
+     */
+    public data class Pill(
+        override val weight: Float = 1f,
+        /** Center, as fractions of width and height. */
+        val x: Float = 0.5f,
+        val y: Float = 0.5f,
+        /** End cap to end cap, as a fraction of the surface's longer side. */
+        val length: Float = PILL_DEFAULT_LENGTH,
+        /** Rim to rim across the bar, as a fraction of the surface's longer side. */
+        val thickness: Float = PILL_DEFAULT_THICKNESS,
+        /** Clockwise turn around the center, in degrees; 0 lies along the width. */
+        val rotation: Float = 0f,
+        /** Share of the half-thickness held at full density before the falloff starts: 0 = soft, 1 = a hard edge. */
+        val plateau: Float = PILL_DEFAULT_PLATEAU,
+    ) : ShapePrimitive
+
+    /**
+     * A circle outline, or an arc of one, dense along its curve. An arc ends in round caps, and a
+     * [sweep] of 0 leaves a dot. Sizes are fractions of the surface's longer side.
+     */
+    public data class Ring(
+        override val weight: Float = 1f,
+        val x: Float = 0.5f,
+        val y: Float = 0.5f,
+        /** To the center of the band. */
+        val radius: Float = RING_DEFAULT_RADIUS,
+        /** Rim to rim across the band. */
+        val thickness: Float = RING_DEFAULT_THICKNESS,
+        /** Clockwise from the width axis, in degrees. */
+        val startAngle: Float = 0f,
+        /** Clockwise from [startAngle], in degrees: 0 to 360, where 360 closes the ring. */
+        val sweep: Float = RING_DEFAULT_SWEEP,
+        /** Share of the half-thickness held at full density: 0 = soft, 1 = a hard edge. */
+        val plateau: Float = RING_DEFAULT_PLATEAU,
+    ) : ShapePrimitive
+
+    /**
+     * A filled rectangle, dense inside and thinning out toward its rim. Sizes are fractions of the
+     * surface's longer side, so a square stays square. A [cornerRadius] of half the shorter side looks like a [Pill].
+     */
+    public data class Rect(
+        override val weight: Float = 1f,
+        val x: Float = 0.5f,
+        val y: Float = 0.5f,
+        val width: Float = RECT_DEFAULT_SIZE,
+        val height: Float = RECT_DEFAULT_SIZE,
+        /** Clockwise turn around the center, in degrees. */
+        val rotation: Float = 0f,
+        /** Held to half the shorter side; 0 is a hard corner. */
+        val cornerRadius: Float = RECT_DEFAULT_CORNER_RADIUS,
+        /** Share of the inradius held at full density: 0 = fades up to the center, 1 = a hard edge. */
+        val plateau: Float = SOLID_DEFAULT_PLATEAU,
+    ) : ShapePrimitive
+
+    /**
+     * A filled isosceles triangle, dense inside and thinning out toward its rim. At rotation 0 the
+     * [width] is the base and the apex points up; an equilateral one has a height of about 0.866 times
+     * the width. Sizes are fractions of the surface's longer side, and [x] and [y] are the centroid.
+     */
+    public data class Triangle(
+        override val weight: Float = 1f,
+        val x: Float = 0.5f,
+        val y: Float = 0.5f,
+        val width: Float = TRIANGLE_DEFAULT_WIDTH,
+        /** Base to apex. */
+        val height: Float = TRIANGLE_DEFAULT_HEIGHT,
+        /** Clockwise turn around the centroid, in degrees. */
+        val rotation: Float = 0f,
+        /** Held to the triangle's inradius. */
+        val cornerRadius: Float = TRIANGLE_DEFAULT_CORNER_RADIUS,
+        /** Share of the inradius held at full density: 0 = fades up to the center, 1 = a hard edge. */
+        val plateau: Float = SOLID_DEFAULT_PLATEAU,
     ) : ShapePrimitive
 }
 
 /**
- * One mesh layer. Geometry is in grid cells (a cell is the window's longer side over [density]), so
+ * One layer, describing one mesh. Geometry is in grid cells (a cell is the window's longer side over [density]), so
  * the mesh is equally fine on every surface of a screen and never reshuffles when one resizes; stroke,
  * node and glow sizes are in dp, so they read the same on a 64dp app bar and a full-screen hero.
  * Fractions marked "of height"/"of width" are of the surface.
  *
  * Invariants, whatever the values:
- * - every drawn node has at least two visible edges. The edge filters below shape the mesh, then
- *   [enforceMinDegree] repairs short nodes or prunes them, and a node's dot dims with its
- *   second-brightest edge, so neither a dangling tail nor a stray dot can appear;
+ * - from an [edgeAlpha] of 0.02 up, every drawn node has at least two visible edges. The edge filters below
+ *   shape the mesh, then [enforceMinDegree] repairs short nodes or prunes them, and a node's dot dims with its
+ *   second-brightest edge, so neither a dangling tail nor a stray dot can appear. Below it the dots fade toward
+ *   their own alpha, so an [edgeAlpha] of 0 draws only the dots, and a [nodeSizeDp] of 0 draws only the edges;
  * - a node's dot is at least as opaque as every edge it anchors, and its pixels are exactly its own
  *   alpha: edges are limited by the dimmer of their two dots, and dots replace rather than blend with
  *   what the layer drew under them.
  */
 public data class MorpheusGraphLayerSpec(
     /**
-     * Where nodes sit: up to [MAX_SHAPE_PRIMITIVES] primitives, combined by taking the strongest weighted
-     * one at each point. See [ShapePrimitive] and [MorpheusGraphEnvelope].
+     * Where nodes sit: up to [MAX_SHAPE_PRIMITIVES] shapes, combined by taking the strongest weighted
+     * one at each point into the layer's density. See [ShapePrimitive] and [MorpheusGraphEnvelope].
      */
     val shapes: List<ShapePrimitive> = listOf(ShapePrimitive.Uniform()),
     val edgeRule: EdgeRule = EdgeRule.FixedTriangulation,
-    /** Grid cells along the window's longer side; the node-count knob. */
+    /** Cells along the window's longer side, the grid's resolution; the node-count knob. Not the shapes' density. */
     val density: Float = 20f,
-    /** Chance a cell inside the envelope holds a node at all. */
+    /** Ceiling on how many cells may activate: a 0..1 multiplier on the density at each cell's home. */
     val fillChance: Float = 0.9f,
-    /** How far a node's rest position sits from its cell's center, in cells. */
+    /** How far a node's home sits from its cell's center, in cells. */
     val jitter: Float = 0.45f,
-    /** How far a node wanders from its rest position, in cells. Kept under 1 to avoid clumping. */
+    /** How far a node drifts from its home, in cells. Kept under 1 to avoid clumping. */
     val driftAmplitude: Float = 0.4f,
     val driftSpeed: Float = 1f,
-    /** Node density outside the envelope, so the shape has stray outliers instead of a hard border. */
+    /** Density floor: the density outside every shape, so the shapes leave stray nodes instead of a hard border. */
     val envelopeFloor: Float = 0.03f,
-    /** Travelling vertical wave applied to every rest position, as a fraction of height. 0 = static. */
+    /** Travelling vertical wave applied to every home, as a fraction of height. 0 = static. */
     val waveAmplitude: Float = 0f,
     val waveSpeed: Float = 0.3f,
     /** Longest edge kept, in cells. For [EdgeRule.Proximity] this is the reach itself. */
@@ -131,31 +223,34 @@ public data class MorpheusGraphLayerSpec(
      */
     val strictTriangles: Boolean = true,
     val strokeWidthDp: Float = 0.8f,
+    /** 0 = no edges drawn, only the nodes. */
     val edgeAlpha: Float = 0.55f,
     /** How much dimmer an edge at max length is than a very short one. */
     val lengthFalloff: Float = 0.5f,
     /** How deep edges pulse: 0 = steady, 1 = down to the pulse floor. */
     val pulseDepth: Float = 0f,
+    /** 0 = no dots drawn, only the edges. */
     val nodeSizeDp: Float = 2.2f,
     /** Spread of node radii around [nodeSizeDp], 0 = all equal. */
     val nodeSizeVariance: Float = 0.3f,
-    /** Share of nodes that are "hot": larger, fully opaque, and haloed. Nodes heat up and cool down gradually as it changes. */
+    /** Share of nodes that are hot: larger, fully opaque, and glowing. Nodes heat up and cool down gradually as it changes. */
     val hotNodeShare: Float = 0f,
     val glowRadiusDp: Float = 14f,
     val glowStrength: Float = 0.35f,
     /** Per-node depth inside this one mesh: far nodes and their edges dim and shrink. 0 = off. */
     val depthDimming: Float = 0f,
     /**
-     * Scales the comets a morph sends between this layer's moving shapes, averaged over the morph's two
-     * ends: 1 lights a patch about the size of the shapes it travels between, under about 0.5 almost
-     * nothing, 0 none at all. See [Comet].
+     * The comets a morph sends, carrying light from the nodes only its start shows to the nodes only its end shows,
+     * averaged over the morph's two ends. See [MorpheusGraphComets].
      */
-    val cometStrength: Float = 1f,
+    val comets: MorpheusGraphComets = MorpheusGraphComets(),
     /**
-     * How many of a comet's nodes heat up as it reaches them and cool down once it has passed, averaged
-     * over the morph's two ends: 0 none, 1 a good share of them.
+     * How far apart a same-family morph runs its leaving and its arriving nodes, as a share of the morph, averaged
+     * over its two ends and kept within -1..0.8: at -1 both sweep the whole morph together, at 0 the leaving nodes
+     * switch over its first half and the arriving ones over its second, and above 0 a pause this long opens between
+     * them, where only the comets fly.
      */
-    val cometSpark: Float = 0f,
+    val morphGap: Float = 0f,
     /** Multiplies every alpha in the layer. */
     val alpha: Float = 1f,
     /** What this layer alone is painted with; null = its spec's fill, else the inherited one (see [MorpheusGraphFill]). */

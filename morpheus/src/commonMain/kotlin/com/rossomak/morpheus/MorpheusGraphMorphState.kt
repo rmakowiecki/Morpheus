@@ -26,8 +26,8 @@ private const val DEFAULT_MORPH_MILLIS = 900
 private const val MAX_MORPH_NESTING = 4
 
 /**
- * Which spec a network-graph background shows, and how it gets to the next one, for
- * [morpheusGraphBackground]'s state overload, which reads it while drawing so the background follows
+ * Which spec a graph shows, and how it gets to the next one, for
+ * [morpheusGraphBackground]'s state overload, which reads it while drawing so the graph follows
  * every change without recomposing.
  *
  * Three ways to move it, all starting from exactly what is on screen, part way through an earlier
@@ -55,11 +55,17 @@ public class MorpheusGraphMorphState(initial: MorpheusGraphSpec) {
     private var seekTarget: MorpheusGraphSpec? = null
     private val mutator = Mutator()
 
-    /** What the background draws now. */
+    /** The last [morph], returned again while its inputs hold. */
+    private var lastMorph: MorpheusGraphMorph? = null
+
+    /** What the graph draws now. */
     public val morph: MorpheusGraphMorph
         get() {
             val fraction = progress.value
-            return MorpheusGraphMorph(from, to, fraction, origin.takeIf { fraction < 1f })
+            val shownOrigin = origin.takeIf { fraction < 1f }
+            val last = lastMorph
+            if (last != null && last.from === from && last.to === to && last.origin === shownOrigin && last.fraction == fraction) return last
+            return MorpheusGraphMorph(from, to, fraction, shownOrigin).also { lastMorph = it }
         }
 
     /** The spec the state is heading for, or shows once it has arrived. */
@@ -71,7 +77,7 @@ public class MorpheusGraphMorphState(initial: MorpheusGraphSpec) {
     /** Shows [spec] at once. */
     public suspend fun snapTo(spec: MorpheusGraphSpec): Unit = snapTo(MorpheusGraphMorph(spec, spec, 1f))
 
-    /** Shows [morph] at once, as the stateless background overload would. */
+    /** Shows [morph] at once, as the stateless [morpheusGraphBackground] overload would. */
     public suspend fun snapTo(morph: MorpheusGraphMorph): Unit = mutator.mutate {
         seekTarget = null
         from = morph.from
@@ -145,7 +151,7 @@ private fun MorpheusGraphMorph.withNestingAtMost(levels: Int): MorpheusGraphMorp
 public fun rememberMorpheusGraphMorphState(initial: MorpheusGraphSpec): MorpheusGraphMorphState = remember { MorpheusGraphMorphState(initial) }
 
 /**
- * A timed morph toward [target]: every time [target] changes, the background morphs from wherever it
+ * A timed morph toward [target]: every time [target] changes, the graph morphs from wherever it
  * is to the new target over [animationSpec], including from part way through an earlier morph.
  */
 @Composable
@@ -171,15 +177,15 @@ public fun animateMorpheusGraphMorph(target: MorpheusGraphSpec, animationSpec: A
  * the position's first move takes over from wherever that has got to. Any other call to the state does
  * the same: the next move continues from the screen.
  *
- * With a [minMorphDuration], the background never crosses from one spec to the next faster than that;
+ * With a [minMorphDuration], the graph never crosses from one spec to the next faster than that;
  * slower motion is followed exactly. A quick flick, or a pager's own short scroll to the next page,
- * leaves the background behind: it catches up at that speed, slowing down to land on the position, and
+ * leaves the graph behind: it catches up at that speed, slowing down to land on the position, and
  * turns around when the position turns back. Jumps still run over [animationSpec]. Under the system's
  * "Remove animations" setting the position is followed exactly.
  *
  * [target] is the index of the spec the position heads for, such as `PagerState.targetPage`. When it
- * lies beyond the pair of specs the background shows, as after several quick Next taps, the specs in
- * between are skipped: the background morphs from the screen straight to it over [minMorphDuration],
+ * lies beyond the pair of specs the graph shows, as after several quick Next taps, the specs in
+ * between are skipped: the graph morphs from the screen straight to it over [minMorphDuration],
  * starting again from the screen whenever the target changes, and holds it until the position gets
  * there. Without one, the target is the whole position the position moves toward, so a fast fling
  * changes course at each page it passes instead.

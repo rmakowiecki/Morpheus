@@ -1,7 +1,11 @@
 package com.rossomak.morpheus
 
 import com.rossomak.morpheus.ShapePrimitive.Bloom
+import com.rossomak.morpheus.ShapePrimitive.Pill
+import com.rossomak.morpheus.ShapePrimitive.Rect
 import com.rossomak.morpheus.ShapePrimitive.Ribbon
+import com.rossomak.morpheus.ShapePrimitive.Ring
+import com.rossomak.morpheus.ShapePrimitive.Triangle
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.ints.shouldBeGreaterThan
 import kotlin.math.max
@@ -9,9 +13,9 @@ import kotlin.test.Test
 
 /**
  * Sweeps real [LayerField]s over seeds, both surface shapes and every slider extreme, and checks the
- * network-graph invariants: every drawn node has at least two visible edges, its dot is at least as
- * opaque as every edge it anchors, and, under [EdgeRule.FixedTriangulation], the mesh and the graph as
- * drawn have no graph smaller than [MIN_GRAPH_NODES] and none hanging together by a single node or edge.
+ * mesh invariants: every drawn node has at least two visible edges, its dot is at least as
+ * opaque as every edge it anchors, and, under [EdgeRule.FixedTriangulation], the triangulated edges and the edges as
+ * drawn have no connected piece smaller than [MIN_GRAPH_NODES] nodes and none hanging together by a single node or edge.
  */
 class MinDegreeInvariantTest {
 
@@ -26,6 +30,22 @@ class MinDegreeInvariantTest {
         "ribbon + bloom, tilted" to { it.copy(shapes = listOf(Ribbon(weight = 0.7f, tilt = 20f), Bloom(x = 0.2f))) },
         "two ribbons + centre disc" to {
             it.copy(shapes = listOf(Ribbon(center = 0.2f, width = 0.15f), Ribbon(center = 0.8f, width = 0.15f), Bloom(x = 0.5f, y = 0.5f, reach = 0.3f, plateau = 0.8f)))
+        },
+        "pill, rotated" to { it.copy(shapes = listOf(Pill(rotation = -30f))) },
+        "two thin crossing pills" to { it.copy(shapes = listOf(Pill(thickness = 0.06f, rotation = 30f), Pill(weight = 0.8f, thickness = 0.06f, rotation = -60f))) },
+        "ring" to { it.copy(shapes = listOf(Ring())) },
+        "thin arc" to { it.copy(shapes = listOf(Ring(thickness = 0.06f, startAngle = 200f, sweep = 140f))) },
+        "rect, rotated" to { it.copy(shapes = listOf(Rect(width = 0.5f, height = 0.2f, rotation = 25f))) },
+        "triangle" to { it.copy(shapes = listOf(Triangle())) },
+        "ring + rect + triangle + pill" to {
+            it.copy(
+                shapes = listOf(
+                    Ring(x = 0.3f, radius = 0.2f),
+                    Rect(x = 0.65f, y = 0.4f, rotation = -20f),
+                    Triangle(x = 0.5f, y = 0.7f, rotation = 35f),
+                    Pill(x = 0.8f, y = 0.8f, thickness = 0.06f, rotation = 60f),
+                ),
+            )
         },
     )
 
@@ -108,7 +128,7 @@ class MinDegreeInvariantTest {
 }
 
 /**
- * Every network-graph invariant violation in [field]'s last frame, labelled with [where]: topology
+ * Every mesh invariant violation in [field]'s last frame, labelled with [where]: topology
  * (live nodes have two edges, pruned ones none, strict meshes have no open edges), visibility (a drawn
  * dot has two visible edges) and the alpha rule (no drawn edge outshines either of its dots).
  */

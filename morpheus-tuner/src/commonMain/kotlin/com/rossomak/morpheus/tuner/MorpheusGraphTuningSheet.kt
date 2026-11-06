@@ -40,12 +40,17 @@ import com.rossomak.morpheus.MorpheusGraphPresets
 import com.rossomak.morpheus.MorpheusGraphSpec
 import com.rossomak.morpheus.ShapePrimitive
 import com.rossomak.morpheus.ShapePrimitive.Bloom
+import com.rossomak.morpheus.ShapePrimitive.Pill
+import com.rossomak.morpheus.ShapePrimitive.Rect
 import com.rossomak.morpheus.ShapePrimitive.Ribbon
+import com.rossomak.morpheus.ShapePrimitive.Ring
+import com.rossomak.morpheus.ShapePrimitive.Triangle
 import com.rossomak.morpheus.ShapePrimitive.Uniform
+import kotlin.math.roundToInt
 
 /**
  * Live editor for one [MorpheusGraphSpec]: a layer picker (with add-back-layer / remove), the layer's
- * edge rule as a segmented row, its shape as one collapsible card per [ShapePrimitive] (add, remove,
+ * edge rule as a segmented row, its shapes as one collapsible card per [ShapePrimitive] (add, remove,
  * up to [MAX_SHAPE_PRIMITIVES]), then the curated sliders. Edits are in-memory only; [toKotlinSource]
  * is how they survive.
  * [header] goes above everything else, inside the same scroll. [showViolations] is screen-wide,
@@ -148,7 +153,7 @@ private fun LayerPicker(
     }
 }
 
-/** One card per primitive, only one expanded at a time, then a chip per kind to add one more. */
+/** One card per shape, only one expanded at a time, then a chip per kind to add one more. */
 @Composable
 private fun ShapeEditor(shapes: List<ShapePrimitive>, onShapesChange: (List<ShapePrimitive>) -> Unit) {
     var expanded by remember { mutableIntStateOf(-1) }
@@ -278,6 +283,10 @@ private val ShapePrimitive.kindName: String
         is Uniform -> "Uniform"
         is Ribbon -> "Ribbon"
         is Bloom -> "Bloom"
+        is Pill -> "Pill"
+        is Ring -> "Ring"
+        is Rect -> "Rect"
+        is Triangle -> "Triangle"
     }
 
 /** What each add chip inserts: a centered bloom rather than another corner one, so it shows up at once. */
@@ -285,6 +294,10 @@ private val newPrimitives: List<ShapePrimitive> = listOf(
     Uniform(weight = 0.3f),
     Ribbon(),
     Bloom(x = 0.5f, y = 0.5f, reach = 0.3f),
+    Pill(),
+    Ring(),
+    Rect(),
+    Triangle(),
 )
 
 private class PrimitiveSlider<T : ShapePrimitive>(
@@ -309,7 +322,46 @@ private fun primitiveSliders(primitive: ShapePrimitive): List<PrimitiveSlider<Sh
     is Bloom -> listOf<PrimitiveSlider<Bloom>>(
         PrimitiveSlider("Weight", 0f..1f, { it.weight }, { shape, value -> shape.copy(weight = value) }),
         PrimitiveSlider("Reach", 0.1f..1.5f, { it.reach }, { shape, value -> shape.copy(reach = value) }),
-        PrimitiveSlider("Plateau (0 soft, 1 disc)", 0f..0.95f, { it.plateau }, { shape, value -> shape.copy(plateau = value) }),
+        PrimitiveSlider("Plateau (0 soft, 1 disc)", 0f..1f, { it.plateau }, { shape, value -> shape.copy(plateau = value) }),
+        PrimitiveSlider("Center x", 0f..1f, { it.x }, { shape, value -> shape.copy(x = value) }),
+        PrimitiveSlider("Center y", 0f..1f, { it.y }, { shape, value -> shape.copy(y = value) }),
+    )
+    is Pill -> listOf<PrimitiveSlider<Pill>>(
+        PrimitiveSlider("Weight", 0f..1f, { it.weight }, { shape, value -> shape.copy(weight = value) }),
+        PrimitiveSlider("Length", 0.02f..1.5f, { it.length }, { shape, value -> shape.copy(length = value) }),
+        PrimitiveSlider("Thickness", 0.02f..0.8f, { it.thickness }, { shape, value -> shape.copy(thickness = value) }),
+        PrimitiveSlider("Rotation (°)", -180f..180f, { it.rotation }, { shape, value -> shape.copy(rotation = value) }),
+        PrimitiveSlider("Plateau (0 soft, 1 hard edge)", 0f..1f, { it.plateau }, { shape, value -> shape.copy(plateau = value) }),
+        PrimitiveSlider("Center x", 0f..1f, { it.x }, { shape, value -> shape.copy(x = value) }),
+        PrimitiveSlider("Center y", 0f..1f, { it.y }, { shape, value -> shape.copy(y = value) }),
+    )
+    is Ring -> listOf<PrimitiveSlider<Ring>>(
+        PrimitiveSlider("Weight", 0f..1f, { it.weight }, { shape, value -> shape.copy(weight = value) }),
+        PrimitiveSlider("Radius", 0f..1f, { it.radius }, { shape, value -> shape.copy(radius = value) }),
+        PrimitiveSlider("Thickness", 0.02f..0.8f, { it.thickness }, { shape, value -> shape.copy(thickness = value) }),
+        PrimitiveSlider("Start angle (°)", -180f..180f, { it.startAngle }, { shape, value -> shape.copy(startAngle = value) }),
+        PrimitiveSlider("Sweep (°)", 0f..360f, { it.sweep }, { shape, value -> shape.copy(sweep = value) }),
+        PrimitiveSlider("Plateau (0 soft, 1 hard edge)", 0f..1f, { it.plateau }, { shape, value -> shape.copy(plateau = value) }),
+        PrimitiveSlider("Center x", 0f..1f, { it.x }, { shape, value -> shape.copy(x = value) }),
+        PrimitiveSlider("Center y", 0f..1f, { it.y }, { shape, value -> shape.copy(y = value) }),
+    )
+    is Rect -> listOf<PrimitiveSlider<Rect>>(
+        PrimitiveSlider("Weight", 0f..1f, { it.weight }, { shape, value -> shape.copy(weight = value) }),
+        PrimitiveSlider("Width", 0.02f..1.5f, { it.width }, { shape, value -> shape.copy(width = value) }),
+        PrimitiveSlider("Height", 0.02f..1.5f, { it.height }, { shape, value -> shape.copy(height = value) }),
+        PrimitiveSlider("Rotation (°)", -180f..180f, { it.rotation }, { shape, value -> shape.copy(rotation = value) }),
+        PrimitiveSlider("Corner radius", 0f..0.5f, { it.cornerRadius }, { shape, value -> shape.copy(cornerRadius = value) }),
+        PrimitiveSlider("Plateau (0 fades to center, 1 hard edge)", 0f..1f, { it.plateau }, { shape, value -> shape.copy(plateau = value) }),
+        PrimitiveSlider("Center x", 0f..1f, { it.x }, { shape, value -> shape.copy(x = value) }),
+        PrimitiveSlider("Center y", 0f..1f, { it.y }, { shape, value -> shape.copy(y = value) }),
+    )
+    is Triangle -> listOf<PrimitiveSlider<Triangle>>(
+        PrimitiveSlider("Weight", 0f..1f, { it.weight }, { shape, value -> shape.copy(weight = value) }),
+        PrimitiveSlider("Width (base)", 0.02f..1.5f, { it.width }, { shape, value -> shape.copy(width = value) }),
+        PrimitiveSlider("Height", 0.02f..1.5f, { it.height }, { shape, value -> shape.copy(height = value) }),
+        PrimitiveSlider("Rotation (°)", -180f..180f, { it.rotation }, { shape, value -> shape.copy(rotation = value) }),
+        PrimitiveSlider("Corner radius", 0f..0.5f, { it.cornerRadius }, { shape, value -> shape.copy(cornerRadius = value) }),
+        PrimitiveSlider("Plateau (0 fades to center, 1 hard edge)", 0f..1f, { it.plateau }, { shape, value -> shape.copy(plateau = value) }),
         PrimitiveSlider("Center x", 0f..1f, { it.x }, { shape, value -> shape.copy(x = value) }),
         PrimitiveSlider("Center y", 0f..1f, { it.y }, { shape, value -> shape.copy(y = value) }),
     )
@@ -317,12 +369,12 @@ private fun primitiveSliders(primitive: ShapePrimitive): List<PrimitiveSlider<Sh
 
 @Suppress("MagicNumber")
 private val layerSliders = listOf(
-    LayerSlider("Density (cells on window long side)", 4f..48f, { it.density }, { spec, value -> spec.copy(density = value) }),
+    LayerSlider("Cell density (cells on window long side)", 4f..96f, { it.density }, { spec, value -> spec.copy(density = value) }),
     LayerSlider("Fill chance", 0.3f..1f, { it.fillChance }, { spec, value -> spec.copy(fillChance = value) }),
     LayerSlider("Jitter (cells)", 0f..0.5f, { it.jitter }, { spec, value -> spec.copy(jitter = value) }),
     LayerSlider("Drift amplitude (cells)", 0f..1.2f, { it.driftAmplitude }, { spec, value -> spec.copy(driftAmplitude = value) }),
     LayerSlider("Drift speed", 0f..4f, { it.driftSpeed }, { spec, value -> spec.copy(driftSpeed = value) }),
-    LayerSlider("Outlier density", 0f..0.3f, { it.envelopeFloor }, { spec, value -> spec.copy(envelopeFloor = value) }, isShaped),
+    LayerSlider("Density floor", 0f..0.3f, { it.envelopeFloor }, { spec, value -> spec.copy(envelopeFloor = value) }, isShaped),
     LayerSlider("Wave amplitude", 0f..0.2f, { it.waveAmplitude }, { spec, value -> spec.copy(waveAmplitude = value) }),
     LayerSlider("Wave speed", 0f..2f, { it.waveSpeed }, { spec, value -> spec.copy(waveSpeed = value) }),
     LayerSlider("Max edge (cells)", 0.8f..5f, { it.maxEdgeFactor }, { spec, value -> spec.copy(maxEdgeFactor = value) }),
@@ -339,7 +391,40 @@ private val layerSliders = listOf(
     LayerSlider("Glow radius (dp)", 2f..48f, { it.glowRadiusDp }, { spec, value -> spec.copy(glowRadiusDp = value) }),
     LayerSlider("Glow strength", 0f..1f, { it.glowStrength }, { spec, value -> spec.copy(glowStrength = value) }),
     LayerSlider("Depth dimming", 0f..1f, { it.depthDimming }, { spec, value -> spec.copy(depthDimming = value) }),
-    LayerSlider("Comet strength", 0f..2f, { it.cometStrength }, { spec, value -> spec.copy(cometStrength = value) }),
-    LayerSlider("Comet spark (comet nodes heat up)", 0f..1f, { it.cometSpark }, { spec, value -> spec.copy(cometSpark = value) }),
+    LayerSlider("Comet strength", 0f..2f, { it.comets.strength }, { spec, value -> spec.copy(comets = spec.comets.copy(strength = value)) }),
+    LayerSlider("Comet size (× slice spread)", 0f..3f, { it.comets.size }, { spec, value -> spec.copy(comets = spec.comets.copy(size = value)) }),
+    LayerSlider("Comet head spacing (slice spreads)", 0.25f..4f, { it.comets.headSpacing }, { spec, value -> spec.copy(comets = spec.comets.copy(headSpacing = value)) }),
+    LayerSlider(
+        "Comet heads per stream (0 = auto)",
+        0f..32f,
+        { it.comets.headsPerStream?.toFloat() ?: 0f },
+        { spec, value -> spec.copy(comets = spec.comets.copy(headsPerStream = value.roundToInt().takeIf { it >= 1 })) },
+    ),
+    LayerSlider("Comet spark (comet nodes heat up)", 0f..1f, { it.comets.spark }, { spec, value -> spec.copy(comets = spec.comets.copy(spark = value)) }),
+    LayerSlider("Comet stagger (heads travel apart in time; above 0 unsyncs them)", 0f..1f, {
+        it.comets.stagger
+    }, { spec, value -> spec.copy(comets = spec.comets.copy(stagger = value)) }),
+    LayerSlider(
+        "Comet easing (each head eases within its window, on top of the morph's; above 0 unsyncs them)",
+        0f..1f,
+        { it.comets.easing },
+        { spec, value -> spec.copy(comets = spec.comets.copy(easing = value)) },
+    ),
+    LayerSlider("Comet size deviation (× size)", 0f..1f, { it.comets.sizeDeviation }, { spec, value -> spec.copy(comets = spec.comets.copy(sizeDeviation = value)) }),
+    LayerSlider("Comet piece size (node spacings)", 4f..60f, { it.comets.pieceSize }, { spec, value -> spec.copy(comets = spec.comets.copy(pieceSize = value)) }),
+    LayerSlider("Comet zone (share of the morph; wider launches earlier)", 0.02f..1f, { it.comets.zone }, { spec, value -> spec.copy(comets = spec.comets.copy(zone = value)) }),
+    LayerSlider("Comet tail (head radii)", 0f..8f, { it.comets.tail }, { spec, value -> spec.copy(comets = spec.comets.copy(tail = value)) }),
+    LayerSlider(
+        "Comet lead (share of the morph; above 0 sets off before the source fades)",
+        -0.5f..0.5f,
+        { it.comets.lead },
+        { spec, value -> spec.copy(comets = spec.comets.copy(lead = value)) },
+    ),
+    LayerSlider(
+        "Morph gap (-1 leaving and arriving overlap fully, 0 relay, above 0 a pause)",
+        -1f..0.8f,
+        { it.morphGap },
+        { spec, value -> spec.copy(morphGap = value) },
+    ),
     LayerSlider("Layer alpha", 0f..1f, { it.alpha }, { spec, value -> spec.copy(alpha = value) }),
 )

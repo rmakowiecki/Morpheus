@@ -7,3 +7,14 @@
 build/
 /captures
 local.properties
+# Capture tool output, regenerated on demand (ADR-0002).
+/docs/media/
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
+
+# Topics parked for a later grilling session, kept local.
+/docs/to-grill/
+
+# Python bytecode from the scripts.
+__pycache__/

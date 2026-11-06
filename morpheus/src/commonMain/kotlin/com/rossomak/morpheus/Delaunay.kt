@@ -11,7 +11,6 @@ import kotlin.math.sqrt
 /** How far past the points' bounding box the enclosing super-triangle reaches, in box spans. */
 private const val SUPER_TRIANGLE_SCALE = 20.0
 private const val DEGENERATE_DETERMINANT = 1e-9
-private const val DEGREES_TO_RADIANS = 0.017453292f
 
 /**
  * Bowyer–Watson Delaunay triangulation, hand-written rather than pulled in as a dependency. Each
@@ -52,6 +51,7 @@ internal object Delaunay {
         triangles += Triangle.of(count, count + 1, count + 2, pointsX, pointsY)
         val badTriangles = ArrayList<Triangle>()
         val edgeOccurrences = HashMap<Long, Int>()
+        val boundary = ArrayList<Long>()
         for (point in 0 until count) {
             val pointX = pointsX[point]
             val pointY = pointsY[point]
@@ -74,10 +74,12 @@ internal object Delaunay {
                 edgeOccurrences.increment(edgeKey(triangle.second, triangle.third))
                 edgeOccurrences.increment(edgeKey(triangle.third, triangle.first))
             }
-            // The cavity's boundary is every edge only one bad triangle had; each is re-fanned to the point.
-            for ((key, occurrences) in edgeOccurrences) {
-                if (occurrences == 1) triangles += Triangle.of(edgeStart(key), edgeEnd(key), point, pointsX, pointsY)
-            }
+            // The cavity's boundary is every edge only one bad triangle had; each is re-fanned to the
+            // point in ascending key order, since map order differs between platforms.
+            boundary.clear()
+            for ((key, occurrences) in edgeOccurrences) if (occurrences == 1) boundary += key
+            boundary.sort()
+            for (key in boundary) triangles += Triangle.of(edgeStart(key), edgeEnd(key), point, pointsX, pointsY)
         }
 
         val result = ArrayList<Int>(triangles.size * 3)

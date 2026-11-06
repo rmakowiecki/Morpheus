@@ -3,22 +3,28 @@ package com.rossomak.morpheus.tuner
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import com.rossomak.morpheus.GradientStop
+import com.rossomak.morpheus.MorpheusGraphComets
 import com.rossomak.morpheus.MorpheusGraphFill
 import com.rossomak.morpheus.MorpheusGraphLayerSpec
 import com.rossomak.morpheus.MorpheusGraphPresets
 import com.rossomak.morpheus.MorpheusGraphSpec
 import com.rossomak.morpheus.ShapePrimitive
 
-// Each primitive's constructor defaults, read off a default instance so they never drift from the lib.
+// Each shape's constructor defaults, read off a default instance so they never drift from the lib.
 private val UniformDefaults = ShapePrimitive.Uniform()
 private val RibbonDefaults = ShapePrimitive.Ribbon()
 private val BloomDefaults = ShapePrimitive.Bloom()
+private val PillDefaults = ShapePrimitive.Pill()
+private val RingDefaults = ShapePrimitive.Ring()
+private val RectDefaults = ShapePrimitive.Rect()
+private val TriangleDefaults = ShapePrimitive.Triangle()
+private val CometDefaults = MorpheusGraphComets()
 
 /**
  * The spec as Kotlin source in the style of [MorpheusGraphPresets], ready to paste into a preset list. Lists
  * only the layer fields that differ from the defaults.
  *
- * The pasted source names `Color`, `Offset`, `GradientStop`, `EdgeRule` and `ShapePrimitive` unqualified,
+ * The pasted source names `Color`, `Offset`, `GradientStop`, `EdgeRule`, `ShapePrimitive` and `MorpheusGraphComets` unqualified,
  * so the file it lands in needs their imports. A [MorpheusGraphFill.Custom] is code of the caller's own and
  * exports as `null`, which on a layer means it inherits the spec's or the surface's fill instead.
  */
@@ -73,11 +79,31 @@ private fun MorpheusGraphLayerSpec.sourceArguments(): Map<String, String> = link
     "glowRadiusDp" to glowRadiusDp.toSource(),
     "glowStrength" to glowStrength.toSource(),
     "depthDimming" to depthDimming.toSource(),
-    "cometStrength" to cometStrength.toSource(),
-    "cometSpark" to cometSpark.toSource(),
+    "comets" to comets.toSource(),
+    "morphGap" to morphGap.toSource(),
     "alpha" to alpha.toSource(),
     "fill" to (fill?.toSource() ?: "null"),
 )
+
+/** The comets as a constructor call, listing only the arguments that differ from its defaults. */
+private fun MorpheusGraphComets.toSource(): String {
+    val arguments = listOf(
+        "strength" to (strength.toSource() to CometDefaults.strength.toSource()),
+        "size" to (size.toSource() to CometDefaults.size.toSource()),
+        "headSpacing" to (headSpacing.toSource() to CometDefaults.headSpacing.toSource()),
+        "headsPerStream" to (headsPerStream.toString() to CometDefaults.headsPerStream.toString()),
+        "spark" to (spark.toSource() to CometDefaults.spark.toSource()),
+        "stagger" to (stagger.toSource() to CometDefaults.stagger.toSource()),
+        "easing" to (easing.toSource() to CometDefaults.easing.toSource()),
+        "sizeDeviation" to (sizeDeviation.toSource() to CometDefaults.sizeDeviation.toSource()),
+        "pieceSize" to (pieceSize.toSource() to CometDefaults.pieceSize.toSource()),
+        "zone" to (zone.toSource() to CometDefaults.zone.toSource()),
+        "tail" to (tail.toSource() to CometDefaults.tail.toSource()),
+        "lead" to (lead.toSource() to CometDefaults.lead.toSource()),
+    )
+    return arguments.filter { (_, values) -> values.first != values.second }
+        .joinToString(separator = ", ", prefix = "MorpheusGraphComets(", postfix = ")") { (name, values) -> "$name = ${values.first}" }
+}
 
 /** The fill as a constructor call; a custom fill is code of the caller's own, so it exports as a comment. */
 private fun MorpheusGraphFill.toSource(): String = when (this) {
@@ -93,7 +119,7 @@ private fun List<GradientStop>.toSource(): String =
 
 private fun Color.toSource(): String = "Color(0x${toArgbHex()})"
 
-/** The primitive as a constructor call, listing only the arguments that differ from its defaults. */
+/** The shape as a constructor call, listing only the arguments that differ from its defaults. */
 private fun ShapePrimitive.toSource(): String {
     val arguments = when (this) {
         is ShapePrimitive.Uniform -> listOf("weight" to (weight to UniformDefaults.weight))
@@ -110,6 +136,45 @@ private fun ShapePrimitive.toSource(): String {
             "y" to (y to BloomDefaults.y),
             "reach" to (reach to BloomDefaults.reach),
             "plateau" to (plateau to BloomDefaults.plateau),
+        )
+        is ShapePrimitive.Pill -> listOf(
+            "weight" to (weight to PillDefaults.weight),
+            "x" to (x to PillDefaults.x),
+            "y" to (y to PillDefaults.y),
+            "length" to (length to PillDefaults.length),
+            "thickness" to (thickness to PillDefaults.thickness),
+            "rotation" to (rotation to PillDefaults.rotation),
+            "plateau" to (plateau to PillDefaults.plateau),
+        )
+        is ShapePrimitive.Ring -> listOf(
+            "weight" to (weight to RingDefaults.weight),
+            "x" to (x to RingDefaults.x),
+            "y" to (y to RingDefaults.y),
+            "radius" to (radius to RingDefaults.radius),
+            "thickness" to (thickness to RingDefaults.thickness),
+            "startAngle" to (startAngle to RingDefaults.startAngle),
+            "sweep" to (sweep to RingDefaults.sweep),
+            "plateau" to (plateau to RingDefaults.plateau),
+        )
+        is ShapePrimitive.Rect -> listOf(
+            "weight" to (weight to RectDefaults.weight),
+            "x" to (x to RectDefaults.x),
+            "y" to (y to RectDefaults.y),
+            "width" to (width to RectDefaults.width),
+            "height" to (height to RectDefaults.height),
+            "rotation" to (rotation to RectDefaults.rotation),
+            "cornerRadius" to (cornerRadius to RectDefaults.cornerRadius),
+            "plateau" to (plateau to RectDefaults.plateau),
+        )
+        is ShapePrimitive.Triangle -> listOf(
+            "weight" to (weight to TriangleDefaults.weight),
+            "x" to (x to TriangleDefaults.x),
+            "y" to (y to TriangleDefaults.y),
+            "width" to (width to TriangleDefaults.width),
+            "height" to (height to TriangleDefaults.height),
+            "rotation" to (rotation to TriangleDefaults.rotation),
+            "cornerRadius" to (cornerRadius to TriangleDefaults.cornerRadius),
+            "plateau" to (plateau to TriangleDefaults.plateau),
         )
     }
     val changed = arguments.filter { (_, values) -> values.first != values.second }

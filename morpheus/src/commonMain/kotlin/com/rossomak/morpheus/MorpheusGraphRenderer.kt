@@ -6,7 +6,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -15,6 +14,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -26,10 +26,11 @@ import kotlin.math.max
 import kotlin.time.TimeSource
 
 private const val NANOS_PER_SECOND = 1_000_000_000f
-private const val NANOS_PER_MILLI = 1_000_000f
+
+private var nextHolderId = 0
 
 /**
- * Draws [spec] as an animated network-graph background: every layer's edges, glows and nodes,
+ * Draws [spec] as an animated graph: every layer's edges, glows and nodes,
  * back to front, each painted with its own fill, else its spec's, else [fill] (see [MorpheusGraphFill]).
  * Paints nothing else and is transparent everywhere it doesn't draw, so it composes over whatever
  * `Modifier.background(...)` ran earlier in the chain.
@@ -47,7 +48,7 @@ public fun Modifier.morpheusGraphBackground(spec: MorpheusGraphSpec, fill: Morph
 
 /**
  * The [morph] between two specs, at its fraction; see [MorpheusGraphMorph]. Drive the fraction from
- * anything — a pager's scroll position, a slider, or [animateMorpheusGraphMorph] — and the background
+ * anything — a pager's scroll position, a slider, or [animateMorpheusGraphMorph] — and the graph
  * follows it continuously, in either direction.
  *
  * The surface may change size at any time without reshuffling: the node grid is sized from the
@@ -55,20 +56,23 @@ public fun Modifier.morpheusGraphBackground(spec: MorpheusGraphSpec, fill: Morph
  */
 @Composable
 public fun Modifier.morpheusGraphBackground(morph: MorpheusGraphMorph, fill: MorpheusGraphFill = LocalMorpheusGraphFill.current): Modifier =
-    drawMorpheusGraph({ morph }, fill, stats = null, layerStats = null, showViolations = false)
+    drawMorpheusGraph({ morph }, fill, stats = LocalMorpheusGraphFrameStats.current, layerStats = null, showViolations = false, cometDebug = MorpheusGraphCometDebug.None)
 
 /**
  * Whatever [state] shows; see [MorpheusGraphMorphState]. The state is read while drawing, so seeks,
- * timed morphs and [Follow] redraw the background without recomposing anything.
+ * timed morphs and [Follow] redraw the graph without recomposing anything.
  */
 @Composable
 public fun Modifier.morpheusGraphBackground(state: MorpheusGraphMorphState, fill: MorpheusGraphFill = LocalMorpheusGraphFill.current): Modifier =
-    drawMorpheusGraph({ state.morph }, fill, stats = null, layerStats = null, showViolations = false)
+    drawMorpheusGraph({ state.morph }, fill, stats = LocalMorpheusGraphFrameStats.current, layerStats = null, showViolations = false, cometDebug = MorpheusGraphCometDebug.None)
 
 /**
- * [morpheusGraphBackground] with diagnostics: [stats] gets each frame's draw time, [layerStats] each
- * layer's visible, pruned and repaired counts, and [showViolations] rings in red any node that breaks
- * the connectivity or alpha rules anyway, as an on-device check.
+ * [morpheusGraphBackground] with diagnostics: [stats] gets each frame's draw time and breakdown, [layerStats]
+ * each layer's visible, pruned and repaired counts, and [showViolations] rings in red any node that breaks
+ * the connectivity or alpha rules anyway, as an on-device check. [cometDebug] picks the overlays each
+ * running morph's comets draw (see [MorpheusGraphCometDebug]); a still frame draws none. A null [stats] falls
+ * back to [LocalMorpheusGraphFrameStats]; the violations show if either the argument or the stats ask, and
+ * each comet overlay if either turns it on.
  */
 @ExperimentalMorpheusGraphApi
 @Composable
@@ -78,7 +82,8 @@ public fun Modifier.morpheusGraphBackground(
     stats: MorpheusGraphFrameStats?,
     layerStats: MorpheusGraphLayerStats? = null,
     showViolations: Boolean = false,
-): Modifier = drawMorpheusGraph({ morph }, fill, stats, layerStats, showViolations)
+    cometDebug: MorpheusGraphCometDebug = MorpheusGraphCometDebug.None,
+): Modifier = drawMorpheusGraph({ morph }, fill, stats ?: LocalMorpheusGraphFrameStats.current, layerStats, showViolations, cometDebug)
 
 /** The [state] overload of [morpheusGraphBackground] with diagnostics. */
 @ExperimentalMorpheusGraphApi
@@ -89,7 +94,8 @@ public fun Modifier.morpheusGraphBackground(
     stats: MorpheusGraphFrameStats?,
     layerStats: MorpheusGraphLayerStats? = null,
     showViolations: Boolean = false,
-): Modifier = drawMorpheusGraph({ state.morph }, fill, stats, layerStats, showViolations)
+    cometDebug: MorpheusGraphCometDebug = MorpheusGraphCometDebug.None,
+): Modifier = drawMorpheusGraph({ state.morph }, fill, stats ?: LocalMorpheusGraphFrameStats.current, layerStats, showViolations, cometDebug)
 
 @Composable
 private fun Modifier.drawMorpheusGraph(
@@ -98,6 +104,7 @@ private fun Modifier.drawMorpheusGraph(
     stats: MorpheusGraphFrameStats?,
     layerStats: MorpheusGraphLayerStats?,
     showViolations: Boolean,
+    cometDebug: MorpheusGraphCometDebug,
 ): Modifier {
     val windowSize = LocalWindowInfo.current.containerSize
     val holder = remember { MorpheusGraphHolder() }
@@ -118,33 +125,44 @@ private fun Modifier.drawMorpheusGraph(
 
     return this.drawBehind {
         if (size.width <= 0f || size.height <= 0f) return@drawBehind
-        val drawStart = TimeSource.Monotonic.markNow()
+        // Without stats, no clock is read at all.
+        val drawStart = stats?.let { TimeSource.Monotonic.markNow() }
+        val probe = stats?.probe
+        stats?.recordBackground(holder.id)
+        val showsViolations = showViolations || stats?.showViolations == true
+        // Merged only when both ask for overlays, so a frame without any builds no new set.
+        val statsComets = stats?.cometDebug ?: MorpheusGraphCometDebug.None
+        val showsComets = if (!statsComets.any) {
+            cometDebug
+        } else if (!cometDebug.any) {
+            statsComets
+        } else {
+            cometDebug or statsComets
+        }
         val timeSeconds = elapsedNanos.longValue / NANOS_PER_SECOND
         // No window in previews; the surface itself is the next best fixed reference.
         val windowLongSide = max(windowSize.width, windowSize.height).toFloat()
         val referenceSize = if (windowLongSide > 0f) windowLongSide else max(size.width, size.height)
-        val layers = holder.layersFor(morph(), fill)
-        val fields = holder.fieldsFor(layers, referenceSize, density)
-        // Two meshes dissolving into each other draw one spec layer, and a fill sees them as one.
-        val layerCount = (layers.maxOfOrNull { it.slotFromFront } ?: -1) + 1
+        holder.startFrame(morph(), fill, referenceSize, density)
+        val fields = holder.fields
         // Nodes deliberately sit past the surface's edges, and drawBehind is not clipped.
         clipRect {
-            fields.forEachIndexed { index, field ->
-                val layer = layers[index]
-                val layerFill = layer.fill.toLayerFill(layerCount - 1 - layer.slotFromFront, layerCount, timeSeconds, size)
-                field.advance(timeSeconds, size.width, size.height)
-                field.draw(this, layerFill, holder.halosFor(layerFill.maskColor), timeSeconds, showViolations)
+            // By index: no iterator garbage.
+            for (index in fields.indices) {
+                val field = fields[index]
+                holder.prepareLayer(index, timeSeconds, size, probe)
+                field.draw(this, holder.layerFill(index), holder.halos(index), timeSeconds, showsViolations, probe, showsComets)
+                probe?.endLayer(field)
             }
         }
-        holder.endFrame()
-        stats?.recordDraw(drawStart.elapsedNow().inWholeNanoseconds)
+        drawStart?.let { start -> stats?.recordDraw(start.elapsedNow().inWholeNanoseconds) }
         layerStats?.record(fields)
     }
 }
 
 /** How [LayerField.draw] colors a layer. */
 internal sealed interface LayerFill {
-    /** The opaque color the layer's edges, halos and dots are drawn in before any brush is applied. */
+    /** The opaque color the layer's edges, glows and dots are drawn in before any brush is applied. */
     val maskColor: Color
 
     /** How opaque the whole layer is composited, on top of each element's own alpha. */
@@ -167,44 +185,6 @@ internal sealed interface LayerFill {
     }
 
     data class Overlay(val brush: Brush, val alpha: Float)
-}
-
-/**
- * Average frame interval and graph draw time, published twice a second so the readout doesn't
- * recompose every frame. Draw time is CPU time spent recording every graph on the page into the
- * display list, summed per frame — a relative cost signal between presets, not a GPU measurement.
- */
-@ExperimentalMorpheusGraphApi
-@Stable
-public class MorpheusGraphFrameStats {
-    public var frameMillis: Float by mutableFloatStateOf(0f)
-        private set
-    public var drawMillis: Float by mutableFloatStateOf(0f)
-        private set
-
-    private var intervalNanosSum = 0L
-    private var drawNanosSum = 0L
-    private var frames = 0
-
-    public fun recordDraw(nanos: Long) {
-        drawNanosSum += nanos
-    }
-
-    public fun recordFrame(intervalNanos: Long) {
-        intervalNanosSum += intervalNanos
-        frames++
-        if (intervalNanosSum >= PUBLISH_INTERVAL_NANOS) {
-            frameMillis = intervalNanosSum / frames / NANOS_PER_MILLI
-            drawMillis = drawNanosSum / frames / NANOS_PER_MILLI
-            intervalNanosSum = 0L
-            drawNanosSum = 0L
-            frames = 0
-        }
-    }
-
-    private companion object {
-        const val PUBLISH_INTERVAL_NANOS = 500_000_000L
-    }
 }
 
 /**
@@ -235,21 +215,39 @@ public class MorpheusGraphLayerStats {
 }
 
 /**
- * Per-modifier state kept across frames: the morph's layers, one [LayerField] per mesh and the halo brushes.
+ * Per-modifier state kept across frames: the morph's layers, one [LayerField] per mesh, and each drawn
+ * layer's fill and glow brushes.
  *
  * A field is kept for as long as its layer stays in the same morph family and seed, whatever else
  * changes, so a morph, a tuning edit or a resize never rebuilds it; only a new window size, which
  * changes the grid's cell size, rebuilds them all.
+ *
+ * A still frame reuses the last frame's layers, fields and fills, so it allocates nothing.
  */
-private class MorpheusGraphHolder {
+internal class MorpheusGraphHolder {
+    /** Tells the holder's graph apart in [MorpheusGraphFrameStats], without the stats holding on to it. */
+    val id = nextHolderId++
+
     private var builtReferenceSize = 0f
     private var builtPxPerDp = 0f
     private var fieldsByFamily = HashMap<LayerFamily, LayerField>()
-    private var halosByColor = HashMap<Color, HaloBrushCache>()
-    private var halosThisFrame = HashMap<Color, HaloBrushCache>()
     private var lastMorph: MorpheusGraphMorph? = null
     private var lastFill: MorpheusGraphFill? = null
     private var lastLayers: List<MorphLayer> = emptyList()
+
+    /** The layers [fields] and [layerCount] were built for. */
+    private var fieldsLayers: List<MorphLayer>? = null
+    private var layerCount = 0
+
+    /** One per drawn layer, by position; only ever added to. */
+    private val slots = ArrayList<LayerSlot>()
+
+    /** The last [startFrame]'s layers, back to front. */
+    val layers: List<MorphLayer> get() = lastLayers
+
+    /** The last [startFrame]'s field for each of [layers]. */
+    var fields: List<LayerField> = emptyList()
+        private set
 
     /** [morph]'s layers, worked out again only when the morph or the inherited fill changes. */
     fun layersFor(morph: MorpheusGraphMorph, fill: MorpheusGraphFill): List<MorphLayer> {
@@ -261,8 +259,11 @@ private class MorpheusGraphHolder {
         return lastLayers
     }
 
+    /** One field per layer of [layers]; the same list again for the same [layers], window and density. */
     fun fieldsFor(layers: List<MorphLayer>, referenceSize: Float, pxPerDp: Float): List<LayerField> {
-        if (referenceSize != builtReferenceSize || pxPerDp != builtPxPerDp) {
+        val sameWindow = referenceSize == builtReferenceSize && pxPerDp == builtPxPerDp
+        if (layers === fieldsLayers && sameWindow) return fields
+        if (!sameWindow) {
             fieldsByFamily.clear()
             builtReferenceSize = referenceSize
             builtPxPerDp = pxPerDp
@@ -277,16 +278,70 @@ private class MorpheusGraphHolder {
             field
         }
         fieldsByFamily = kept
+        fieldsLayers = layers
+        this.fields = fields
+        // Two meshes dissolving into each other draw one spec layer, and a fill sees them as one.
+        layerCount = (layers.maxOfOrNull { it.slotFromFront } ?: -1) + 1
+        while (slots.size < layers.size) slots += LayerSlot()
         return fields
     }
 
-    fun halosFor(color: Color): HaloBrushCache = halosThisFrame.getOrPut(color) { halosByColor[color] ?: HaloBrushCache(color) }
-
-    /** Drops every halo cache the frame just drawn didn't use: a crossfade or an animated fill passes a new color each frame. */
-    fun endFrame() {
-        halosByColor = halosThisFrame
-        halosThisFrame = HashMap()
+    /** Works out [morph]'s [layers] and their [fields]; then [prepareLayer] readies each one for drawing. */
+    fun startFrame(morph: MorpheusGraphMorph, fill: MorpheusGraphFill, referenceSize: Float, pxPerDp: Float) {
+        fieldsFor(layersFor(morph, fill), referenceSize, pxPerDp)
     }
+
+    /**
+     * Works out the [layerFill] at [index] on [size] and advances its field to [timeSeconds]. Called right before the
+     * layer draws, so it draws the nodes its advance just touched. [probe] starts timing the layer; the caller ends it.
+     */
+    fun prepareLayer(index: Int, timeSeconds: Float, size: Size, probe: LayerProbe? = null) {
+        val field = fields[index]
+        val layer = lastLayers[index]
+        probe?.startLayer(layer.slotFromFront, field)
+        updateFill(index, layer.fill, layerCount - 1 - layer.slotFromFront, timeSeconds, size)
+        probe?.lap(FramePhase.Fill)
+        field.advance(timeSeconds, size.width, size.height, probe)
+    }
+
+    /** The last [prepareLayer]'s fill for the layer at [index]. */
+    fun layerFill(index: Int): LayerFill = slots[index].fill ?: error("no fill prepared for layer $index")
+
+    /** The glow brushes in the mask color of [layerFill] at [index]. */
+    fun halos(index: Int): HaloBrushCache = slots[index].halos ?: error("no halos prepared for layer $index")
+
+    /**
+     * Works out the fill at [position] again only when its inputs change; a [MorpheusGraphFill.Custom] fill reads the
+     * time, so it is worked out every frame. Its glow brushes change only with the mask color.
+     */
+    private fun updateFill(position: Int, state: FillState, layerIndex: Int, timeSeconds: Float, size: Size) {
+        val slot = slots[position]
+        if (slot.state == state && slot.layerIndex == layerIndex && slot.layerCount == layerCount && slot.size == size) return
+        val layerFill = state.toLayerFill(layerIndex, layerCount, timeSeconds, size)
+        slot.fill = layerFill
+        slot.state = state.takeUnless { it.hasCustomFill() }
+        slot.layerIndex = layerIndex
+        slot.layerCount = layerCount
+        slot.size = size
+        val maskColor = layerFill.maskColor
+        if (slot.halos?.color != maskColor) slot.halos = HaloBrushCache(maskColor)
+    }
+}
+
+/** One drawn layer's fill, what it was worked out for, and its glow brushes. */
+private class LayerSlot {
+    var fill: LayerFill? = null
+    var state: FillState? = null
+    var layerIndex = -1
+    var layerCount = 0
+    var size = Size.Unspecified
+    var halos: HaloBrushCache? = null
+}
+
+/** True if this state paints with a [MorpheusGraphFill.Custom] fill anywhere, which is asked for its brush every frame. */
+private fun FillState.hasCustomFill(): Boolean = when (this) {
+    is FillState.Of -> fill is MorpheusGraphFill.Custom
+    is FillState.Crossfade -> from.hasCustomFill() || to.hasCustomFill()
 }
 
 /** What a [LayerField] can't change after it is built. */
@@ -295,21 +350,21 @@ private data class LayerFamily(val seed: Int, val density: Float, val jitter: Fl
 }
 
 /**
- * One radial-gradient [Brush] per halo radius, built on first use and kept. Per-halo brightness goes
+ * One radial-gradient [Brush] per glow radius, built on first use and kept. Per-glow brightness goes
  * through `drawCircle`'s alpha rather than into the brush, so a handful of brushes cover a surface.
  */
-internal class HaloBrushCache(private val color: Color) {
-    private val brushesByRadius = HashMap<Int, Brush>()
+internal class HaloBrushCache(val color: Color) {
+    /** By whole radius in pixels, grown on demand: a map would box its keys. */
+    private var brushesByRadius = arrayOfNulls<Brush>(0)
 
     fun brushFor(radius: Float): Brush {
         val key = radius.toInt().coerceAtLeast(1)
-        return brushesByRadius.getOrPut(key) {
+        if (key >= brushesByRadius.size) brushesByRadius = brushesByRadius.copyOf(key + 1)
+        return brushesByRadius[key] ?: Brush.radialGradient(
             // Fading to the same color at zero alpha, not Color.Transparent, which would pass through black.
-            Brush.radialGradient(
-                colors = listOf(color.copy(alpha = 1f), color.copy(alpha = 0f)),
-                center = Offset.Zero,
-                radius = key.toFloat(),
-            )
-        }
+            colors = listOf(color.copy(alpha = 1f), color.copy(alpha = 0f)),
+            center = Offset.Zero,
+            radius = key.toFloat(),
+        ).also { brushesByRadius[key] = it }
     }
 }

@@ -9,7 +9,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 
 /**
- * What a layer's edges, halos and dots are painted with: only its colors count, since the layer's own
+ * What a layer's edges, glows and dots are painted with: only its colors count, since the layer's own
  * alpha rules decide how opaque each element is. A fill's alpha, a stop's included, multiplies the
  * layer's [MorpheusGraphLayerSpec.alpha].
  *
@@ -95,7 +95,7 @@ public sealed interface MorpheusGraphFill {
 @Immutable
 public data class GradientStop(val position: Float, val color: Color)
 
-/** The fill every network graph below inherits when neither its layer nor its spec sets one. */
+/** The fill every graph below inherits when neither its layer nor its spec sets one. */
 public val LocalMorpheusGraphFill: ProvidableCompositionLocal<MorpheusGraphFill> =
     staticCompositionLocalOf { MorpheusGraphFill.Solid(DefaultFillColor) }
 
@@ -105,7 +105,7 @@ private val DefaultFillColor = Color(0xFF8A8A8A)
 private const val CENTER_FRACTION = 0.5f
 private const val DEFAULT_RADIAL_RADIUS = 0.5f
 
-/** Which end of a morph a [MorpheusGraphLayerContext] describes; a still background is its [From] end. */
+/** Which end of a morph a [MorpheusGraphLayerContext] describes; a still graph is its [From] end. */
 public enum class MorpheusGraphMorphSide { From, To }
 
 /**

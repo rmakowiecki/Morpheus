@@ -1,0 +1,90 @@
+@file:Suppress("MagicNumber")
+
+package com.rossomak.morpheus.samples.morphs
+
+import androidx.compose.animation.core.Easing
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import com.rossomak.morpheus.MorpheusGraphComets
+import com.rossomak.morpheus.MorpheusGraphPresets.MorphFamily
+import com.rossomak.morpheus.MorpheusGraphSpec
+import com.rossomak.morpheus.ShapePrimitive.Bloom
+import com.rossomak.morpheus.samples.MorphTiming
+import com.rossomak.morpheus.samples.Sample
+import com.rossomak.morpheus.samples.SampleMorph
+import com.rossomak.morpheus.samples.SampleSection
+import com.rossomak.morpheus.samples.TunableMorph
+import com.rossomak.morpheus.samples.TunableSpec
+import com.rossomak.morpheus.samples.easings
+import com.rossomak.morpheus.samples.forMorphSample
+import com.rossomak.morpheus.samples.mapLayers
+import kotlin.time.Duration.Companion.milliseconds
+
+/** Larger and sparkier than a layer's default, so the streams read at a glance. */
+private val sampleComets = MorpheusGraphComets(size = 1.5f, spark = 0.8f)
+
+private const val COMETS_DENSITY = 70f
+
+/** Blooms shrink to this share of their reach, so the nodes have further to travel and the streams are easier to follow. */
+private const val BLOOM_REACH_SHARE = 0.65f
+
+/** The comets sample's corner blooms shrink further, to this share of their reach, so more of the surface is left to the comets. */
+private const val CORNER_REACH_SHARE = 0.7f
+
+/** This spec at the comets sample's cell density, with its blooms drawn in and its comets turned up. */
+internal fun MorpheusGraphSpec.withSampleComets() = forMorphSample(COMETS_DENSITY).mapLayers { layer ->
+    layer.copy(shapes = layer.shapes.map { if (it is Bloom) it.copy(reach = it.reach * BLOOM_REACH_SHARE) else it }, comets = sampleComets)
+}
+
+/** The comets sample's comet zone: most of each shape pours into the comets. */
+private const val COMETS_ZONE = 0.7f
+
+/** This spec relayed at a gap of 0, so each shape is gone before the next sweeps in, with the comets sample's wide comet zone. */
+private fun MorpheusGraphSpec.withCometsRelay() = mapLayers { it.copy(comets = it.comets.copy(zone = COMETS_ZONE), morphGap = 0f) }
+
+private val centreDisc = MorphFamily.centreDisc.withSampleComets().withCometsRelay()
+private val cornerPair = MorphFamily.cornerPair.withSampleComets().withCometsRelay().mapLayers { layer ->
+    layer.copy(shapes = layer.shapes.map { if (it is Bloom) it.copy(reach = it.reach * CORNER_REACH_SHARE) else it })
+}
+
+private const val CENTRE_DISC = "Centre disc"
+private const val CORNER_PAIR = "Corner pair"
+private const val CENTRE_DISC_TO_CORNER_PAIR = "$CENTRE_DISC → $CORNER_PAIR"
+private const val CORNER_PAIR_TO_CENTRE_DISC = "$CORNER_PAIR → $CENTRE_DISC"
+
+private val CometsTiming = MorphTiming(hold = 750.milliseconds, morph = 2250.milliseconds)
+
+/**
+ * A disc in the middle and a bloom in each of two corners morph into each other and back, with the comets turned up.
+ * Both are one morph family, so the nodes stay put and the comets carry what each shape leaves to the nodes it gains.
+ */
+@Composable
+fun CometsSample(
+    modifier: Modifier = Modifier,
+    specs: List<MorpheusGraphSpec> = listOf(centreDisc, cornerPair),
+    easings: List<Easing> = specs.map { FastOutSlowInEasing },
+    timing: MorphTiming = CometsTiming,
+) {
+    SampleMorph(specs, easings, timing, modifier)
+}
+
+internal val cometsSample = Sample(
+    id = "comets",
+    title = "Comets",
+    summary = "A disc and two corner blooms morph, with comets carrying the light.",
+    description = "A disc and two corner blooms morph into each other and back, within one morph family. The disc is a bloom with a high plateau, so it " +
+        "keeps full density almost out to its rim. The shapes share almost no nodes, so comets carry the light from the old shape to the new one. " +
+        "Open Comet debug to see where each comet sets off and lands.",
+    section = SampleSection.Morphs,
+    specs = listOf(TunableSpec(CENTRE_DISC, centreDisc), TunableSpec(CORNER_PAIR, cornerPair)),
+    morphs = listOf(TunableMorph(CENTRE_DISC_TO_CORNER_PAIR), TunableMorph(CORNER_PAIR_TO_CENTRE_DISC)),
+    timing = CometsTiming,
+    content = { specs ->
+        CometsSample(
+            specs = listOf(specs[CENTRE_DISC], specs[CORNER_PAIR]),
+            easings = specs.easings(CENTRE_DISC_TO_CORNER_PAIR, CORNER_PAIR_TO_CENTRE_DISC),
+            timing = specs.timing,
+        )
+    },
+)
