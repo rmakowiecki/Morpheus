@@ -1917,7 +1917,8 @@ internal class LayerField(
 
     /** Glows are exempt from the alpha rule but still fade with their node's presence and edges. Returns how many it drew. */
     internal fun DrawScope.drawGlows(halos: HaloBrushCache): Int {
-        if (spec.glowStrength <= 0f) return 0
+        // A layer drawn without nodes draws no glows either.
+        if (spec.glowStrength <= 0f || largestDotRadius <= 0f) return 0
         var drawn = 0
         forEachRelevantNode { index ->
             if (hotWeights[index] <= 0f) return@forEachRelevantNode
