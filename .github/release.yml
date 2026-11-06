@@ -1,0 +1,9 @@
+# Groups the notes GitHub generates for a release (gh release create --generate-notes) by pull request label.
+changelog:
+  categories:
+    - title: Breaking changes
+      labels:
+        - breaking
+    - title: Other changes
+      labels:
+        - "*"

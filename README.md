@@ -26,11 +26,16 @@ across.
 
 ## Quick start
 
-Nothing is published yet, so add this repository as a git submodule and include it as a composite build:
+Nothing is on Maven Central yet, so add this repository as a git submodule, pin it to a
+[release](https://github.com/rmakowiecki/Morpheus/releases) and include it as a composite build:
 
 ```shell
 git submodule add https://github.com/rmakowiecki/morpheus.git morpheus
+git -C morpheus checkout v0.1.0
 ```
+
+A submodule follows the default branch, `develop`, unless you pin it. `main` holds the released commits only, and
+the live demo is built from `develop`, so it can show changes no release has yet.
 
 ```kotlin
 // settings.gradle.kts
@@ -134,12 +139,12 @@ build-logic/            convention plugins for targets, libraries, samples and s
 config/detekt/          detekt configuration
 docs/                   the benchmark recipe, design notes, and the README's hero in assets/
 scripts/                benchmark runners
-.github/workflows/      CI, and the deploy of the live demo to GitHub Pages
+.github/workflows/      CI, the release of a merge into main, and the deploy of the live demo to GitHub Pages
 ```
 
 Guides for each module are coming. Until then:
 
-- [`CHANGELOG.md`](CHANGELOG.md) lists what changed.
+- [Releases](https://github.com/rmakowiecki/Morpheus/releases) lists what changed.
 - [`docs/benchmark.md`](docs/benchmark.md) measures what a frame costs.
 - [`CONTEXT.md`](CONTEXT.md) defines the words used here: graph, spec, seed, layer, mesh, cell, node, edge, edge rule, shape, density, fill chance, surface, window, preset, fill, glow, hot node, morph, morph family, presence, dissolve and comet.
 
