@@ -69,15 +69,15 @@ import kotlinx.coroutines.flow.collectLatest
 /** The text and content description of the compact detail's menu button. */
 internal const val MORE_OPTIONS = "More options"
 
-/** The cycle across the full width, then Tune and Reset to defaults, wrapping when the two don't fit side by side. */
+/**
+ * The cycle across the full width if the sample [GallerySession.runsCycle], then Tune and Reset to defaults, wrapping when
+ * the two don't fit side by side.
+ */
 @Composable
 internal fun CompactControls(session: GallerySession, panes: OpenPanes) {
-    CycleControls(
-        control = session.cycle,
-        runsCycle = session.runsCycle,
-        fillsWidth = true,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-    )
+    if (session.runsCycle) {
+        CycleControls(control = session.cycle, fillsWidth = true, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp))
+    }
     if (GalleryPane.Tune in panes.available) {
         FlowRow(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
@@ -110,7 +110,7 @@ internal fun RegularControls(
             TuneButton(onClick = { panes.toggle(GalleryPane.Tune) })
             ResetButton(session)
         }
-        CycleControls(control = session.cycle, runsCycle = session.runsCycle, fillsWidth = false)
+        if (session.runsCycle) CycleControls(control = session.cycle, fillsWidth = false)
         PerformanceStatsButton(isOpen = panes.isOpen(GalleryPane.PerformanceStats), onClick = { panes.toggle(GalleryPane.PerformanceStats) })
         if (GalleryPane.CometDebug in panes.available) {
             CometDebugButton(frameStats = frameStats, onClick = { panes.toggle(GalleryPane.CometDebug) })
@@ -194,11 +194,11 @@ internal fun CompactMenu(
 internal const val OVERLAYS_ON = "Overlays on"
 
 /**
- * Pause/Play for any sample, plus the [ScrubSlot] if it [runsCycle]. The button lays out both labels, so it keeps the
+ * Pause/Play and the [ScrubSlot], only for a sample that runs a cycle. The button lays out both labels, so it keeps the
  * wider one's width. When it [fillsWidth], the slider takes the width the button leaves, with the time under it.
  */
 @Composable
-private fun CycleControls(control: CycleControl, runsCycle: Boolean, fillsWidth: Boolean, modifier: Modifier = Modifier) {
+private fun CycleControls(control: CycleControl, fillsWidth: Boolean, modifier: Modifier = Modifier) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FilledTonalButton(onClick = { control.isPaused = !control.isPaused }) {
             Box(contentAlignment = Alignment.Center) {
@@ -206,12 +206,10 @@ private fun CycleControls(control: CycleControl, runsCycle: Boolean, fillsWidth:
                 PlayPauseLabel(icon = Icons.Filled.PlayArrow, label = "Play", shown = control.isPaused)
             }
         }
-        if (runsCycle) {
-            if (fillsWidth) {
-                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) { ScrubSlot(control, sliderModifier = Modifier.fillMaxWidth()) }
-            } else {
-                ScrubSlot(control, sliderModifier = Modifier.width(SCRUB_SLIDER_WIDTH))
-            }
+        if (fillsWidth) {
+            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) { ScrubSlot(control, sliderModifier = Modifier.fillMaxWidth()) }
+        } else {
+            ScrubSlot(control, sliderModifier = Modifier.width(SCRUB_SLIDER_WIDTH))
         }
     }
 }

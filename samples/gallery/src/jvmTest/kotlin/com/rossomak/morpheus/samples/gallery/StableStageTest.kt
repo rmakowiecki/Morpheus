@@ -365,15 +365,18 @@ class StableStageTest {
         settle()
     }
 
+    /** Pause, a scrub and Play leave the stage as it was; a sample without morphs has no Pause at all. */
     private fun <T> SkikoComposeUiTest.checkPlayback(sample: Sample, stage: T, stageNow: SkikoComposeUiTest.() -> T) {
+        if (sample.timing == null) {
+            button("Pause").assertDoesNotExist()
+            return
+        }
         button("Pause").performClick()
         settle()
         stageNow() shouldBe stage
-        if (sample.timing != null) {
-            onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress)).performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
-            settle()
-            stageNow() shouldBe stage
-        }
+        onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress)).performSemanticsAction(SemanticsActions.SetProgress) { it(0.5f) }
+        settle()
+        stageNow() shouldBe stage
         button("Play").performClick()
         settle()
         stageNow() shouldBe stage

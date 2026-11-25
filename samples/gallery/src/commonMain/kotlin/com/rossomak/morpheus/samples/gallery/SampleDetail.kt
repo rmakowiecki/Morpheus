@@ -215,7 +215,7 @@ private val MIN_STAGE_HEIGHT = 320.dp
 /** The stage's least share of a regular detail's height. */
 private const val MIN_STAGE_SHARE = 0.5f
 
-/** The most of a compact detail's height the stage takes, so a very tall canvas still leaves Pause in view. */
+/** The most of a compact detail's height the stage takes, so a very tall canvas still leaves the controls in view. */
 private const val MAX_COMPACT_STAGE_SHARE = 0.75f
 
 /** Above and below a compact stage's canvas, which takes the full width. */

@@ -146,7 +146,7 @@ private fun CentredText(
 internal fun ViewerNoticeCard(modifier: Modifier = Modifier) {
     val text = buildAnnotatedString {
         withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)) { append("${ViewerNotice.HEADLINE}. ") }
-        append("${ViewerNotice.RISK} ${ViewerNotice.PAUSE_HINT}")
+        append(ViewerNotice.RISK)
     }
     Surface(
         modifier = modifier.fillMaxWidth(),
