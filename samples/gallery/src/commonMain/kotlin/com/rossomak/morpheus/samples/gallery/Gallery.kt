@@ -88,6 +88,8 @@ internal fun Gallery(
     val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(session) { session?.prepare() }
+    // Every way back to the landing page closes the panes: the in-app Back, the browser's Back and Forward, the home title.
+    LaunchedEffect(selectedId) { if (selectedId == null) frameStats.closePanes() }
 
     val systemDark = isSystemInDarkTheme()
     MaterialTheme(colorScheme = if (systemDark) darkColorScheme() else lightColorScheme()) {
@@ -105,15 +107,7 @@ internal fun Gallery(
                         onThemeModeChange = { themeMode = it },
                         opensOnePaneAtATime = !hasSideColumn,
                         logsBenchmarkReadings = benchmark != null,
-                        onBack = if (wide) {
-                            null
-                        } else {
-                            {
-                                // The next sample opens with no sheet over it.
-                                OpenPanes(openSession, frameStats).closeAll()
-                                nav.open(null)
-                            }
-                        },
+                        onBack = if (wide) null else ({ nav.open(null) }),
                         modifier = modifier.testTag(DETAIL_TEST_TAG),
                     )
                 }

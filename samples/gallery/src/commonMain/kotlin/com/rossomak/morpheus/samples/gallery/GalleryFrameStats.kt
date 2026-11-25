@@ -50,6 +50,12 @@ internal class GalleryFrameStats {
     var isPerformanceStatsOpen by mutableStateOf(false)
     var isCometDebugOpen by mutableStateOf(false)
     var isCanvasScaled by mutableStateOf(false)
+
+    /** Closes the gallery-wide panes, so the next sample opens with none over it. */
+    fun closePanes() {
+        isPerformanceStatsOpen = false
+        isCometDebugOpen = false
+    }
 }
 
 /** One tile of a grid sample, under its label, with the stats it reports into. */
