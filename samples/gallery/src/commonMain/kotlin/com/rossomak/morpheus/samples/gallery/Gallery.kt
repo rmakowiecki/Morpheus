@@ -97,6 +97,8 @@ internal fun Gallery(
             BoxWithConstraints {
                 val wide = maxWidth >= WIDE_LAYOUT_MIN_WIDTH && maxHeight <= maxWidth
                 val hasSideColumn = maxWidth >= SIDE_COLUMN_MIN_WIDTH && maxWidth >= maxHeight * SIDE_COLUMN_MIN_ASPECT
+                // The window's size, not the detail's: a window this short leaves no room for the regular controls over a stage.
+                val compact = maxWidth < COMPACT_MAX_WIDTH || maxHeight < COMPACT_MAX_HEIGHT
                 val detail = @Composable { openSession: GallerySession, modifier: Modifier ->
                     SampleDetail(
                         session = openSession,
@@ -107,6 +109,7 @@ internal fun Gallery(
                         onThemeModeChange = { themeMode = it },
                         opensOnePaneAtATime = !hasSideColumn,
                         logsBenchmarkReadings = benchmark != null,
+                        compact = compact,
                         onBack = if (wide) null else ({ nav.open(null) }),
                         modifier = modifier.testTag(DETAIL_TEST_TAG),
                     )
@@ -249,6 +252,10 @@ private suspend fun exportSpec(spec: MorpheusGraphSpec, clipboard: Clipboard, on
 }
 
 private val WIDE_LAYOUT_MIN_WIDTH = 840.dp
+
+/** A window narrower or shorter than these, a phone's in either orientation, gets the compact sample detail. */
+private val COMPACT_MAX_WIDTH = 600.dp
+private val COMPACT_MAX_HEIGHT = 480.dp
 private val LIST_WIDTH = 320.dp
 private val SIDE_SHEET_WIDTH = 380.dp
 

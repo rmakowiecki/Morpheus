@@ -32,7 +32,7 @@ internal enum class PreviewPreset(val label: String, val size: DpSize?) {
     /** The sample's own capture canvas: what its media will look like. */
     Sample("Sample", null),
 
-    /** The whole pane, at whatever ratio it has. */
+    /** The whole stage, at whatever ratio it has. */
     Fill("Fill pane", null),
     Wide("16:9", WideCanvas),
     Classic("4:3", ClassicCanvas),
@@ -45,7 +45,7 @@ internal enum class PreviewPreset(val label: String, val size: DpSize?) {
 
 /**
  * The gallery-wide preview canvas, kept across samples: a [preset], the [customSize] for
- * [PreviewPreset.Custom], and whether a fixed-size canvas [scalesToFit] the pane or shows at its own size
+ * [PreviewPreset.Custom], and whether a fixed-size canvas [scalesToFit] the stage or shows at its own size
  * (shrunk only when it wouldn't fit).
  */
 @Stable
@@ -54,7 +54,7 @@ internal class PreviewFrame {
     var customSize by mutableStateOf(WideCanvas)
     var scalesToFit by mutableStateOf(true)
 
-    /** The canvas for a sample with this [recipe], or null to fill the pane. */
+    /** The canvas for a sample with this [recipe], or null to fill the stage. */
     fun canvasSize(recipe: CaptureRecipe): DpSize? = when (preset) {
         PreviewPreset.Sample -> recipe.canvasSize
         PreviewPreset.Fill -> null

@@ -30,13 +30,7 @@ internal fun CometDebugButton(frameStats: GalleryFrameStats, onClick: () -> Unit
         icon = Icons.Filled.BugReport,
         label = GalleryPane.CometDebug.title,
         isActive = isOpen || overlaysOn,
-        stateDescription = if (isOpen) {
-            "Open"
-        } else if (overlaysOn) {
-            "Closed, overlays on"
-        } else {
-            "Closed"
-        },
+        stateDescription = paneStateDescription(isOpen = isOpen, overlaysOn = overlaysOn),
         onClick = onClick,
         modifier = modifier,
     )
