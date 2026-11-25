@@ -273,8 +273,9 @@ class StableStageTest {
         val shown = onAllNodes(hasClickAction() or SemanticsMatcher.keyIsDefined(SemanticsProperties.Text), useUnmergedTree = true).fetchSemanticsNodes()
         shown.forEach { node ->
             withClue(node.config) {
-                node.boundsInRoot.left shouldBeGreaterThanOrEqual 0f
-                node.boundsInRoot.right shouldBeLessThanOrEqual windowSize.width
+                // Unclipped: bounds in the root end at the window's, so a control past it would still pass.
+                node.positionInRoot.x shouldBeGreaterThanOrEqual 0f
+                node.positionInRoot.x + node.size.width shouldBeLessThanOrEqual windowSize.width
             }
         }
     }
