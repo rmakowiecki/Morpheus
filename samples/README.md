@@ -5,8 +5,8 @@ their registry, `gallery` runs them on desktop and in the browser, and `capture`
 
 ## The viewer notice
 
-Some samples are vivid, so the gallery opens with a notice for viewers sensitive to flashing lights, above the list
-and before any sample plays. Its text lives in `ViewerNotice`. The root README and the Pages fallback page in
+Some samples are vivid, so the gallery's landing page carries a notice for viewers sensitive to flashing lights,
+read before any sample plays. A sample link opens its sample straight away, without the landing page. Its text lives in `ViewerNotice`. The root README and the Pages fallback page in
 `gallery/src/wasmJsMain/resources/index.html` quote it, and `ViewerNoticeTest` fails when they stop matching.
 [`CONTRIBUTING.md`](../CONTRIBUTING.md) says what to check when you add a sample.
 

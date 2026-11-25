@@ -86,6 +86,29 @@ class StableStageTest {
     fun `a window taller than it is wide opens the detail over the list, however wide`() = checkSheetsOpenOneAtATime(PORTRAIT, hasBack = true)
 
     @Test
+    fun `leaving a sample by the browser's Back closes its panes too`() = runSkikoComposeUiTest(size = NARROW, density = Density(1f)) {
+        val sample = SampleRegistry.samples.single { it.id == CYCLE_SAMPLE_ID }
+        val frameStats = GalleryFrameStats()
+        val navigation = InMemoryNavigation(initialSampleId = null)
+        mainClock.autoAdvance = false
+        setContent { Gallery(samples = listOf(sample), onSpecExport = {}, benchmark = null, frameStats = frameStats, navigation = navigation) }
+        settle()
+        onNodeWithText(sample.title).performClick()
+        settle()
+        button(GalleryPane.PerformanceStats.title).performSemanticsAction(SemanticsActions.OnClick)
+        settle()
+        frameStats.isPerformanceStatsOpen shouldBe true
+
+        // What the browser's Back does: straight to the landing page, past the in-app Back.
+        runOnIdle { navigation.open(null) }
+        settle()
+        frameStats.isPerformanceStatsOpen shouldBe false
+        onNodeWithText(sample.title).performClick()
+        settle()
+        frameStats.isPerformanceStatsOpen shouldBe false
+    }
+
+    @Test
     fun `stage follows the window and the canvas follows the preset`() = runSkikoComposeUiTest(size = WIDE, density = Density(1f)) {
         val sample = SampleRegistry.samples.single { it.id == CYCLE_SAMPLE_ID }
         // The gallery's own space, shrunk below to stand for a resized window.

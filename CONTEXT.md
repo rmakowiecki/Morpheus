@@ -138,6 +138,14 @@ _Avoid_: Demo, example
 The app that runs every sample, on desktop and in the browser, where a viewer tunes a sample and copies its specs as Kotlin.
 _Avoid_: Demo app, catalog
 
+**Landing page**:
+What the gallery shows with no sample open: what Morpheus is, the viewer notice, how to use the gallery and a link to GitHub. In a wide window it fills the stage beside the list; in a narrow one it heads the list.
+_Avoid_: Home screen, welcome page
+
+**Sample link**:
+The gallery's web address with a sample's id as the hash (`#comet-playground`), which opens that sample. Sample ids are public once linked, so they stay stable.
+_Avoid_: Permalink, deep link
+
 **Section**:
 One group of samples in the gallery's list: Showcase, Shapes, Basic Parameters, Meshes, Fills or Morphs, in that order (`SampleSection` in code). Each sample belongs to exactly one.
 _Avoid_: Category

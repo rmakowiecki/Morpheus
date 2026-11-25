@@ -14,7 +14,8 @@ import kotlin.time.Duration
 /**
  * One registry entry: a sample composable plus what the gallery and the capture tool need to know about it.
  *
- * [id] is kebab-case and names the sample's media files. [summary] is one sentence for the sample list, and
+ * [id] is kebab-case and names the sample's media files and its gallery link (`#id` on the web), so keep it
+ * stable once published. [summary] is one sentence for the sample list, and
  * [description] two to four for the main pane: what you see, then how the library does it. [specs] are the specs the gallery can tune, by
  * name, [morphs] the easings of the morphs between them and [timing] how long each morph and each hold takes;
  * a sample with morphs has a timing, one without has none. [content] receives all of them through [SampleSpecs],

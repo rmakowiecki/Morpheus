@@ -53,19 +53,33 @@ internal const val GALLERY_TITLE = "Morpheus gallery"
  * With a [benchmark] it opens set up as `docs/benchmark.md`'s recipe asks: its sample on the 16:9
  * preview with scale to fit off, the benchmark's skip switches on, and every reading of the frame stats also
  * printed (see [LogBenchmarkReadings]).
+ *
+ * [navigation] holds the open sample, by default in memory; with none open, the gallery shows its landing page.
  */
 @Composable
-fun Gallery(samples: List<Sample> = SampleRegistry.samples, onSpecExport: (source: String) -> Unit = {}, benchmark: GalleryBenchmark? = null) {
+fun Gallery(
+    samples: List<Sample> = SampleRegistry.samples,
+    onSpecExport: (source: String) -> Unit = {},
+    benchmark: GalleryBenchmark? = null,
+    navigation: GalleryNavigation? = null,
+) {
     val frameStats = remember { GalleryFrameStats().apply { benchmark?.let { stats.setUpForBenchmark(it.skips) } } }
-    Gallery(samples = samples, onSpecExport = onSpecExport, benchmark = benchmark, frameStats = frameStats)
+    Gallery(samples = samples, onSpecExport = onSpecExport, benchmark = benchmark, frameStats = frameStats, navigation = navigation)
 }
 
 /** The [Gallery] reporting into [frameStats], which a test can feed and read. */
 @Composable
-internal fun Gallery(samples: List<Sample>, onSpecExport: (source: String) -> Unit, benchmark: GalleryBenchmark?, frameStats: GalleryFrameStats) {
+internal fun Gallery(
+    samples: List<Sample>,
+    onSpecExport: (source: String) -> Unit,
+    benchmark: GalleryBenchmark?,
+    frameStats: GalleryFrameStats,
+    navigation: GalleryNavigation? = null,
+) {
     // Grouped by section in menu order, each group in registry order.
     val orderedSamples = remember(samples) { samples.sortedBy { it.section.ordinal } }
-    var selectedId by remember { mutableStateOf(benchmark?.sampleId) }
+    val nav = navigation ?: remember { InMemoryNavigation(benchmark?.sampleId) }
+    val selectedId = nav.sampleId
     // Held here rather than in a pane, so a layout switch keeps the open sample's preparation and tuning.
     var themeMode by remember { mutableStateOf(ThemeMode.System) }
     val previewFrame = remember { PreviewFrame().apply { if (benchmark != null) setUpForBenchmark() } }
@@ -74,6 +88,8 @@ internal fun Gallery(samples: List<Sample>, onSpecExport: (source: String) -> Un
     val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(session) { session?.prepare() }
+    // Every way back to the landing page closes the panes: the in-app Back, the browser's Back and Forward, the home title.
+    LaunchedEffect(selectedId) { if (selectedId == null) frameStats.closePanes() }
 
     val systemDark = isSystemInDarkTheme()
     MaterialTheme(colorScheme = if (systemDark) darkColorScheme() else lightColorScheme()) {
@@ -91,15 +107,7 @@ internal fun Gallery(samples: List<Sample>, onSpecExport: (source: String) -> Un
                         onThemeModeChange = { themeMode = it },
                         opensOnePaneAtATime = !hasSideColumn,
                         logsBenchmarkReadings = benchmark != null,
-                        onBack = if (wide) {
-                            null
-                        } else {
-                            {
-                                // The next sample opens with no sheet over it.
-                                OpenPanes(openSession, frameStats).closeAll()
-                                selectedId = null
-                            }
-                        },
+                        onBack = if (wide) null else ({ nav.open(null) }),
                         modifier = modifier.testTag(DETAIL_TEST_TAG),
                     )
                 }
@@ -117,12 +125,12 @@ internal fun Gallery(samples: List<Sample>, onSpecExport: (source: String) -> Un
                         SampleList(
                             samples = orderedSamples,
                             selectedId = selectedId,
-                            onSelect = { selectedId = it },
+                            onSelect = nav::open,
                             modifier = Modifier.width(LIST_WIDTH).fillMaxHeight(),
-                        )
+                        ) { HomeTitle(onClick = { nav.open(null) }) }
                         VerticalDivider()
                         if (session == null) {
-                            NoSampleSelected(modifier = Modifier.weight(1f).fillMaxHeight())
+                            LandingPane(modifier = Modifier.weight(1f).fillMaxHeight())
                         } else {
                             detail(session, Modifier.weight(1f).fillMaxHeight())
                             PanesBesideDetail(hasSideColumn = hasSideColumn, session = session, frameStats = frameStats) { tuneSheet(session, Modifier) }
@@ -130,7 +138,9 @@ internal fun Gallery(samples: List<Sample>, onSpecExport: (source: String) -> Un
                     }
                 } else {
                     if (session == null) {
-                        SampleList(samples = orderedSamples, selectedId = null, onSelect = { selectedId = it }, modifier = Modifier.fillMaxSize())
+                        SampleList(samples = orderedSamples, selectedId = null, onSelect = nav::open, modifier = Modifier.fillMaxSize()) {
+                            LandingHeader()
+                        }
                     } else {
                         detail(session, Modifier.fillMaxSize())
                         PaneSheets(session = session, frameStats = frameStats) { tuneSheet(session, Modifier) }
