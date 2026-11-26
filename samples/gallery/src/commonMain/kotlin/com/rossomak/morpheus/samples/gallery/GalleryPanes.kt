@@ -20,9 +20,12 @@ internal enum class GalleryPane(val title: String) {
     }
 }
 
-/** Which panes of the open [session] are open. Tune's flag is the session's, the others are gallery-wide in [frameStats]. */
+/**
+ * Which panes of the open [session] are open. Tune's flag is the session's, the others are gallery-wide in [frameStats].
+ * Where the panes are sheets, opening one [closesOthers].
+ */
 @Stable
-internal class OpenPanes(private val session: GallerySession, private val frameStats: GalleryFrameStats) {
+internal class OpenPanes(private val session: GallerySession, private val frameStats: GalleryFrameStats, private val closesOthers: Boolean) {
     val available: List<GalleryPane> = GalleryPane.entries.filter { it.isAvailableFor(session.sample) }
 
     val open: List<GalleryPane> get() = available.filter(::isOpen)
@@ -42,8 +45,8 @@ internal class OpenPanes(private val session: GallerySession, private val frameS
         }
     }
 
-    /** Opens or closes [pane]; opening it first closes the others if [closesOthers]. */
-    fun toggle(pane: GalleryPane, closesOthers: Boolean) {
+    /** Opens or closes [pane]; opening it first closes the others if the panes [closesOthers]. */
+    fun toggle(pane: GalleryPane) {
         val opens = !isOpen(pane)
         if (opens && closesOthers) closeAll()
         setOpen(pane, opens)
@@ -55,5 +58,12 @@ internal class OpenPanes(private val session: GallerySession, private val frameS
 }
 
 @Composable
-internal fun rememberOpenPanes(session: GallerySession, frameStats: GalleryFrameStats): OpenPanes =
-    remember(session, frameStats) { OpenPanes(session, frameStats) }
+internal fun rememberOpenPanes(session: GallerySession, frameStats: GalleryFrameStats, closesOthers: Boolean = false): OpenPanes =
+    remember(session, frameStats, closesOthers) { OpenPanes(session, frameStats, closesOthers) }
+
+/** What a pane's button or menu item tells a screen reader: open or closed, and whether Comet debug's overlays stay on. */
+internal fun paneStateDescription(isOpen: Boolean, overlaysOn: Boolean = false): String = when {
+    isOpen -> "Open"
+    overlaysOn -> "Closed, overlays on"
+    else -> "Closed"
+}

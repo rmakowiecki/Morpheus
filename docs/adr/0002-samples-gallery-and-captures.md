@@ -40,9 +40,10 @@ quotes the helper's call rather than its body.
 
 A sample shows what the library draws and how it manipulates the visuals: specs, layers, morphs, fills and
 their parameters. It doesn't show how an app feeds the library, such as reacting to swipes or scroll
-position, so the gallery has no pager or scroll samples. The gallery's panes are one common set (theme, preview
-canvas, Tune, Pause, performance stats, comet debug), and a sample takes only the modules that apply to it: only a
-sample with morphs has a scrub slider, comet debug and timing controls.
+position, so the gallery has no pager or scroll samples. The gallery's controls are one common set (theme, preview
+canvas, and the Tune, Performance stats and Comet debug panes), and a sample takes only the modules that apply
+to it: only a sample with morphs has Pause, a scrub slider, comet debug and timing controls. A phone's compact detail has no
+preview canvas control and keeps the theme and every pane but Tune in a menu.
 
 ### Captures render only from code
 

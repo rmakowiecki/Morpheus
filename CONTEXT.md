@@ -92,7 +92,7 @@ A node that is larger, fully opaque and glows. A layer makes a share of its node
 
 **Surface**:
 The area a graph is drawn in: the size of the composable its modifier is on. Shapes are laid out over it, as fractions of its width, height or longer side.
-_Avoid_: Canvas, background (that is what a graph is drawn behind)
+_Avoid_: Canvas (in the gallery, the box surfaces are laid out in), background (that is what a graph is drawn behind)
 
 **Window**:
 The reference size a layer's grid is built from, normally the app window, or the surface itself when none is given. Its longer side is divided into cells, so the surface can resize without changing the cell size: a bigger surface adds cells and a smaller one fades the nodes outside it.
@@ -158,7 +158,22 @@ One sentence about a sample, shown under its title in the gallery's list.
 _Avoid_: Subtitle
 
 **Description**:
-Two to four sentences about a sample, shown under its title when it is open: what you see, then how the library does it, in this glossary's terms.
+Two to four sentences about a sample, shown when it is open, under its title or, on a phone, after its controls: what you see, then how the library does it, in this glossary's terms.
+
+**Stage**:
+The part of an open sample's detail that its canvas is shown in. On a phone it takes the full width under the title; elsewhere it takes the height the controls leave, but at least half the detail's.
+
+**Canvas**:
+The fixed size a sample is drawn at in the gallery and in its capture, and the reference window its grids are built from. The stage scales it to fit or shows it at its own size. Not the surface: a canvas is the box a sample's surfaces are laid out in.
+_Avoid_: Viewport
+
+**Pane**:
+One of Tune, Performance stats and Comet debug: a panel about the open sample, in the side column beside its detail or, without one, as a sheet. Only one sheet is open at a time.
+_Avoid_: Panel, drawer
+
+**Compact detail**:
+An open sample laid out for a phone, in a window under 600 dp wide or 480 dp tall: the stage first, then the controls and the description, with the theme and every pane but Tune in a menu.
+_Avoid_: Mobile layout
 
 **Capture**:
 A sample rendered headlessly to a media file, by its id, at the defaults of its specs.

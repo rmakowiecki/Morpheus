@@ -13,7 +13,7 @@ across.
 [**Live demo**](https://rmakowiecki.github.io/Morpheus/) · runs in your browser, no install
 
 > **Viewer discretion is advised.** Some samples have bright, fast-moving lights and rapid changes in brightness,
-> which can trigger seizures in people with photosensitive epilepsy. The gallery's Pause button stops any sample.
+> which can trigger seizures in people with photosensitive epilepsy.
 
 - **Morphs.** A graph turns into another one without a cut. Layers of one morph family keep every node in place
   and only reshape and recolor; other layers dissolve.

@@ -9,7 +9,4 @@ object ViewerNotice {
 
     const val RISK = "Some samples have bright, fast-moving lights and rapid changes in brightness, " +
         "which can trigger seizures in people with photosensitive epilepsy."
-
-    /** The gallery has a Pause button on every sample. */
-    const val PAUSE_HINT = "Pause stops any sample."
 }

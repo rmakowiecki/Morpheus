@@ -131,7 +131,7 @@ internal fun PerformanceStatsButton(isOpen: Boolean, onClick: () -> Unit, modifi
         icon = Icons.Filled.Speed,
         label = GalleryPane.PerformanceStats.title,
         isActive = isOpen,
-        stateDescription = if (isOpen) "Open" else "Closed",
+        stateDescription = paneStateDescription(isOpen),
         onClick = onClick,
         modifier = modifier,
     )
